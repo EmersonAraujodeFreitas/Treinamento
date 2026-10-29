@@ -27,6 +27,7 @@ const ITENS = {
 };
 const TODAS_ABAS = ITENS.abas.map(a => a[0]), TODOS_BOTOES = ITENS.botoes.map(b => b[0]);
 const MAX_LOTE = 30;
+['inovacao_nuvem_config', 'inovacao_nuvem_sessao', 'inovacao_nuvem_ts', 'inovacao_nuvem_apagados', 'inovacao_nuvem_sinc', 'inovacao_treinamento_gh_token', 'inovacao_treinamento_senha_equipe'].forEach(k => { try { localStorage.removeItem(k); sessionStorage.removeItem(k); } catch (e) { /* ok */ } });
 
 /* ---------------- utilidades ---------------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -381,8 +382,21 @@ async function renderAdmin(aba) {
       : `<p class="adm-ok">✓ Conectado a ${esc(API)}</p>
         <p class="dica">Usuários, senhas e permissões são conferidos no servidor. Cada perfil recebe só os dados que pode ver. Versão dos dados: ${versaoLocal} · alterações aguardando envio: ${pend}</p>
         <div class="adm-acoes"><button type="button" class="btn btn-pri" id="admPublicar">Publicar agora</button><button type="button" class="btn btn-sec" id="admPuxar">Buscar atualizações</button><button type="button" class="btn btn-sec" id="admMigrar">Enviar todos os dados deste navegador</button></div>`}
-      <p class="msg" id="admMsg"></p></div>`;
+      <p class="msg" id="admMsg"></p></div>
+      <div class="adm-bloco"><h3>Trazer dados do sistema anterior</h3>
+        <p class="dica">Os cadastros feitos na versão anterior (que guardava os dados no GitHub) são trazidos para cá e enviados ao servidor. Use o usuário e a senha que você usava naquela versão.</p>
+        <div class="adm-grade"><label class="campo"><span>Usuário anterior</span><input id="antUsuario" value="EMERSON"></label><label class="campo"><span>Senha anterior</span><input type="password" id="antSenha" autocomplete="off"></label></div>
+        <div class="adm-acoes"><button type="button" class="btn btn-sec" id="antImportar">Importar dados anteriores</button></div><p class="msg" id="antMsg"></p></div>`;
     const m = document.getElementById('admMsg');
+    document.getElementById('antImportar').onclick = async () => {
+      const am = document.getElementById('antMsg'); am.textContent = 'Abrindo os dados anteriores…'; am.className = 'msg';
+      try {
+        const r = await importarAntigo(document.getElementById('antUsuario').value, document.getElementById('antSenha').value);
+        am.innerHTML = `${r.n} registros trazidos${modoLocal() ? ' para este navegador (vão para o servidor quando ele for conectado)' : ' e enviados ao servidor'}.` + (r.usuarios.length ? `<br>Usuários da versão anterior para recriar na aba Usuários: <b>${r.usuarios.map(u => esc(u.usuario) + ' (' + esc(u.perfil) + ')').join(', ')}</b>` : '');
+        am.className = 'msg ok';
+        if (!modoLocal()) enviar();
+      } catch (e) { am.textContent = e.message; am.className = 'msg erro'; }
+    };
     if (modoLocal()) { document.getElementById('admApiOk').onclick = () => { const v = document.getElementById('admApi').value.trim(); if (!/^https:\/\//.test(v)) { m.textContent = 'O endereço precisa começar com https://'; m.className = 'msg erro'; return; } localStorage.setItem('inovacao_api_url', v); localStorage.removeItem(K_SESSAO); sessionStorage.removeItem(K_SESSAO); location.reload(); }; return; }
     document.getElementById('admPublicar').onclick = async () => { m.textContent = 'Publicando…'; m.className = 'msg'; const ok = await enviar(); await puxar(true).catch(() => {}); m.textContent = ok ? 'Publicado. Todos recebem em até 15 segundos.' : 'Não foi possível publicar: ' + statusSinc.msg; m.className = 'msg ' + (ok ? 'ok' : 'erro'); };
     document.getElementById('admPuxar').onclick = async () => { m.textContent = 'Buscando…'; await puxar(true).catch(e => { m.textContent = e.message; }); m.textContent = 'Atualizado.'; m.className = 'msg ok'; };
@@ -459,6 +473,33 @@ async function renderAdmin(aba) {
     corpo.innerHTML = `<div class="adm-bloco"><h3>Últimos acessos e alterações</h3><table class="tabela adm-tab"><thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>Detalhe</th></tr></thead><tbody>
       ${log.map(l => `<tr><td>${new Date(l.quando).toLocaleString('pt-BR')}</td><td>${esc(l.usuario)}</td><td>${l.acao === 'login-falhou' ? '<span class="tag ruim">Senha errada</span>' : esc(nomes[l.acao] || l.acao)}</td><td>${esc(l.detalhe)}</td></tr>`).join('') || '<tr><td colspan="4" class="dica">Nada registrado ainda.</td></tr>'}</tbody></table></div>`;
   }
+}
+
+/* ---------------- importar do sistema anterior (arquivo criptografado no GitHub) ---------------- */
+const deb64 = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
+async function importarAntigo(usuario, senha) {
+  const pegar = async arq => { const r = await fetch(arq + '?t=' + Date.now(), { cache: 'no-store' }); if (!r.ok) throw new Error('Arquivo do sistema anterior não encontrado.'); return r.json(); };
+  const acesso = await pegar('dados/acesso.json'), pkg = await pegar('dados/estado.json');
+  const ent = (acesso.usuarios || []).find(u => normU(u.usuario) === normU(usuario));
+  if (!ent) throw new Error('Usuário não encontrado no sistema anterior.');
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveKey']);
+  const kSenha = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: deb64(ent.sal), iterations: 200000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  let raw;
+  try { raw = deb64(new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: deb64(ent.iv) }, kSenha, deb64(ent.chave)))); }
+  catch (e) { throw new Error('Senha do sistema anterior incorreta.'); }
+  const kDados = await crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['decrypt']);
+  const est = JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: deb64(pkg.iv) }, kDados, deb64(pkg.dados))));
+  const d = est.datasets || {}; let n = 0;
+  for (const ds of LISTAS) {
+    const atual = lerJ(DS[ds], []) || [], mapa = new Map(atual.map(r => [r.id, r]));
+    (d[ds] || []).forEach(r => { if (!r || !r.id) return; const x = mapa.get(r.id); if (!x || (r.atualizadoEm || '') > (x.atualizadoEm || '')) { mapa.set(r.id, r); n++; } });
+    localStorage.setItem(DS[ds], JSON.stringify([...mapa.values()])); // passa pelo registro de pendentes
+  }
+  for (const v of ['quadro', 'supervisores', 'meta']) if (d[v] !== null && d[v] !== undefined) localStorage.setItem(DS[v], JSON.stringify(d[v]));
+  if (d.bairros) { const b = lerJ(DS.bairros, {}) || {}; Object.entries(d.bairros).forEach(([c, l]) => b[c] = [...new Set([...(b[c] || []), ...l])]); localStorage.setItem(DS.bairros, JSON.stringify(b)); }
+  const usuarios = ((est.config || {}).usuarios || []).filter(u => normU(u.usuario) !== 'EMERSON');
+  window.dispatchEvent(new CustomEvent('dados-atualizados'));
+  return { n, usuarios };
 }
 
 /* ---------------- API para os outros módulos ---------------- */

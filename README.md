@@ -9,3 +9,7 @@ Site da área de treinamento para a **formação inicial de turmas** de habilita
 Os dados ficam salvos no navegador (localStorage). Use **Baixar backup** com frequência.
 
 Para publicar: Settings → Pages → Deploy from branch → `main` / root.
+
+## Acesso e segurança
+
+O site exige usuário e senha. Os dados ficam num servidor próprio (pasta `worker/`, Cloudflare Worker + D1), que confere a senha e entrega a cada perfil só o que ele pode ver. Veja `worker/LEIA-ME.md` para implantar. Enquanto o endereço do servidor não estiver em `assets/config.js`, o site funciona só no navegador do administrador.
