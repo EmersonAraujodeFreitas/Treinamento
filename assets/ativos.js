@@ -91,11 +91,11 @@ A.autocomplete($('#atAutoBairro'), {
 function colaboradores() {
   const m = new Map();
   A.formacao().filter(r => r.status === 'Aprovado').forEach(r => m.set(norm(r.email || r.nome), { nome: r.nome, email: r.email, cidade: r.cidade, bairro: r.bairro, operacao: r.indicacao === 'Permanência' || r.operacao === 'Permanência' ? 'Permanência' : r.operacao === 'Captação' || r.indicacao === 'Captação' ? 'Captação' : '', instituicao: r.instituicao, origem: 'Formação ' + (r.turma || '') }));
-  regs.slice().sort((a, b) => (a.atualizadoEm || '').localeCompare(b.atualizadoEm || '')).forEach(r => m.set(chaveColab(r), { nome: r.nome, email: r.email, matricula: r.matricula, supervisor: r.supervisor, tempoCasa: r.tempoCasa, turno: r.turno, cidade: r.cidade, bairro: r.bairro, operacao: r.operacao, instituicao: r.instituicao, origem: (regs.filter(x => chaveColab(x) === chaveColab(r)).length) + ' treinamento(s) registrado(s)' }));
+  regs.slice().sort((a, b) => (a.atualizadoEm || '').localeCompare(b.atualizadoEm || '')).forEach(r => m.set(chaveColab(r), { nome: r.nome, email: r.email, matricula: r.matricula, login: r.login, idOlos: r.idOlos, hubspot: r.hubspot, escala: r.escala, nascimento: r.nascimento, admissao: r.admissao, supervisor: r.supervisor, tempoCasa: r.tempoCasa, turno: r.turno, cidade: r.cidade, bairro: r.bairro, operacao: r.operacao, instituicao: r.instituicao, origem: (regs.filter(x => chaveColab(x) === chaveColab(r)).length) + ' treinamento(s) registrado(s)' }));
   quadro.itens.filter(c => c.status !== 'Desligado').forEach(c => {
     const k = norm(c.email || c.nome), ant = [...m.entries()].find(([kk, v]) => kk === k || norm(v.nome) === norm(c.nome) || (c.mat && v.matricula === c.mat));
     if (ant) m.delete(ant[0]);
-    m.set(k, { nome: c.nome, email: c.email, matricula: c.mat, supervisor: c.supervisor, tempoCasa: c.tempoCasa, turno: c.turno, cidade: c.cidade, bairro: c.bairro, operacao: c.operacao, instituicao: c.ies, origem: 'BD da operação · ' + c.status + (c.grupo ? ' · ' + c.grupo : '') });
+    m.set(k, { nome: c.nome, email: c.email, matricula: c.mat, login: c.login, idOlos: c.idOlos, hubspot: c.hubspot, escala: c.escala, nascimento: c.nascimento, admissao: c.admissao, supervisor: c.supervisor, tempoCasa: c.tempoCasa, turno: c.turno, cidade: c.cidade, bairro: c.bairro, operacao: c.operacao, instituicao: c.ies, origem: 'BD da operação · ' + c.status + (c.grupo ? ' · ' + c.grupo : '') });
   });
   return [...m.values()].sort((a, b) => cmpTxt(a.nome, b.nome));
 }
@@ -126,7 +126,8 @@ function colaboradores() {
     const preenchidos = [];
     const set = (id, v) => { const el = F(id); const val = v || ''; if (el.tagName === 'SELECT' && val && ![...el.options].some(o => o.value === val || o.text === val)) return; el.value = val; if (val) preenchidos.push(el); };
     if (c.supervisor && !supReal(c.supervisor)) { supervisores.push(c.supervisor); salvarSup(); }
-    set('atEmail', c.email); set('atMatricula', c.matricula); set('atSupervisor', supReal(c.supervisor) || c.supervisor); set('atTempoCasa', c.tempoCasa); set('atTurno', c.turno);
+    set('atEmail', c.email); set('atMatricula', c.matricula); set('atLogin', c.login); set('atIdOlos', c.idOlos); set('atHubspot', c.hubspot); set('atSupervisor', supReal(c.supervisor) || c.supervisor); set('atTurno', c.turno); set('atEscala', c.escala); set('atNascimento', c.nascimento); set('atAdmissao', c.admissao);
+    atualizarCalculos(); if (c.nascimento) preenchidos.push(F('atIdade'), F('atSigno')); if (c.admissao) preenchidos.push(F('atTempoCasaTxt'));
     if (c.operacao) set('atOperacao', c.operacao); if (c.instituicao) set('atInstituicao', c.instituicao);
     if (c.bairro && (!c.cidade || !A.bairrosDaCidade(c.cidade).some(b => norm(b) === norm(c.bairro)))) { const lc = A.acharBairro(c.bairro, c.cidade); c = { ...c, cidade: lc.cidade, bairro: lc.bairro }; }
     const cid = A.MUN_NORM.get(norm(c.cidade)) || '';
@@ -163,7 +164,30 @@ F('atTema').addEventListener('change', () => {
 });
 
 const ACAO = [['atTema', 'tema'], ['atData', 'data'], ['atInstituicao', 'instituicao'], ['atOperacao', 'operacao'], ['atInstrutor', 'instrutor'], ['atModalidade', 'modalidade'], ['atMotivo', 'motivo'], ['atObjetivo', 'objetivo']];
-const COLAB = [['atNome', 'nome'], ['atMatricula', 'matricula'], ['atEmail', 'email'], ['atSupervisor', 'supervisor'], ['atTempoCasa', 'tempoCasa'], ['atTurno', 'turno']];
+const COLAB = [['atNome', 'nome'], ['atMatricula', 'matricula'], ['atLogin', 'login'], ['atIdOlos', 'idOlos'], ['atHubspot', 'hubspot'], ['atEmail', 'email'], ['atSupervisor', 'supervisor'], ['atTempoCasa', 'tempoCasa'], ['atTurno', 'turno'], ['atEscala', 'escala'], ['atNascimento', 'nascimento'], ['atAdmissao', 'admissao']];
+
+/* idade, signo e tempo de casa calculados */
+const SIGNOS_AT = [['Capricórnio', 1, 19], ['Aquário', 2, 18], ['Peixes', 3, 20], ['Áries', 4, 19], ['Touro', 5, 20], ['Gêmeos', 6, 20], ['Câncer', 7, 22], ['Leão', 8, 22], ['Virgem', 9, 22], ['Libra', 10, 22], ['Escorpião', 11, 21], ['Sagitário', 12, 21], ['Capricórnio', 12, 31]];
+const signoDe = d => { if (!d) return ''; const [, m, dd] = d.split('-').map(Number); for (const [n, mm, x] of SIGNOS_AT) if (m < mm || (m === mm && dd <= x)) return n; return 'Capricórnio'; };
+const idadeDe = d => { if (!d) return null; const n = new Date(d + 'T12:00'), h = new Date(); let i = h.getFullYear() - n.getFullYear(); if (h.getMonth() < n.getMonth() || (h.getMonth() === n.getMonth() && h.getDate() < n.getDate())) i--; return i >= 0 && i < 110 ? i : null; };
+function tempoExato(adm) {
+  if (!adm) return '';
+  const a = new Date(adm + 'T12:00'), h = new Date();
+  let meses = (h.getFullYear() - a.getFullYear()) * 12 + (h.getMonth() - a.getMonth()); if (h.getDate() < a.getDate()) meses--;
+  if (meses < 0) return '';
+  const anos = Math.floor(meses / 12), m = meses % 12;
+  const partes = []; if (anos) partes.push(`${anos} ano${anos > 1 ? 's' : ''}`); if (m) partes.push(`${m} ${m > 1 ? 'meses' : 'mês'}`);
+  if (!partes.length) { const dias = Math.floor((h - a) / 86400000); partes.push(`${dias} dia${dias === 1 ? '' : 's'}`); }
+  return partes.join(' e ');
+}
+function atualizarCalculos() {
+  const nasc = F('atNascimento').value, adm = F('atAdmissao').value, i = idadeDe(nasc);
+  F('atIdade').value = i === null ? '' : `${i} anos`; F('atSigno').value = signoDe(nasc);
+  const t = tempoExato(adm); F('atTempoCasaTxt').value = t ? `${t} (desde ${dataBR(adm)})` : '';
+  F('atTempoCasa').value = tempoDeCasa(adm);
+}
+F('atNascimento').addEventListener('input', atualizarCalculos);
+F('atAdmissao').addEventListener('input', atualizarCalculos);
 const msg = (t, tipo) => { const m = F('atMsg'); m.textContent = t; m.className = 'msg ' + (tipo || ''); };
 
 function limpar(manterAcao) {
@@ -172,12 +196,12 @@ function limpar(manterAcao) {
   setSeg('atTipo', ''); setSeg('atPresenca', '');
   F('atAssimilacao').dataset.v = ''; $$('#atAssimilacao button').forEach(b => b.classList.remove('on'));
   F('atCidade').dataset.ok = ''; F('atBairro').disabled = true; F('atBairro').placeholder = 'Escolha a cidade primeiro';
-  F('atDicaNome').textContent = 'Busca entre colaboradores já registrados e aprovados na formação inicial';
+  F('atDicaNome').textContent = 'Digite o nome: a lista do BD da operação aparece e os dados se preenchem sozinhos';
   $$('#atForm .invalido').forEach(e => e.classList.remove('invalido'));
   F('atModoEdicao').hidden = true; F('atSalvarTxt').textContent = 'Salvar registro'; F('atBtnNovo').lastChild.textContent = 'Novo registro';
   if (acao) { setSeg('atTipo', acao.tipo); ACAO.forEach(([id, k]) => F(id).value = acao[k]); F('atCarga').value = acao.carga; }
   if (!manterAcao) { LOTE.clear(); RES.clear(); modo('um'); }
-  evolucao(); msg('');
+  atualizarCalculos(); evolucao(); msg('');
 }
 function preencher(r) {
   limpar(false); modo('um');
@@ -193,12 +217,13 @@ function preencher(r) {
   F('atQualAntes').value = r.qualAntes === null || r.qualAntes === undefined ? '' : fmt(r.qualAntes, 2);
   F('atQualDepois').value = r.qualDepois === null || r.qualDepois === undefined ? '' : fmt(r.qualDepois, 2);
   if (r.assimilacao) { F('atAssimilacao').dataset.v = String(r.assimilacao); $$('#atAssimilacao button').forEach(b => b.classList.toggle('on', b.dataset.n === String(r.assimilacao))); }
+  atualizarCalculos();
   F('atModoEdicao').hidden = false; F('atModoTxt').textContent = 'Editando: ' + (r.nome || '').split(' ').slice(0, 2).join(' ');
   F('atSalvarTxt').textContent = 'Salvar alterações'; F('atBtnNovo').lastChild.textContent = 'Cancelar edição';
   evolucao();
 }
 F('atBtnLimpar').onclick = () => limpar(false);
-F('atBtnNovo').onclick = () => { limpar(false); F('atTema').focus(); };
+F('atBtnNovo').onclick = () => { limpar(false); F('atNome').focus(); };
 
 F('atForm').addEventListener('submit', e => {
   e.preventDefault();
@@ -321,7 +346,7 @@ const LOTE = new Map();   // chave -> pessoa
 const RES = new Map();    // chave -> { presenca, pre, pos, qa, qd }
 const chaveP = c => c.mat || c.matricula || norm(c.email || c.nome);
 function pessoasLote() {
-  if (quadro.itens.length) return quadro.itens.map(c => ({ k: chaveP(c), nome: c.nome, matricula: c.mat, email: c.email, supervisor: c.supervisor, ies: c.ies, operacao: c.operacao, turno: c.turno, tempoCasa: c.tempoCasa, cidade: c.cidade, bairro: c.bairro, status: c.status, login: c.login }));
+  if (quadro.itens.length) return quadro.itens.map(c => ({ k: chaveP(c), nome: c.nome, matricula: c.mat, idOlos: c.idOlos, hubspot: c.hubspot, escala: c.escala, nascimento: c.nascimento, admissao: c.admissao, email: c.email, supervisor: c.supervisor, ies: c.ies, operacao: c.operacao, turno: c.turno, tempoCasa: c.tempoCasa, cidade: c.cidade, bairro: c.bairro, status: c.status, login: c.login }));
   return colaboradores().map(c => ({ k: chaveP(c), nome: c.nome, matricula: c.matricula, email: c.email, supervisor: c.supervisor, ies: c.instituicao, operacao: c.operacao, turno: c.turno, tempoCasa: c.tempoCasa, cidade: c.cidade, bairro: c.bairro, status: 'Ativo', login: '' }));
 }
 function modo(m) {
@@ -374,7 +399,7 @@ function renderLoteRes() {
     <td><input data-c="pre" inputmode="decimal" placeholder="—" value="${esc(v(r.pre, 1))}"></td><td><input data-c="pos" inputmode="decimal" placeholder="—" value="${esc(v(r.pos, 1))}"></td>
     <td><span class="campo-pct"><input data-c="qa" inputmode="decimal" placeholder="0,00" value="${esc(v(r.qa, 2))}"><b>%</b></span></td><td><span class="campo-pct"><input data-c="qd" inputmode="decimal" placeholder="0,00" value="${esc(v(r.qd, 2))}"><b>%</b></span></td>
     <td class="dir"><span class="ad-res mini ${dq === null ? '' : dq > 0 ? 'sobe' : dq < 0 ? 'desce' : ''}">${dq === null ? '—' : sinal(dq, 2, ' p.p.')}</span></td></tr>`; }).join('')}</tbody>`
-    : '<tbody><tr><td class="dica" style="padding:14px">Marque os consultores no bloco 2 para lançar o resultado de cada um.</td></tr></tbody>';
+    : '<tbody><tr><td class="dica" style="padding:14px">Marque os consultores no bloco 1 para lançar o resultado de cada um.</td></tr></tbody>';
 }
 F('atLoteTab').addEventListener('input', e => {
   const el = e.target.closest('[data-c]'); if (!el) return; const k = el.closest('tr').dataset.k; const r = RES.get(k) || {}; RES.set(k, r);
@@ -410,7 +435,7 @@ function salvarLote() {
     const r = { id: uid(), criadoEm: agora, atualizadoEm: agora, tipo: F('atTipo').dataset.valor };
     ACAO.forEach(([id, kk]) => r[kk] = F(id).value.trim());
     r.instituicao = p.ies || r.instituicao; r.operacao = p.operacao || r.operacao; r.carga = carga;
-    Object.assign(r, { nome: p.nome, matricula: p.matricula || '', email: (p.email || '').toLowerCase(), supervisor: supReal(p.supervisor) || p.supervisor || '', tempoCasa: p.tempoCasa || '', turno: p.turno || '', cidade: p.cidade || '', bairro: p.bairro || '' });
+    Object.assign(r, { nome: p.nome, matricula: p.matricula || '', login: p.login || '', idOlos: p.idOlos || '', hubspot: p.hubspot || '', escala: p.escala || '', nascimento: p.nascimento || '', admissao: p.admissao || '', email: (p.email || '').toLowerCase(), supervisor: supReal(p.supervisor) || p.supervisor || '', tempoCasa: p.tempoCasa || '', turno: p.turno || '', cidade: p.cidade || '', bairro: p.bairro || '' });
     r.presenca = presenca; r.status = presenca === 'Presente' ? (F('atStatus').value || 'Concluído') : 'Reagendado';
     r.proxima = F('atProxima').value; r.obs = F('atObs').value.trim(); r.assimilacao = null;
     r.pre = res.pre ?? null; r.pos = res.pos ?? null; r.qualAntes = res.qa ?? null; r.qualDepois = res.qd ?? null;
@@ -646,12 +671,12 @@ F('atBtnApagarTudo').onclick = () => {
 
 // exportar / importar
 const MAPA = [['Tipo', 'tipo'], ['Tema', 'tema'], ['Data', 'data'], ['Carga horária (h)', 'carga'], ['Instituição', 'instituicao'], ['Operação', 'operacao'], ['Instrutor', 'instrutor'], ['Modalidade', 'modalidade'], ['Motivo', 'motivo'], ['Objetivo', 'objetivo'],
-  ['Colaborador', 'nome'], ['Matrícula', 'matricula'], ['E-mail', 'email'], ['Supervisor', 'supervisor'], ['Tempo de casa', 'tempoCasa'], ['Turno', 'turno'], ['Cidade', 'cidade'], ['Bairro', 'bairro'],
+  ['Colaborador', 'nome'], ['Matrícula', 'matricula'], ['Login', 'login'], ['ID Olos', 'idOlos'], ['ID HubSpot', 'hubspot'], ['Escala', 'escala'], ['Data de nascimento', 'nascimento'], ['Admissão', 'admissao'], ['E-mail', 'email'], ['Supervisor', 'supervisor'], ['Tempo de casa', 'tempoCasa'], ['Turno', 'turno'], ['Cidade', 'cidade'], ['Bairro', 'bairro'],
   ['Presença', 'presenca'], ['Situação', 'status'], ['Próxima ação', 'proxima'], ['Pré-teste', 'pre'], ['Pós-teste', 'pos'], ['Qualidade antes (%)', 'qualAntes'], ['Qualidade depois (%)', 'qualDepois'], ['Assimilação (1-5)', 'assimilacao'], ['Observações', 'obs']];
 const NUMS = { carga: 1, pre: 1, pos: 1, qualAntes: 2, qualDepois: 2, assimilacao: 0 };
 F('atExpCsv').onclick = () => {
   if (!regs.length) return toast('Nenhum registro para exportar');
-  const linhas = [MAPA.map(m => m[0])].concat(regs.map(r => MAPA.map(([, k]) => k === 'data' || k === 'proxima' ? dataBR(r[k]) : k in NUMS ? (r[k] === null || r[k] === undefined ? '' : fmt(r[k], NUMS[k])) : r[k] ?? '')));
+  const linhas = [MAPA.map(m => m[0])].concat(regs.map(r => MAPA.map(([, k]) => ['data', 'proxima', 'nascimento', 'admissao'].includes(k) ? dataBR(r[k]) : k in NUMS ? (r[k] === null || r[k] === undefined ? '' : fmt(r[k], NUMS[k])) : r[k] ?? '')));
   baixar(`colaboradores-ativos-registros-${hoje()}.csv`, '﻿' + linhas.map(l => l.map(A.csvCel).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
 };
 F('atExpJson').onclick = () => baixar(`colaboradores-ativos-backup-${hoje()}.json`, JSON.stringify({ versao: 1, area: 'colaboradores-ativos', geradoEm: new Date().toISOString(), registros: regs }, null, 1), 'application/json');
@@ -664,7 +689,7 @@ F('atImpArquivo').addEventListener('change', async e => {
       const [cab, ...dados] = A.parseCSV(txt); const idx = h => cab.findIndex(c => norm(c) === norm(h));
       novos = dados.map(l => { const r = { id: uid(), criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString() };
         MAPA.forEach(([h, k]) => { const i = idx(h); if (i >= 0) r[k] = (l[i] || '').trim(); });
-        r.data = A.dataISO(r.data); r.proxima = A.dataISO(r.proxima);
+        r.data = A.dataISO(r.data); r.proxima = A.dataISO(r.proxima); r.nascimento = A.dataISO(r.nascimento); r.admissao = A.dataISO(r.admissao);
         Object.keys(NUMS).forEach(k => r[k] = num(r[k]));
         r.cidade = A.MUN_NORM.get(norm(r.cidade)) || r.cidade || ''; return r; }).filter(r => r.nome);
     }
@@ -723,7 +748,7 @@ async function importarBD(arquivo) {
         login: String(pega(l, 'login') ?? ''), grupo, ies, operacao, status: ehDeslig || /deslig/.test(norm(pega(l, 'status'))) ? 'Desligado' : titulo(pega(l, 'status')) || 'Ativo',
         escala: String(pega(l, 'escala') ?? ''), turno: titulo(pega(l, 'turno')), telefone: telefone(pega(l, 'telefone')),
         bairro: local.bairro, cidade: local.cidade,
-        email: String(corp || '').trim().toLowerCase(), admissao: adm, tempoCasa: tempoDeCasa(adm), onda: titulo(pega(l, 'onda')),
+        email: String(corp || '').trim().toLowerCase(), admissao: adm, hubspot: String(pega(l, 'hubspot', 'id hubspot') ?? ''), nascimento: XLSXLeitor.dataExcel(pega(l, 'data de nascimento')), tempoCasa: tempoDeCasa(adm), onda: titulo(pega(l, 'onda')),
         desligamento: ehDeslig ? XLSXLeitor.dataExcel(pega(l, 'data de desligamento')) : '', aba: aba.nome
       };
       const atual = pessoas.get(chave);
@@ -806,7 +831,7 @@ F('atTQuadro').addEventListener('click', e => {
   const b = e.target.closest('[data-treinar]'); if (!b) return;
   const c = quadro.itens.find(x => (x.mat || x.nome) === b.dataset.treinar); if (!c) return;
   limpar(false);
-  F('atNome').value = c.nome; F('atEmail').value = c.email; F('atMatricula').value = c.mat; F('atSupervisor').value = c.supervisor;
+  F('atNome').value = c.nome; F('atEmail').value = c.email; F('atMatricula').value = c.mat; F('atLogin').value = c.login || ''; F('atIdOlos').value = c.idOlos || ''; F('atHubspot').value = c.hubspot || ''; F('atEscala').value = c.escala || ''; F('atNascimento').value = c.nascimento || ''; F('atAdmissao').value = c.admissao || ''; F('atSupervisor').value = c.supervisor; atualizarCalculos();
   F('atTempoCasa').value = c.tempoCasa; F('atTurno').value = c.turno; F('atOperacao').value = c.operacao; F('atInstituicao').value = c.ies;
   if (c.cidade) { F('atCidade').value = c.cidade; F('atCidade').dataset.ok = c.cidade; F('atBairro').disabled = false; F('atBairro').value = c.bairro; }
   F('atDicaNome').textContent = 'Dados preenchidos a partir de: BD da operação · ' + c.status;

@@ -367,34 +367,7 @@
     <input type="hidden" id="atId">
 
     <fieldset class="bloco">
-      <legend><span class="icb" data-ic="rocket"></span>Ação de treinamento<span class="passo">1</span></legend>
-      <div class="grade g4">
-        <div class="campo c2"><span>Tipo de treinamento <i class="obr">*</i></span>
-          <div class="seg seg4" id="atTipo" data-valor="">
-            <button type="button" data-v="Reciclagem">Reciclagem</button>
-            <button type="button" data-v="Alinhamento">Alinhamento</button>
-            <button type="button" data-v="Novo conteúdo">Novo conteúdo</button>
-            <button type="button" data-v="Novo produto">Novo produto</button>
-          </div></div>
-        <label class="campo c2"><span>Tema / conteúdo <i class="obr">*</i></span>
-          <input id="atTema" list="atListaTemas" placeholder="Ex.: Nova política de bolsas, Script de retenção…" required><datalist id="atListaTemas"></datalist></label>
-        <label class="campo"><span>Instituição <i class="obr">*</i></span>
-          <select id="atInstituicao" required><option value="">Selecione</option><option>UVA</option><option>Unijorge</option></select></label>
-        <label class="campo"><span>Operação <i class="obr">*</i></span>
-          <select id="atOperacao" required><option value="">Selecione</option><option>Captação</option><option>Permanência</option></select></label>
-        <label class="campo"><span>Data <i class="obr">*</i></span><input type="date" id="atData" required></label>
-        <label class="campo"><span>Carga horária (horas)</span><input id="atCarga" inputmode="decimal" placeholder="Ex.: 2"></label>
-        <label class="campo"><span>Instrutor(a)</span><input id="atInstrutor" list="atListaInstrutores" placeholder="Quem aplicou"><datalist id="atListaInstrutores"></datalist></label>
-        <label class="campo"><span>Modalidade</span>
-          <select id="atModalidade"><option value="">Selecione</option><option>Presencial</option><option>Remoto</option><option>Híbrido</option><option>Na posição (side by side)</option></select></label>
-        <label class="campo"><span>Motivo</span>
-          <select id="atMotivo"><option value="">Selecione</option><option>Cronograma / rotina</option><option>Indicação da qualidade</option><option>Baixa performance</option><option>Mudança de processo</option><option>Lançamento de produto</option><option>Solicitação da supervisão</option><option>Retorno de afastamento</option></select></label>
-        <label class="campo"><span>Objetivo da ação</span><input id="atObjetivo" placeholder="O que o colaborador precisa sair sabendo fazer"></label>
-      </div>
-    </fieldset>
-
-    <fieldset class="bloco">
-      <legend><span class="icb" data-ic="user"></span>Colaborador<span class="passo">2</span></legend>
+      <legend><span class="icb" data-ic="user"></span>Colaborador<span class="passo">1</span></legend>
       <div class="modo-linha">
         <div class="seg modo" id="atModo" data-valor="um">
           <button type="button" data-v="um" class="on"><i data-ic="user"></i>Um consultor</button>
@@ -425,19 +398,53 @@
       <div class="grade g4" id="atUm">
         <div class="campo c2"><span>Nome do colaborador <i class="obr">*</i></span>
           <div class="auto" id="atAutoNome"><input id="atNome" placeholder="Digite para buscar quem já está na base…" required><ul class="auto-lista" hidden></ul></div>
-          <small class="dica" id="atDicaNome">Busca entre colaboradores já registrados e aprovados na formação inicial</small></div>
-        <label class="campo"><span>Matrícula / login</span><input id="atMatricula" placeholder="Opcional"></label>
-        <label class="campo"><span>E-mail</span><input type="email" id="atEmail" placeholder="nome@email.com"></label>
+          <small class="dica" id="atDicaNome">Digite o nome: a lista do BD da operação aparece e os dados se preenchem sozinhos</small></div>
+        <label class="campo"><span>Matrícula</span><input id="atMatricula" placeholder="—"></label>
+        <label class="campo"><span>Login</span><input id="atLogin" placeholder="—"></label>
+        <label class="campo"><span>ID Olos</span><input id="atIdOlos" placeholder="—"></label>
+        <label class="campo"><span>ID HubSpot</span><input id="atHubspot" placeholder="—"></label>
+        <label class="campo"><span>E-mail corporativo</span><input type="email" id="atEmail" placeholder="nome@email.com"></label>
         <div class="campo"><span>Supervisor(a) <button type="button" class="btn btn-link mini-link" id="atGerSup">gerenciar</button></span>
           <div class="auto" id="atAutoSup"><input id="atSupervisor" placeholder="Digite para buscar…" autocomplete="off"><ul class="auto-lista" hidden></ul></div></div>
-        <label class="campo"><span>Tempo de casa</span>
-          <select id="atTempoCasa"><option value="">Selecione</option><option>Até 3 meses</option><option>3 a 6 meses</option><option>6 meses a 1 ano</option><option>1 a 2 anos</option><option>Mais de 2 anos</option></select></label>
         <label class="campo"><span>Turno</span>
           <select id="atTurno"><option value="">Selecione</option><option>Manhã</option><option>Tarde</option><option>Noite</option><option>Integral</option></select></label>
+        <label class="campo"><span>Escala</span><input id="atEscala" list="atListaEscalas" placeholder="Ex.: 6x1"><datalist id="atListaEscalas"><option value="6x1"><option value="5x2"><option value="12x36"></datalist></label>
+        <label class="campo"><span>Data de nascimento</span><input type="date" id="atNascimento"></label>
+        <label class="campo"><span>Idade</span><input id="atIdade" class="calc" readonly tabindex="-1" placeholder="—"></label>
+        <label class="campo"><span>Signo</span><input id="atSigno" class="calc" readonly tabindex="-1" placeholder="—"></label>
+        <label class="campo"><span>Admissão</span><input type="date" id="atAdmissao"></label>
+        <label class="campo c2"><span>Tempo de casa</span><input id="atTempoCasaTxt" class="calc" readonly tabindex="-1" placeholder="calculado pela data de admissão"><input type="hidden" id="atTempoCasa"></label>
         <div class="campo"><span>Cidade</span>
           <div class="auto" id="atAutoCidade"><input id="atCidade" placeholder="Digite para buscar…"><ul class="auto-lista" hidden></ul></div></div>
         <div class="campo"><span>Bairro</span>
           <div class="auto" id="atAutoBairro"><input id="atBairro" placeholder="Escolha a cidade primeiro" disabled><ul class="auto-lista" hidden></ul></div></div>
+      </div>
+    </fieldset>
+
+    <fieldset class="bloco">
+      <legend><span class="icb" data-ic="rocket"></span>Ação de treinamento<span class="passo">2</span></legend>
+      <div class="grade g4">
+        <div class="campo c2"><span>Tipo de treinamento <i class="obr">*</i></span>
+          <div class="seg seg4" id="atTipo" data-valor="">
+            <button type="button" data-v="Reciclagem">Reciclagem</button>
+            <button type="button" data-v="Alinhamento">Alinhamento</button>
+            <button type="button" data-v="Novo conteúdo">Novo conteúdo</button>
+            <button type="button" data-v="Novo produto">Novo produto</button>
+          </div></div>
+        <label class="campo c2"><span>Tema / conteúdo <i class="obr">*</i></span>
+          <input id="atTema" list="atListaTemas" placeholder="Ex.: Nova política de bolsas, Script de retenção…" required><datalist id="atListaTemas"></datalist></label>
+        <label class="campo"><span>Instituição <i class="obr">*</i></span>
+          <select id="atInstituicao" required><option value="">Selecione</option><option>UVA</option><option>Unijorge</option></select></label>
+        <label class="campo"><span>Operação <i class="obr">*</i></span>
+          <select id="atOperacao" required><option value="">Selecione</option><option>Captação</option><option>Permanência</option></select></label>
+        <label class="campo"><span>Data <i class="obr">*</i></span><input type="date" id="atData" required></label>
+        <label class="campo"><span>Carga horária (horas)</span><input id="atCarga" inputmode="decimal" placeholder="Ex.: 2"></label>
+        <label class="campo"><span>Instrutor(a)</span><input id="atInstrutor" list="atListaInstrutores" placeholder="Quem aplicou"><datalist id="atListaInstrutores"></datalist></label>
+        <label class="campo"><span>Modalidade</span>
+          <select id="atModalidade"><option value="">Selecione</option><option>Presencial</option><option>Remoto</option><option>Híbrido</option><option>Na posição (side by side)</option></select></label>
+        <label class="campo"><span>Motivo</span>
+          <select id="atMotivo"><option value="">Selecione</option><option>Cronograma / rotina</option><option>Indicação da qualidade</option><option>Baixa performance</option><option>Mudança de processo</option><option>Lançamento de produto</option><option>Solicitação da supervisão</option><option>Retorno de afastamento</option></select></label>
+        <label class="campo"><span>Objetivo da ação</span><input id="atObjetivo" placeholder="O que o colaborador precisa sair sabendo fazer"></label>
       </div>
     </fieldset>
 
