@@ -275,6 +275,24 @@ async function rotaAdmin(env, u, req, partes) {
   throw new Erro(404, 'Rota não encontrada.');
 }
 
+/* ---------------- diagnóstico (não mostra nenhum valor secreto) ---------------- */
+async function diagnostico(env) {
+  const d = { servico: 'treinamento-inovacao-casa', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
+  if (d.banco_ligado) {
+    try { d.tabelas = (await todos(env, "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")).map(r => r.name).filter(n => !n.startsWith('_') && !n.startsWith('sqlite')); }
+    catch (e) { d.erro_banco = String(e.message || e).slice(0, 200); }
+  }
+  const faltam = ['usuarios', 'registros', 'valores', 'tentativas', 'log'].filter(t => !d.tabelas.includes(t));
+  d.problemas = [];
+  if (!d.banco_ligado) d.problemas.push('O banco não está ligado: em Settings → Bindings, adicione D1 com o nome DB.');
+  else if (faltam.length) d.problemas.push('Faltam tabelas no banco (' + faltam.join(', ') + '): rode o schema.sql no Console do D1.');
+  if (!d.segredo_sessao) d.problemas.push('Falta o segredo SEGREDO_SESSAO (mínimo 20 caracteres) em Settings → Variables and Secrets.');
+  if (!d.pimenta) d.problemas.push('Falta o segredo PIMENTA em Settings → Variables and Secrets.');
+  if (!d.origens) d.problemas.push('Falta a variável ORIGENS com o endereço do site.');
+  d.ok = d.problemas.length === 0;
+  return d;
+}
+
 /* ---------------- entrada ---------------- */
 function cors(env, req) {
   const origem = req.headers.get('Origin') || '';
@@ -291,10 +309,10 @@ export default {
       const origem = req.headers.get('Origin');
       const permitidas = String(env.ORIGENS || 'https://emersonaraujodefreitas.github.io').split(',').map(s => s.trim());
       if (origem && !permitidas.includes(origem)) throw new Erro(403, 'Origem não permitida.');
-      await garantirAdmin(env);
       const partes = new URL(req.url).pathname.replace(/^\/+|\/+$/g, '').split('/');
       const rota = partes[0];
-      if (rota === '' || rota === 'saude') return resposta(env, req, { ok: true, servico: 'treinamento-inovacao-casa' });
+      if (rota === '' || rota === 'saude') return resposta(env, req, await diagnostico(env));
+      await garantirAdmin(env);
       if (rota === 'login' && req.method === 'POST') return resposta(env, req, await rotaLogin(env, req));
       const u = await autenticar(env, req);
       if (u.trocar_senha && rota !== 'senha') throw new Erro(403, 'Troque a senha para continuar.');
