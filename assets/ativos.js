@@ -95,7 +95,7 @@ function colaboradores() {
   quadro.itens.filter(c => c.status !== 'Desligado').forEach(c => {
     const k = norm(c.email || c.nome), ant = [...m.entries()].find(([kk, v]) => kk === k || norm(v.nome) === norm(c.nome) || (c.mat && v.matricula === c.mat));
     if (ant) m.delete(ant[0]);
-    m.set(k, { nome: c.nome, email: c.email, matricula: c.mat, login: c.login, idOlos: c.idOlos, hubspot: c.hubspot, escala: c.escala, nascimento: c.nascimento, admissao: c.admissao, supervisor: c.supervisor, tempoCasa: c.tempoCasa, turno: c.turno, cidade: c.cidade, bairro: c.bairro, operacao: c.operacao, instituicao: c.ies, origem: 'BD da operação · ' + c.status + (c.grupo ? ' · ' + c.grupo : '') });
+    m.set(k, { nome: c.nome, email: c.email, matricula: c.mat, login: c.login, idOlos: c.idOlos, hubspot: c.hubspot, escala: c.escala, nascimento: c.nascimento, signoBD: c.signoBD, admissao: c.admissao, supervisor: c.supervisor, tempoCasa: c.tempoCasa, turno: c.turno, cidade: c.cidade, bairro: c.bairro, operacao: c.operacao, instituicao: c.ies, origem: 'BD da operação · ' + c.status + (c.grupo ? ' · ' + c.grupo : '') });
   });
   return [...m.values()].sort((a, b) => cmpTxt(a.nome, b.nome));
 }
@@ -127,7 +127,7 @@ function colaboradores() {
     const set = (id, v) => { const el = F(id); const val = v || ''; if (el.tagName === 'SELECT' && val && ![...el.options].some(o => o.value === val || o.text === val)) return; el.value = val; if (val) preenchidos.push(el); };
     if (c.supervisor && !supReal(c.supervisor)) { supervisores.push(c.supervisor); salvarSup(); }
     set('atEmail', c.email); set('atMatricula', c.matricula); set('atLogin', c.login); set('atIdOlos', c.idOlos); set('atHubspot', c.hubspot); set('atSupervisor', supReal(c.supervisor) || c.supervisor); set('atTurno', c.turno); set('atEscala', c.escala); set('atNascimento', c.nascimento); set('atAdmissao', c.admissao);
-    atualizarCalculos(); if (c.nascimento) preenchidos.push(F('atIdade'), F('atSigno')); if (c.admissao) preenchidos.push(F('atTempoCasaTxt'));
+    atualizarCalculos(); if (!c.nascimento && c.signoBD) F('atSigno').value = c.signoBD; if (c.nascimento) preenchidos.push(F('atIdade'), F('atSigno')); if (c.admissao) preenchidos.push(F('atTempoCasaTxt'));
     if (c.operacao) set('atOperacao', c.operacao); if (c.instituicao) set('atInstituicao', c.instituicao);
     if (c.bairro && (!c.cidade || !A.bairrosDaCidade(c.cidade).some(b => norm(b) === norm(c.bairro)))) { const lc = A.acharBairro(c.bairro, c.cidade); c = { ...c, cidade: lc.cidade, bairro: lc.bairro }; }
     const cid = A.MUN_NORM.get(norm(c.cidade)) || '';
@@ -136,7 +136,7 @@ function colaboradores() {
     if (cid) preenchidos.push(F('atCidade')); if (cid && c.bairro) preenchidos.push(F('atBairro'));
     preenchidos.forEach(el => { el.classList.remove('auto-preenchido'); void el.offsetWidth; el.classList.add('auto-preenchido'); });
     $$('#atForm .invalido').forEach(el => { if (preenchidos.includes(el) || el.id === 'atNome') el.classList.remove('invalido'); });
-    F('atDicaNome').textContent = `${preenchidos.length} campos preenchidos automaticamente · origem: ${c.origem}`;
+    F('atDicaNome').textContent = `${preenchidos.length} campos preenchidos automaticamente · origem: ${c.origem}` + (c.origem.startsWith('BD') && quadroAntigo() ? ' · importe o BD de novo para trazer nascimento, signo e HubSpot' : '');
   }
   inp.addEventListener('input', abrir); inp.addEventListener('focus', abrir);
   inp.addEventListener('keydown', e => {
@@ -765,7 +765,7 @@ async function importarBD(arquivo) {
         login: String(pega(l, 'login') ?? ''), grupo, ies, operacao, status: ehDeslig || /deslig/.test(norm(pega(l, 'status'))) ? 'Desligado' : titulo(pega(l, 'status')) || 'Ativo',
         escala: String(pega(l, 'escala') ?? ''), turno: titulo(pega(l, 'turno')), telefone: telefone(pega(l, 'telefone')),
         bairro: local.bairro, cidade: local.cidade,
-        email: String(corp || '').trim().toLowerCase(), admissao: adm, hubspot: String(pega(l, 'hubspot', 'id hubspot') ?? ''), nascimento: XLSXLeitor.dataExcel(pega(l, 'data de nascimento')), tempoCasa: tempoDeCasa(adm), onda: titulo(pega(l, 'onda')),
+        email: String(corp || '').trim().toLowerCase(), admissao: adm, hubspot: String(pega(l, 'hubspot', 'id hubspot') ?? ''), nascimento: XLSXLeitor.dataExcel(pega(l, 'data de nascimento')), signoBD: (() => { const v = titulo(pega(l, 'signo')); return /^\d/.test(v) ? '' : v.replace(/^Sargit/i, 'Sagit'); })(), tempoCasa: tempoDeCasa(adm), onda: titulo(pega(l, 'onda')),
         desligamento: ehDeslig ? XLSXLeitor.dataExcel(pega(l, 'data de desligamento')) : '', aba: aba.nome
       };
       const atual = pessoas.get(chave);
@@ -911,13 +911,16 @@ F('dlgPublicarForm').addEventListener('submit', async e => {
   catch (err) { F('pubMsg').textContent = 'Não foi possível publicar: ' + err.message; F('pubMsg').className = 'msg erro'; }
   finally { F('pubOk').disabled = false; }
 });
+const quadroAntigo = () => quadro.itens.length > 0 && !quadro.itens.some(c => 'nascimento' in c || 'hubspot' in c);
 function renderCompart() {
   const el = F('atCompart'); if (!el) return;
   if (!quadro.itens.length) { el.innerHTML = ''; return; }
+  const aviso = quadroAntigo() ? `<div class="aviso-bd">${G.ic('alert', '')}<span>Este BD foi importado numa versão anterior do site e está <b>sem data de nascimento, signo e HubSpot</b>. Clique em <b>Importar BD da operação</b> e escolha o arquivo de novo: ele é atualizado e republicado para todos.</span></div>` : '';
   const quando = d => new Date(d).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   el.innerHTML = quadro.compartilhado && quadro.publicadoEm
     ? `<span class="tag bom">${G.ic('check', '')}Compartilhado com todos</span><span>publicado em ${quando(quadro.publicadoEm)} · criptografado com a senha da equipe</span><button type="button" class="btn btn-link" id="atRepublicar">publicar de novo</button>`
     : `<span class="tag alerta">${G.ic('alert', '')}Só neste navegador</span><span>Publique para que todos vejam o mesmo BD.</span><button type="button" class="btn btn-pri btn-mini" id="atPublicar">${G.ic('upload', '')}Publicar para todos</button>`;
+  el.innerHTML = aviso + el.innerHTML;
   const b = F('atPublicar') || F('atRepublicar'); if (b) b.onclick = () => pedirPublicacao(false);
 }
 // leitura para todos: ao abrir o site, busca o BD publicado
