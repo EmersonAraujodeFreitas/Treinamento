@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Treinamento | Inovação Casa</title>
+<meta name="description" content="Formação inicial de turmas para habilitação ao call center — cadastro e painel de desempenho por bairro.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f2a4a'/%3E%3Cpath d='M8 16l8-7 8 7v8h-5v-5h-6v5H8z' fill='%23fff'/%3E%3Ccircle cx='24' cy='8' r='3' fill='%2322c3a6'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="assets/dados-bahia.js"></script>
+</head>
+<body>
+
+<header class="topo">
+  <div class="topo-in">
+    <div class="marca">
+      <svg class="logo" viewBox="0 0 48 48" aria-hidden="true">
+        <rect width="48" height="48" rx="12" fill="var(--marca-escura)"/>
+        <path d="M11 24.5 24 13l13 11.5V36h-8.5v-8h-9v8H11z" fill="#fff"/>
+        <circle cx="36.5" cy="11.5" r="4.5" fill="var(--marca-acento)"/>
+        <path d="M36.5 4.5v2.2M36.5 16.3v2.2M29.5 11.5h2.2M41.3 11.5h2.2" stroke="var(--marca-acento)" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <div class="marca-nome">Inovação <b>Casa</b></div>
+        <div class="marca-sub">Treinamento · Formação inicial call center</div>
+      </div>
+    </div>
+    <nav class="abas" role="tablist">
+      <button class="aba ativa" data-aba="cadastro" role="tab">Cadastro de formação</button>
+      <button class="aba" data-aba="dashboard" role="tab">Dashboard</button>
+      <button class="aba" data-aba="base" role="tab">Base de dados <span class="contador" id="contBase">0</span></button>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<!-- ===================== CADASTRO ===================== -->
+<section id="aba-cadastro" class="painel ativo">
+  <div class="cab-pagina">
+    <div>
+      <h1>Cadastro de formação inicial</h1>
+      <p class="sub">Registro do treinando na turma de habilitação ao call center. Campos com <span class="obr">*</span> são obrigatórios.</p>
+    </div>
+    <div class="cab-acoes">
+      <span id="modoEdicao" class="selo selo-aviso" hidden>Editando cadastro</span>
+      <button type="button" class="btn btn-sec" id="btnNovo">Novo cadastro</button>
+    </div>
+  </div>
+
+  <form id="form" novalidate autocomplete="off">
+    <input type="hidden" id="id">
+
+    <fieldset class="bloco">
+      <legend><span class="num">1</span> Turma</legend>
+      <div class="grade g4">
+        <label class="campo"><span>Código da turma <i class="obr">*</i></span>
+          <input id="turma" list="listaTurmas" placeholder="Ex.: T-2026-11-A" required>
+          <datalist id="listaTurmas"></datalist></label>
+        <label class="campo"><span>Início do treinamento <i class="obr">*</i></span><input type="date" id="dataInicio" required></label>
+        <label class="campo"><span>Fim do treinamento</span><input type="date" id="dataFim"></label>
+        <label class="campo"><span>Instrutor(a)</span><input id="instrutor" list="listaInstrutores" placeholder="Nome do instrutor"><datalist id="listaInstrutores"></datalist></label>
+        <label class="campo"><span>Operação / produto</span>
+          <select id="operacao"><option value="">Selecione</option><option>Captação</option><option>Serviços</option><option>Rematrícula</option><option>Cobrança</option><option>SAC</option><option>Outro</option></select></label>
+        <label class="campo"><span>Turno da turma</span>
+          <select id="turnoTurma"><option value="">Selecione</option><option>Manhã</option><option>Tarde</option><option>Noite</option><option>Integral</option></select></label>
+        <label class="campo"><span>Modalidade</span>
+          <select id="modalidade"><option value="">Selecione</option><option>Presencial</option><option>Remoto</option><option>Híbrido</option></select></label>
+      </div>
+    </fieldset>
+
+    <fieldset class="bloco">
+      <legend><span class="num">2</span> Dados pessoais</legend>
+      <div class="grade g4">
+        <label class="campo c2"><span>Nome completo <i class="obr">*</i></span><input id="nome" required placeholder="Nome e sobrenome"></label>
+        <label class="campo"><span>E-mail <i class="obr">*</i></span><input type="email" id="email" required placeholder="nome@email.com"></label>
+        <label class="campo"><span>Telefone / WhatsApp <i class="obr">*</i></span><input id="telefone" inputmode="numeric" required placeholder="(71) 99999-9999"></label>
+        <label class="campo"><span>Data de nascimento <i class="obr">*</i></span><input type="date" id="nascimento" required></label>
+        <label class="campo"><span>Idade</span><input id="idade" readonly tabindex="-1" class="calc" placeholder="—"></label>
+        <label class="campo"><span>Signo</span>
+          <select id="signo"><option value="">Automático pela data</option></select></label>
+        <label class="campo"><span>Escolaridade</span>
+          <select id="escolaridade"><option value="">Selecione</option><option>Ensino médio incompleto</option><option>Ensino médio completo</option><option>Superior cursando</option><option>Superior completo</option><option>Pós-graduação</option></select></label>
+      </div>
+    </fieldset>
+
+    <fieldset class="bloco">
+      <legend><span class="num">3</span> Endereço</legend>
+      <div class="grade g4">
+        <label class="campo"><span>Estado</span><input value="Bahia (BA)" readonly tabindex="-1" class="fixo"></label>
+        <div class="campo"><span>Cidade / município <i class="obr">*</i></span>
+          <div class="auto" id="autoCidade"><input id="cidade" placeholder="Digite para buscar…" required role="combobox" aria-autocomplete="list"><ul class="auto-lista" hidden></ul></div>
+          <small class="dica" id="dicaCidade">417 municípios da Bahia</small></div>
+        <div class="campo"><span>Bairro <i class="obr">*</i></span>
+          <div class="auto" id="autoBairro"><input id="bairro" placeholder="Escolha a cidade primeiro" required disabled role="combobox" aria-autocomplete="list"><ul class="auto-lista" hidden></ul></div>
+          <small class="dica" id="dicaBairro">Vinculado à cidade escolhida</small></div>
+        <label class="campo"><span>Região</span><input id="regiao" readonly tabindex="-1" class="calc" placeholder="—"></label>
+        <label class="campo"><span>Tempo de deslocamento até o trabalho</span>
+          <select id="deslocamento"><option value="">Selecione</option><option>Até 30 min</option><option>30 a 60 min</option><option>1h a 1h30</option><option>Mais de 1h30</option><option>Remoto</option></select></label>
+        <label class="campo"><span>Transporte principal</span>
+          <select id="transporte"><option value="">Selecione</option><option>Ônibus</option><option>Metrô</option><option>Ônibus + metrô</option><option>Carro / moto</option><option>A pé / bicicleta</option><option>Remoto</option></select></label>
+      </div>
+    </fieldset>
+
+    <fieldset class="bloco">
+      <legend><span class="num">4</span> Perfil profissional</legend>
+      <div class="grade g4">
+        <div class="campo c2"><span>Perfil do consultor <i class="obr">*</i></span>
+          <div class="seg" id="perfil" data-valor="">
+            <button type="button" data-v="Vendas">Perfil de vendas</button>
+            <button type="button" data-v="Não vendas">Perfil de não vendas</button>
+          </div></div>
+        <label class="campo"><span>Experiência em call center</span>
+          <select id="experiencia"><option value="">Selecione</option><option>Nenhuma (1º emprego no setor)</option><option>Até 6 meses</option><option>6 meses a 1 ano</option><option>1 a 2 anos</option><option>Mais de 2 anos</option></select></label>
+        <label class="campo"><span>Experiência anterior com vendas</span>
+          <select id="expVendas"><option value="">Selecione</option><option>Sim</option><option>Não</option></select></label>
+        <label class="campo"><span>Como soube da vaga</span>
+          <select id="origemVaga"><option value="">Selecione</option><option>Indicação</option><option>Redes sociais</option><option>Site de vagas</option><option>Agência / RH</option><option>Recontratação</option><option>Outro</option></select></label>
+        <label class="campo"><span>Computador e internet em casa</span>
+          <select id="equipamento"><option value="">Selecione</option><option>Sim, ambos</option><option>Só internet</option><option>Só computador</option><option>Não</option></select></label>
+      </div>
+    </fieldset>
+
+    <fieldset class="bloco">
+      <legend><span class="num">5</span> Frequência e atestados</legend>
+      <div class="grade g4">
+        <div class="campo"><span>Apresentou atestado? <i class="obr">*</i></span>
+          <div class="seg" id="atestado" data-valor="">
+            <button type="button" data-v="Sim">Sim</button>
+            <button type="button" data-v="Não">Não</button>
+          </div></div>
+        <label class="campo"><span>Faltas (dias)</span><input type="number" id="faltas" min="0" step="1" value="0"></label>
+        <label class="campo"><span>Atrasos</span><input type="number" id="atrasos" min="0" step="1" value="0"></label>
+        <label class="campo"><span>Frequência</span><input id="frequencia" readonly tabindex="-1" class="calc" placeholder="—"></label>
+      </div>
+      <div id="blocoAtestados" class="sub-bloco" hidden>
+        <div class="sub-cab"><b>Atestados apresentados</b><button type="button" class="btn btn-link" id="addAtestado">+ adicionar atestado</button></div>
+        <div id="listaAtestados" class="linhas"></div>
+      </div>
+    </fieldset>
+
+    <fieldset class="bloco">
+      <legend><span class="num">6</span> Notas e desempenho <small>escala de 0 a 10</small></legend>
+
+      <div class="sub-bloco">
+        <div class="sub-cab"><b>Provas aplicadas nos dias de treinamento</b><button type="button" class="btn btn-link" id="addProva">+ adicionar prova</button></div>
+        <div id="listaProvas" class="linhas"></div>
+      </div>
+
+      <div class="sub-bloco">
+        <div class="sub-cab"><b>Últimas notas da qualidade (monitorias)</b><button type="button" class="btn btn-link" id="addQualidade">+ adicionar monitoria</button></div>
+        <div id="listaQualidade" class="linhas"></div>
+      </div>
+
+      <div class="sub-bloco">
+        <div class="sub-cab"><b>Avaliação comportamental do instrutor</b><small class="dica">1 = precisa melhorar · 5 = excelente</small></div>
+        <div class="grade g5" id="comportamental"></div>
+      </div>
+
+      <div class="resumo-notas">
+        <div class="rn"><span>Média das provas</span><b id="rMediaProvas">—</b></div>
+        <div class="rn"><span>Média da qualidade</span><b id="rMediaQual">—</b></div>
+        <div class="rn"><span>Comportamental</span><b id="rComport">—</b></div>
+        <label class="rn rn-final"><span>Nota final do treinamento <i class="obr">*</i></span>
+          <input type="number" id="notaFinal" min="0" max="10" step="0.1" placeholder="0,0" required>
+          <small class="dica"><button type="button" class="btn btn-link" id="calcFinal">Calcular automaticamente</button> · 60% provas + 30% qualidade + 10% comportamental</small>
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset class="bloco">
+      <legend><span class="num">7</span> Resultado</legend>
+      <div class="grade g4">
+        <label class="campo"><span>Situação final <i class="obr">*</i></span>
+          <select id="status" required><option value="">Selecione</option><option>Em treinamento</option><option>Aprovado</option><option>Reprovado</option><option>Desistente</option><option>Desligado</option></select></label>
+        <label class="campo"><span>Data de habilitação</span><input type="date" id="dataHabilitacao"></label>
+        <label class="campo"><span>Indicado para</span>
+          <select id="indicacao"><option value="">Selecione</option><option>Operação de vendas</option><option>Operação de não vendas</option><option>Reciclagem</option><option>Não indicado</option></select></label>
+        <label class="campo"><span>Potencial de liderança</span>
+          <select id="potencial"><option value="">Selecione</option><option>Alto</option><option>Médio</option><option>Baixo</option></select></label>
+        <label class="campo c4"><span>Observações do instrutor</span><textarea id="observacoes" rows="3" placeholder="Pontos fortes, pontos de atenção, combinados…"></textarea></label>
+      </div>
+    </fieldset>
+
+    <div class="barra-acoes">
+      <div id="msgForm" class="msg" role="status"></div>
+      <button type="button" class="btn btn-sec" id="btnLimpar">Limpar</button>
+      <button type="submit" class="btn btn-pri" id="btnSalvar">Salvar cadastro</button>
+    </div>
+  </form>
+</section>
+
+<!-- ===================== DASHBOARD ===================== -->
+<section id="aba-dashboard" class="painel">
+  <div class="cab-pagina">
+    <div>
+      <h1>Panorama de desempenho por bairro</h1>
+      <p class="sub">Salvador e fora de Salvador · <span id="dashResumoFiltro">todos os registros</span></p>
+    </div>
+    <div class="cab-acoes">
+      <label class="campo-inline">Meta da nota final <input type="number" id="meta" min="0" max="10" step="0.5" value="7"></label>
+      <button class="btn btn-sec" id="btnImprimir" type="button">Imprimir / PDF</button>
+    </div>
+  </div>
+
+  <div class="filtros" id="filtros">
+    <label>Turma<select data-f="turma"></select></label>
+    <label>Início de<input type="date" data-f="de"></label>
+    <label>até<input type="date" data-f="ate"></label>
+    <label>Abrangência<select data-f="abrangencia">
+      <option value="">Toda a Bahia</option><option value="ssa">Salvador</option><option value="fora">Fora de Salvador</option><option value="rms">Região Metropolitana (sem Salvador)</option><option value="int">Interior</option></select></label>
+    <label>Cidade<select data-f="cidade"></select></label>
+    <label>Bairro<select data-f="bairro"></select></label>
+    <label>Perfil<select data-f="perfil"><option value="">Todos</option><option>Vendas</option><option>Não vendas</option></select></label>
+    <label>Situação<select data-f="status"></select></label>
+    <label>Atestado<select data-f="atestado"><option value="">Todos</option><option>Sim</option><option>Não</option></select></label>
+    <label>Faixa etária<select data-f="faixa"></select></label>
+    <label>Signo<select data-f="signo"></select></label>
+    <button class="btn btn-link" id="limparFiltros" type="button">Limpar filtros</button>
+  </div>
+
+  <div id="dashVazio" class="vazio" hidden>
+    <b>Nenhum treinando encontrado.</b>
+    <p>Cadastre treinandos na primeira aba, importe uma planilha na Base de dados ou carregue dados de exemplo para conhecer o painel.</p>
+    <button class="btn btn-pri" type="button" id="btnExemploDash">Carregar dados de exemplo</button>
+  </div>
+
+  <div id="dashConteudo">
+    <div class="kpis" id="kpis"></div>
+
+    <div class="insights" id="insights"></div>
+
+    <div class="grade-dash">
+      <article class="cartao c-largo">
+        <header><h2>Salvador × fora de Salvador</h2><p>Médias e taxa de aprovação lado a lado</p></header>
+        <div class="comparativo" id="comparativo"></div>
+      </article>
+
+      <article class="cartao c-largo">
+        <header><h2>Ranking de bairros pela nota final</h2>
+          <p>Linha tracejada = meta · <label class="mini">mínimo de treinandos por bairro <select id="minAmostra"><option>1</option><option selected>2</option><option>3</option><option>5</option></select></label>
+          <label class="mini">mostrar <select id="topN"><option value="15">15</option><option value="25" selected>25</option><option value="50">50</option><option value="999">todos</option></select></label></p></header>
+        <div class="area-graf alta" id="wrapRanking"><canvas id="gRanking"></canvas></div>
+      </article>
+
+      <article class="cartao">
+        <header><h2>Nota final por cidade</h2><p>Média dos treinandos de cada município</p></header>
+        <div class="area-graf" id="wrapCidades"><canvas id="gCidades"></canvas></div>
+      </article>
+
+      <article class="cartao">
+        <header><h2>Evolução nas provas</h2><p>Média por ordem da prova no treinamento</p></header>
+        <div class="area-graf"><canvas id="gProvas"></canvas></div>
+      </article>
+
+      <article class="cartao">
+        <header><h2>Distribuição das notas finais</h2><p>Quantidade de treinandos por faixa de nota</p></header>
+        <div class="area-graf"><canvas id="gDistrib"></canvas></div>
+      </article>
+
+      <article class="cartao">
+        <header><h2>Perfil de vendas × não vendas</h2><p>Nota final média e aprovação</p></header>
+        <div class="comparativo" id="compPerfil"></div>
+      </article>
+
+      <article class="cartao">
+        <header><h2>Situação final</h2><p>Quantidade de treinandos</p></header>
+        <div class="area-graf"><canvas id="gStatus"></canvas></div>
+      </article>
+
+      <article class="cartao">
+        <header><h2>Atestado × desempenho</h2><p>Quem apresentou atestado contra quem não apresentou</p></header>
+        <div class="comparativo" id="compAtestado"></div>
+      </article>
+
+      <article class="cartao">
+        <header><h2>Nota final por faixa etária</h2><p>Média por faixa</p></header>
+        <div class="area-graf"><canvas id="gIdade"></canvas></div>
+      </article>
+
+      <article class="cartao">
+        <header><h2>Nota final por signo</h2><p>Média por signo (curiosidade)</p></header>
+        <div class="area-graf"><canvas id="gSigno"></canvas></div>
+      </article>
+
+      <article class="cartao c-largo">
+        <header class="cab-tabela"><div><h2>Panorama completo por bairro</h2><p>Clique no cabeçalho para ordenar · clique no bairro para filtrar o painel</p></div>
+          <div class="cab-acoes"><input type="search" id="buscaBairro" placeholder="Buscar bairro ou cidade"><button class="btn btn-sec" id="expBairros" type="button">Exportar CSV</button></div></header>
+        <div class="tabela-wrap"><table class="tabela" id="tBairros"></table></div>
+      </article>
+
+      <article class="cartao c-largo">
+        <header><h2>Bairros de Salvador sem treinandos</h2><p id="coberturaTxt">Cobertura dos bairros da capital nos registros filtrados</p></header>
+        <div class="cobertura"><div class="barra-cob"><i id="barraCob"></i></div></div>
+        <div class="chips" id="semTreinandos"></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== BASE ===================== -->
+<section id="aba-base" class="painel">
+  <div class="cab-pagina">
+    <div>
+      <h1>Base de dados</h1>
+      <p class="sub">Os cadastros ficam salvos neste navegador. Exporte o backup regularmente ou importe uma planilha.</p>
+    </div>
+    <div class="cab-acoes wrap">
+      <button class="btn btn-sec" id="expCsv" type="button">Exportar planilha (CSV)</button>
+      <button class="btn btn-sec" id="expJson" type="button">Baixar backup</button>
+      <label class="btn btn-sec">Importar backup / CSV<input type="file" id="impArquivo" accept=".json,.csv" hidden></label>
+      <button class="btn btn-sec" id="btnExemplo" type="button">Dados de exemplo</button>
+      <button class="btn btn-perigo" id="btnApagarTudo" type="button">Apagar tudo</button>
+    </div>
+  </div>
+  <div class="barra-busca"><input type="search" id="buscaBase" placeholder="Buscar por nome, e-mail, turma, cidade ou bairro"></div>
+  <div class="cartao"><div class="tabela-wrap"><table class="tabela" id="tBase"></table></div></div>
+</section>
+
+</main>
+
+<footer class="rodape">Inovação Casa · Área de Treinamento</footer>
+
+<div id="toast" class="toast" role="status" hidden></div>
+<div id="tip" class="tip" hidden></div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>
