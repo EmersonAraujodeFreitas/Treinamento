@@ -10,6 +10,13 @@ const F = id => document.getElementById(id);
 
 const KEY = 'inovacao_treinamento_ativos_v1';
 let regs = ler(KEY, []);
+const SUP_ANTIGOS = { 'Carla Menezes': 'ALINE DA CONCEIÇÃO SANTOS', 'Rogério Alves': 'ANA JULIA CRUZ LEITE', 'Juliana Paz': 'KELLY DOS SANTOS', 'Marcos Vinícius': 'LAIS SANTOS DE FREITAS' };
+regs.forEach((r, i) => { if (r.exemplo) { if (SUP_ANTIGOS[r.supervisor]) r.supervisor = SUP_ANTIGOS[r.supervisor]; if (!r.instituicao) r.instituicao = i % 4 === 3 ? 'Unijorge' : 'UVA'; } });
+const KEY_SUP = 'inovacao_treinamento_supervisores_v1';
+const SUP_PADRAO = ['ALINE DA CONCEIÇÃO SANTOS', 'ANA JULIA CRUZ LEITE', 'DEBORA CORDEIRO DOS SANTOS ALMEIDA', 'KELLY DOS SANTOS', 'LAIS SANTOS DE FREITAS', 'PAULA VALERIA NASCIMENTO DA SILVA', 'MERCIA LINS DA SILVA', 'MICHELE OLIVEIRA DOS SANTOS'];
+let supervisores = ler(KEY_SUP, null) || SUP_PADRAO.slice();
+const salvarSup = () => { supervisores = [...new Map(supervisores.filter(Boolean).map(n => [norm(n), n.trim().replace(/\s+/g, ' ')])).values()].sort(cmpTxt); gravar(KEY_SUP, supervisores); };
+const supReal = v => supervisores.find(n => norm(n) === norm(v));
 const salvar = () => { gravar(KEY, regs); F('atContBase').textContent = regs.length; rotuloExemplo(); };
 
 const TIPOS = ['Reciclagem', 'Alinhamento', 'Novo conteúdo', 'Novo produto'];
@@ -79,8 +86,8 @@ A.autocomplete($('#atAutoBairro'), {
 // colaboradores conhecidos (ativos + aprovados da formação)
 function colaboradores() {
   const m = new Map();
-  A.formacao().filter(r => r.status === 'Aprovado').forEach(r => m.set(norm(r.email || r.nome), { nome: r.nome, email: r.email, cidade: r.cidade, bairro: r.bairro, operacao: r.indicacao === 'Permanência' || r.operacao === 'Permanência' ? 'Permanência' : r.operacao === 'Captação' || r.indicacao === 'Captação' ? 'Captação' : '', origem: 'Formação ' + (r.turma || '') }));
-  regs.slice().sort((a, b) => (a.atualizadoEm || '').localeCompare(b.atualizadoEm || '')).forEach(r => m.set(chaveColab(r), { nome: r.nome, email: r.email, matricula: r.matricula, supervisor: r.supervisor, tempoCasa: r.tempoCasa, turno: r.turno, cidade: r.cidade, bairro: r.bairro, operacao: r.operacao, origem: (regs.filter(x => chaveColab(x) === chaveColab(r)).length) + ' treinamento(s) registrado(s)' }));
+  A.formacao().filter(r => r.status === 'Aprovado').forEach(r => m.set(norm(r.email || r.nome), { nome: r.nome, email: r.email, cidade: r.cidade, bairro: r.bairro, operacao: r.indicacao === 'Permanência' || r.operacao === 'Permanência' ? 'Permanência' : r.operacao === 'Captação' || r.indicacao === 'Captação' ? 'Captação' : '', instituicao: r.instituicao, origem: 'Formação ' + (r.turma || '') }));
+  regs.slice().sort((a, b) => (a.atualizadoEm || '').localeCompare(b.atualizadoEm || '')).forEach(r => m.set(chaveColab(r), { nome: r.nome, email: r.email, matricula: r.matricula, supervisor: r.supervisor, tempoCasa: r.tempoCasa, turno: r.turno, cidade: r.cidade, bairro: r.bairro, operacao: r.operacao, instituicao: r.instituicao, origem: (regs.filter(x => chaveColab(x) === chaveColab(r)).length) + ' treinamento(s) registrado(s)' }));
   return [...m.values()].sort((a, b) => cmpTxt(a.nome, b.nome));
 }
 (function () {
@@ -98,7 +105,7 @@ function colaboradores() {
     const c = itens[i]; if (!c) return; ul.hidden = true;
     inp.value = c.nome;
     const set = (id, v) => { if (v && !F(id).value) F(id).value = v; };
-    set('atEmail', c.email); set('atMatricula', c.matricula); set('atSupervisor', c.supervisor); set('atTempoCasa', c.tempoCasa); set('atTurno', c.turno); set('atOperacao', c.operacao);
+    set('atEmail', c.email); set('atMatricula', c.matricula); set('atSupervisor', c.supervisor); set('atTempoCasa', c.tempoCasa); set('atTurno', c.turno); set('atOperacao', c.operacao); set('atInstituicao', c.instituicao);
     if (c.cidade && !F('atCidade').value) { F('atCidade').value = c.cidade; F('atCidade').dataset.ok = A.MUN_NORM.get(norm(c.cidade)) || ''; F('atBairro').disabled = !F('atCidade').dataset.ok; F('atBairro').value = c.bairro || ''; }
     F('atDicaNome').textContent = 'Dados preenchidos a partir de: ' + c.origem;
   }
@@ -117,7 +124,6 @@ function datalists() {
   const uniq = k => [...new Set(regs.map(r => r[k]).filter(Boolean))].sort(cmpTxt);
   F('atListaTemas').innerHTML = uniq('tema').map(t => `<option value="${esc(t)}">`).join('');
   F('atListaInstrutores').innerHTML = uniq('instrutor').map(t => `<option value="${esc(t)}">`).join('');
-  F('atListaSupervisores').innerHTML = uniq('supervisor').map(t => `<option value="${esc(t)}">`).join('');
 }
 // tema já usado puxa os dados da ação
 F('atTema').addEventListener('change', () => {
@@ -128,7 +134,7 @@ F('atTema').addEventListener('change', () => {
     .forEach(([id, k]) => { if (!F(id).value && r[k] !== undefined && r[k] !== null) F(id).value = k === 'carga' ? fmt(r[k], r[k] % 1 ? 1 : 0) : r[k]; });
 });
 
-const ACAO = [['atTema', 'tema'], ['atData', 'data'], ['atOperacao', 'operacao'], ['atInstrutor', 'instrutor'], ['atModalidade', 'modalidade'], ['atMotivo', 'motivo'], ['atObjetivo', 'objetivo']];
+const ACAO = [['atTema', 'tema'], ['atData', 'data'], ['atInstituicao', 'instituicao'], ['atOperacao', 'operacao'], ['atInstrutor', 'instrutor'], ['atModalidade', 'modalidade'], ['atMotivo', 'motivo'], ['atObjetivo', 'objetivo']];
 const COLAB = [['atNome', 'nome'], ['atMatricula', 'matricula'], ['atEmail', 'email'], ['atSupervisor', 'supervisor'], ['atTempoCasa', 'tempoCasa'], ['atTurno', 'turno']];
 const msg = (t, tipo) => { const m = F('atMsg'); m.textContent = t; m.className = 'msg ' + (tipo || ''); };
 
@@ -173,7 +179,8 @@ F('atForm').addEventListener('submit', e => {
   exigir('atTipo', F('atTipo').dataset.valor, 'tipo de treinamento');
   exigir('atTema', F('atTema').value.trim(), 'tema');
   exigir('atData', F('atData').value, 'data');
-  exigir('atOperacao', F('atOperacao').value, 'operação');
+  exigir('atInstituicao', F('atInstituicao').value, 'instituição (UVA ou Unijorge)');
+  exigir('atOperacao', F('atOperacao').value, 'operação (Captação ou Permanência)');
   exigir('atNome', F('atNome').value.trim().split(/\s+/).length >= 2, 'nome completo do colaborador');
   exigir('atPresenca', F('atPresenca').dataset.valor, 'presença');
   exigir('atStatus', F('atStatus').value, 'situação');
@@ -206,6 +213,7 @@ F('atForm').addEventListener('submit', e => {
   r.atualizadoEm = new Date().toISOString(); delete r.exemplo;
   if (!idAtual) regs.push(r);
   if (r.cidade && r.bairro) A.aprenderBairro(r.cidade, r.bairro);
+  if (r.supervisor) { const real = supReal(r.supervisor); if (real) r.supervisor = real; else { supervisores.push(r.supervisor); salvarSup(); } }
   salvar(); datalists();
   if (idAtual) { preencher(r); msg('Alterações salvas. Você pode continuar editando ou buscar outro registro.', 'ok'); toast('Registro atualizado'); return; }
   limpar(true);
@@ -236,6 +244,45 @@ F('atForm').addEventListener('submit', e => {
   inp.addEventListener('blur', () => setTimeout(() => ul.hidden = true, 120));
 })();
 
+// supervisor: lista fixa + cadastro de novos
+A.autocomplete($('#atAutoSup'), {
+  fonte: () => supervisores, permitirNovo: true, rotuloNovo: 'Cadastrar supervisor',
+  aoEscolher: (v, novo) => {
+    const t = v.trim().replace(/\s+/g, ' '); if (!t) return;
+    const real = supReal(t);
+    if (real) { F('atSupervisor').value = real; return; }
+    if (novo) { supervisores.push(t.toUpperCase()); salvarSup(); F('atSupervisor').value = t.toUpperCase(); toast('Supervisor cadastrado'); }
+  }
+});
+function listaSup() {
+  const uso = n => regs.filter(r => norm(r.supervisor) === norm(n)).length;
+  F('supLista').innerHTML = supervisores.map((n, i) => `<li><span class="sup-av">${esc(n.split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join(''))}</span>
+    <input value="${esc(n)}" data-i="${i}" aria-label="Nome do supervisor"><small>${uso(n)} registro${uso(n) === 1 ? '' : 's'}</small>
+    <button type="button" class="btn-icone" data-del="${i}" title="Remover" aria-label="Remover">${G.ic('trash', '')}</button></li>`).join('') || '<li class="dica">Nenhum supervisor cadastrado.</li>';
+  F('supInfo').textContent = `${supervisores.length} supervisores · renomear aqui atualiza os registros já salvos`;
+}
+F('atGerSup').onclick = () => { listaSup(); F('dlgSup').showModal(); setTimeout(() => F('supNovo').focus(), 50); };
+function addSup() {
+  const v = F('supNovo').value.trim().replace(/\s+/g, ' ').toUpperCase(); if (!v) return;
+  if (supReal(v)) { toast('Esse supervisor já está na lista'); return; }
+  supervisores.push(v); salvarSup(); F('supNovo').value = ''; listaSup(); toast('Supervisor cadastrado');
+}
+F('supAdd').onclick = addSup;
+F('supNovo').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addSup(); } });
+F('supLista').addEventListener('change', e => {
+  const inp = e.target.closest('input[data-i]'); if (!inp) return;
+  const antigo = supervisores[+inp.dataset.i], novo = inp.value.trim().replace(/\s+/g, ' ').toUpperCase();
+  if (!novo) { inp.value = antigo; return; }
+  regs.forEach(r => { if (norm(r.supervisor) === norm(antigo)) r.supervisor = novo; });
+  supervisores[+inp.dataset.i] = novo; salvarSup(); salvar(); listaSup(); toast('Supervisor renomeado');
+});
+F('supLista').addEventListener('click', e => {
+  const b = e.target.closest('[data-del]'); if (!b) return;
+  const n = supervisores[+b.dataset.del];
+  if (!confirm(`Remover ${n} da lista? Os registros já salvos continuam com o nome.`)) return;
+  supervisores.splice(+b.dataset.del, 1); salvarSup(); listaSup();
+});
+
 /* =========================================================
    DASHBOARD
    ========================================================= */
@@ -245,7 +292,7 @@ const NOMES_MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set'
 const rotMes = m => { const [a, mm] = m.split('-'); return NOMES_MES[+mm - 1] + '/' + a.slice(2); };
 function filtrar(lista, ignorar) {
   return lista.filter(r => {
-    for (const k of ['tipo', 'operacao', 'tema', 'supervisor', 'instrutor', 'status', 'presenca']) if (k !== ignorar && FILT[k] && r[k] !== FILT[k]) return false;
+    for (const k of ['tipo', 'instituicao', 'operacao', 'tema', 'supervisor', 'instrutor', 'status', 'presenca']) if (k !== ignorar && FILT[k] && r[k] !== FILT[k]) return false;
     if (FILT.de && (r.data || '') < FILT.de) return false;
     if (FILT.ate && (r.data || '') > FILT.ate) return false;
     if (FILT.abrangencia === 'ssa' && r.cidade !== 'Salvador') return false;
@@ -357,6 +404,11 @@ function render() {
   rankGanho(F('atGTemas'), porTema.map(x => ({ nome: x.t, ...x })), 'Lance a qualidade antes e depois para ver o ganho');
   rankGanho(F('atGSupervisor'), [...agrupar(l, r => r.supervisor).entries()].map(([s, rs]) => ({ nome: s, ...resumo(rs) })), 'Informe o supervisor e a qualidade antes e depois');
 
+  // instituição
+  const conv0 = x => ({ n: x.n, presenca: x.presenca, pos: x.pos, qd: x.qd === null ? null : x.qd / 10, concl: x.concl });
+  G.duelo(F('atCompInst'), [conv0(resumo(l.filter(r => r.instituicao === 'UVA'))), conv0(resumo(l.filter(r => r.instituicao === 'Unijorge')))], ['UVA', 'Unijorge'],
+    [['Presença', 'presenca', 1, 'check', true], ['Nota pós-teste', 'pos', 10, 'exam'], ['Qualidade depois', 'qd', 10, 'headset', 'q'], ['Concluídos', 'concl', 1, 'flag', true]], [COR.s1, COR.s4], ['building', 'building'], 'registros');
+
   // operação
   const cap = resumo(l.filter(r => r.operacao === 'Captação')), per = resumo(l.filter(r => r.operacao === 'Permanência'));
   const conv = x => ({ n: x.n, presenca: x.presenca, pos: x.pos, qd: x.qd === null ? null : x.qd / 10, evoQ: x.evoQual === null ? null : Math.max(0, x.evoQual) / 10, concl: x.concl });
@@ -409,14 +461,14 @@ function editar(id) { const r = regs.find(x => x.id === id); if (r) { preencher(
 /* =========================================================
    BASE
    ========================================================= */
-const COLS_B = [['nome', 'Colaborador'], ['tipo', 'Tipo'], ['tema', 'Tema'], ['data', 'Data'], ['operacao', 'Operação'], ['supervisor', 'Supervisor'], ['presenca', 'Presença'], ['pos', 'Pós-teste', 1], ['qualDepois', 'Qualidade depois', 1], ['status', 'Situação']];
+const COLS_B = [['nome', 'Colaborador'], ['instituicao', 'IES'], ['tipo', 'Tipo'], ['tema', 'Tema'], ['data', 'Data'], ['operacao', 'Operação'], ['supervisor', 'Supervisor'], ['presenca', 'Presença'], ['pos', 'Pós-teste', 1], ['qualDepois', 'Qualidade depois', 1], ['status', 'Situação']];
 function renderBase() {
   const q = norm(F('atBuscaBase').value), o = ESTADO.ordB;
   const rows = regs.filter(r => !q || norm([r.nome, r.tema, r.supervisor, r.instrutor, r.email, r.tipo].join(' ')).includes(q))
     .sort((a, b) => { const x = a[o.k], y = b[o.k]; const r = typeof x === 'number' || typeof y === 'number' ? (x ?? -1) - (y ?? -1) : cmpTxt(x || '', y || ''); return o.asc ? r : -r; });
   const st = s => ({ 'Concluído': 'bom', 'Pendente': 'alerta', 'Reagendado': 'alerta', 'Cancelado': 'ruim' }[s] || 'neutro');
   F('atTBase').innerHTML = `<thead><tr>${COLS_B.map(([k, t, n]) => `<th data-k="${k}" class="${n ? 'dir' : ''} ${o.k === k ? 'ord' + (o.asc ? ' asc' : '') : ''}">${t}</th>`).join('')}<th></th></tr></thead>
-  <tbody>${rows.map(r => `<tr><td class="lk" data-edit="${r.id}">${esc(r.nome)}${r.exemplo ? ' <span class="tag neutro">exemplo</span>' : ''}</td><td>${esc(r.tipo)}</td><td>${esc(r.tema)}</td><td>${dataBR(r.data)}</td><td>${esc(r.operacao)}</td><td>${esc(r.supervisor || '—')}</td>
+  <tbody>${rows.map(r => `<tr><td class="lk" data-edit="${r.id}">${esc(r.nome)}${r.exemplo ? ' <span class="tag neutro">exemplo</span>' : ''}</td><td>${esc(r.instituicao || '—')}</td><td>${esc(r.tipo)}</td><td>${esc(r.tema)}</td><td>${dataBR(r.data)}</td><td>${esc(r.operacao)}</td><td>${esc(r.supervisor || '—')}</td>
     <td>${esc(r.presenca)}</td><td class="dir">${fmt(r.pos)}</td><td class="dir">${pctQ(r.qualDepois)}</td><td><span class="tag ${st(r.status)}">${esc(r.status)}</span></td>
     <td><div class="acoes-linha"><button class="btn-icone" data-edit="${r.id}" title="Editar" aria-label="Editar">${G.ic('edit', '')}</button><button class="btn-icone" data-del="${r.id}" title="Excluir" aria-label="Excluir">${G.ic('trash', '')}</button></div></td></tr>`).join('')
     || `<tr><td colspan="${COLS_B.length + 1}" class="dica" style="padding:20px">${regs.length ? 'Nenhum registro encontrado.' : 'Nenhum treinamento registrado ainda.'}</td></tr>`}</tbody>`;
@@ -436,7 +488,7 @@ F('atBtnApagarTudo').onclick = () => {
 };
 
 // exportar / importar
-const MAPA = [['Tipo', 'tipo'], ['Tema', 'tema'], ['Data', 'data'], ['Carga horária (h)', 'carga'], ['Operação', 'operacao'], ['Instrutor', 'instrutor'], ['Modalidade', 'modalidade'], ['Motivo', 'motivo'], ['Objetivo', 'objetivo'],
+const MAPA = [['Tipo', 'tipo'], ['Tema', 'tema'], ['Data', 'data'], ['Carga horária (h)', 'carga'], ['Instituição', 'instituicao'], ['Operação', 'operacao'], ['Instrutor', 'instrutor'], ['Modalidade', 'modalidade'], ['Motivo', 'motivo'], ['Objetivo', 'objetivo'],
   ['Colaborador', 'nome'], ['Matrícula', 'matricula'], ['E-mail', 'email'], ['Supervisor', 'supervisor'], ['Tempo de casa', 'tempoCasa'], ['Turno', 'turno'], ['Cidade', 'cidade'], ['Bairro', 'bairro'],
   ['Presença', 'presenca'], ['Situação', 'status'], ['Próxima ação', 'proxima'], ['Pré-teste', 'pre'], ['Pós-teste', 'pos'], ['Qualidade antes (%)', 'qualAntes'], ['Qualidade depois (%)', 'qualDepois'], ['Assimilação (1-5)', 'assimilacao'], ['Observações', 'obs']];
 const NUMS = { carga: 1, pre: 1, pos: 1, qualAntes: 2, qualDepois: 2, assimilacao: 0 };
@@ -475,8 +527,8 @@ function exemplo() {
   }
   let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647; const pick = a => a[Math.floor(rnd() * a.length)];
   const nomes = ['Aline Matos', 'Bruno Teixeira', 'Camila Reis', 'Diego Santana', 'Elisa Moura', 'Felipe Andrade', 'Gisele Prado', 'Henrique Lopes', 'Ingrid Sales', 'Jonas Batista', 'Kelly Nunes', 'Leandro Cruz', 'Michele Dias', 'Natan Ribeiro', 'Paula Guedes', 'Rafaela Brito', 'Sérgio Pinto', 'Tatiane Lima', 'Uriel Costa', 'Vitória Borges', 'Wagner Melo', 'Yasmin Freitas'];
-  const sup = ['Carla Menezes', 'Rogério Alves', 'Juliana Paz', 'Marcos Vinícius'];
-  const pessoas = nomes.map((n, i) => ({ nome: n, sup: sup[i % 4], op: i % 3 ? 'Captação' : 'Permanência', base: 72 + rnd() * 18, cidade: rnd() < .75 ? 'Salvador' : pick(['Lauro de Freitas', 'Camaçari', 'Simões Filho']), tc: pick(['3 a 6 meses', '6 meses a 1 ano', '1 a 2 anos', 'Mais de 2 anos']) }));
+  const sup = SUP_PADRAO;
+  const pessoas = nomes.map((n, i) => ({ nome: n, sup: sup[i % sup.length], inst: i % 4 === 3 ? 'Unijorge' : 'UVA', op: i % 3 ? 'Captação' : 'Permanência', base: 72 + rnd() * 18, cidade: rnd() < .75 ? 'Salvador' : pick(['Lauro de Freitas', 'Camaçari', 'Simões Filho']), tc: pick(['3 a 6 meses', '6 meses a 1 ano', '1 a 2 anos', 'Mais de 2 anos']) }));
   const bairros = ['Pituba', 'Cabula', 'Itapuã', 'Liberdade', 'Brotas', 'Imbuí', 'Cajazeiras X', 'Pernambués'];
   const acoes = [
     ['Reciclagem', 'Script de abordagem', '2026-07-08', 2, 'Indicação da qualidade', 3.5], ['Novo produto', 'Lançamento pós-graduação EAD', '2026-07-22', 3, 'Lançamento de produto', 1.5],
@@ -493,7 +545,7 @@ function exemplo() {
       const pre = +(4.5 + rnd() * 3.5).toFixed(1), pos = Math.min(10, +(pre + 1 + rnd() * 2.8).toFixed(1));
       const qa = +Math.min(99, p.base + (rnd() - .5) * 6).toFixed(2), qd = +Math.min(100, qa + ganho + (rnd() - .4) * 4).toFixed(2);
       novos.push({ id: uid() + ai + p.nome.length, exemplo: true, criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
-        tipo, tema, data, carga, operacao: p.op, instrutor: pick(['Patrícia Moura', 'Rodrigo Sales']), modalidade: pick(['Presencial', 'Remoto', 'Na posição (side by side)']), motivo, objetivo: '',
+        tipo, tema, data, carga, instituicao: p.inst, operacao: p.op, instrutor: pick(['Patrícia Moura', 'Rodrigo Sales']), modalidade: pick(['Presencial', 'Remoto', 'Na posição (side by side)']), motivo, objetivo: '',
         nome: p.nome, matricula: '', email: norm(p.nome).replace(/\s+/g, '.') + '@exemplo.com', supervisor: p.sup, tempoCasa: p.tc, turno: pick(['Manhã', 'Tarde']),
         cidade: p.cidade, bairro: p.cidade === 'Salvador' ? pick(bairros) : 'Centro',
         presenca, status: presenca === 'Presente' ? (futuro && rnd() < .5 ? 'Pendente' : 'Concluído') : 'Reagendado', proxima: presenca === 'Presente' ? '' : '2026-11-' + String(5 + Math.floor(rnd() * 20)).padStart(2, '0'),
@@ -511,6 +563,6 @@ document.addEventListener('aba-aberta', e => { if (e.detail === 'at-dashboard') 
 let rz; let larg = innerWidth;
 window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (Math.abs(innerWidth - larg) > 40 && F('aba-at-dashboard').classList.contains('ativo')) { larg = innerWidth; render(); } }, 250); });
 G.icones(document);
-salvar(); datalists(); limpar(false);
+salvarSup(); salvar(); datalists(); limpar(false);
 F('atData').value = hoje();
 })();

@@ -42,6 +42,7 @@ let registros = ler(KEY, []);
 registros.forEach(r => { if (r.exemplo && (r.qualidade || []).length && r.qualidade.every(q => q.nota === null || q.nota <= 10)) r.qualidade.forEach(q => { if (q.nota !== null) q.nota = +(q.nota * 10).toFixed(2); }); });
 registros.forEach(r => { if (r.provas || r.qualidade) { const n = notaCalculada(r.provas || [], r.qualidade || [], r.comportamental || {}); if (n !== null) r.notaFinal = n; } });
 registros.forEach(r => { if (r.operacao && !['Captação', 'Permanência'].includes(r.operacao)) r.operacao = r.operacao === 'Serviços' || r.operacao === 'Rematrícula' ? 'Permanência' : ''; });
+registros.forEach((r, i) => { if (r.exemplo && !r.instituicao) r.instituicao = i % 3 ? 'UVA' : 'Unijorge'; });
 registros.forEach(r => { if (r.indicacao === 'Operação de vendas') r.indicacao = 'Captação'; else if (r.indicacao === 'Operação de não vendas') r.indicacao = 'Permanência'; });
 let bairrosAprendidos = ler(KEY_B, {});
 const salvarRegistros = () => { gravar(KEY, registros); $('#contBase').textContent = registros.length; };
@@ -335,13 +336,13 @@ function atualizarDatalists() {
 // ao escolher uma turma existente, puxa datas e instrutor
 F('turma').addEventListener('change', () => {
   const r = registros.find(x => x.turma === F('turma').value.trim()); if (!r || F('id').value) return;
-  ['dataInicio', 'dataFim', 'instrutor', 'operacao', 'turnoTurma', 'modalidade'].forEach(k => { if (!F(k).value && r[k]) F(k).value = r[k]; });
+  ['dataInicio', 'dataFim', 'instrutor', 'instituicao', 'operacao', 'turnoTurma', 'modalidade'].forEach(k => { if (!F(k).value && r[k]) F(k).value = r[k]; });
   atualizarFrequencia();
 });
 
 function msg(t, tipo) { const m = F('msgForm'); m.textContent = t; m.className = 'msg ' + (tipo || ''); }
 
-const CAMPOS = ['turma', 'dataInicio', 'dataFim', 'instrutor', 'operacao', 'turnoTurma', 'modalidade', 'nome', 'email', 'telefone', 'nascimento', 'escolaridade',
+const CAMPOS = ['turma', 'dataInicio', 'dataFim', 'instrutor', 'instituicao', 'operacao', 'turnoTurma', 'modalidade', 'nome', 'email', 'telefone', 'nascimento', 'escolaridade',
   'deslocamento', 'transporte', 'experiencia', 'expVendas', 'origemVaga', 'equipamento', 'faltas', 'atrasos', 'status', 'dataHabilitacao', 'indicacao', 'potencial', 'observacoes'];
 
 function limparForm() {
@@ -385,6 +386,8 @@ F('form').addEventListener('submit', e => {
   const erros = [];
   const exigir = (id, ok, txt) => { if (!ok) { F(id).classList.add('invalido'); erros.push([id, txt]); } };
   exigir('turma', F('turma').value.trim(), 'código da turma');
+  exigir('instituicao', F('instituicao').value, 'instituição (UVA ou Unijorge)');
+  exigir('operacao', F('operacao').value, 'operação (Captação ou Permanência)');
   exigir('dataInicio', F('dataInicio').value, 'início do treinamento');
   exigir('nome', F('nome').value.trim().split(/\s+/).length >= 2, 'nome completo');
   exigir('email', /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(F('email').value.trim()), 'e-mail válido');
@@ -426,10 +429,10 @@ F('form').addEventListener('submit', e => {
   if (!idAtual) registros.push(r);
   aprenderBairro(r.cidade, r.bairro);
   salvarRegistros(); atualizarDatalists();
-  const turma = r.turma, ini = r.dataInicio, fim = r.dataFim, instr = r.instrutor, op = r.operacao, tt = r.turnoTurma, mod = r.modalidade;
+  const turma = r.turma, ini = r.dataInicio, fim = r.dataFim, instr = r.instrutor, inst = r.instituicao, op = r.operacao, tt = r.turnoTurma, mod = r.modalidade;
   if (idAtual) { preencherForm(r); msg('Alterações salvas. Você pode continuar editando ou buscar outro cadastro.', 'ok'); toast('Cadastro atualizado'); return; }
   limparForm();
-  if (!idAtual) { F('turma').value = turma; F('dataInicio').value = ini; F('dataFim').value = fim; F('instrutor').value = instr; F('operacao').value = op; F('turnoTurma').value = tt; F('modalidade').value = mod; atualizarFrequencia(); }
+  if (!idAtual) { F('turma').value = turma; F('dataInicio').value = ini; F('dataFim').value = fim; F('instrutor').value = instr; F('instituicao').value = inst; F('operacao').value = op; F('turnoTurma').value = tt; F('modalidade').value = mod; atualizarFrequencia(); }
   msg(idAtual ? 'Alterações salvas.' : `Cadastro de ${r.nome.split(' ')[0]} salvo. A turma foi mantida para o próximo.`, 'ok');
   toast(idAtual ? 'Cadastro atualizado' : 'Cadastro salvo');
   F('nome').focus();
@@ -462,6 +465,8 @@ function aplicaFiltros(lista, ignorar) {
     if (ignorar !== 'cidade' && f.cidade && r.cidade !== f.cidade) return false;
     if (ignorar !== 'bairro' && ignorar !== 'cidade' && f.bairro && r.bairro !== f.bairro) return false;
     if (f.perfil && r.perfil !== f.perfil) return false;
+    if (f.instituicao && r.instituicao !== f.instituicao) return false;
+    if (f.operacao && r.operacao !== f.operacao) return false;
     if (f.status && r.status !== f.status) return false;
     if (f.atestado && r.atestado !== f.atestado) return false;
     if (f.faixa && r._faixa !== f.faixa) return false;
@@ -588,6 +593,8 @@ function renderDashboard() {
 
   // comparativos
   G.duelo(F('comparativo'), [ssa, fora], ['Salvador', 'Fora de Salvador'], METRICAS_DUELO, [COR.s1, COR.s2]);
+  G.duelo(F('compInst'), [resumo(lista.filter(r => r.instituicao === 'UVA')), resumo(lista.filter(r => r.instituicao === 'Unijorge'))], ['UVA', 'Unijorge'], METRICAS_DUELO, [COR.s1, COR.s4], ['building', 'building']);
+  G.duelo(F('compOper'), [resumo(lista.filter(r => r.operacao === 'Captação')), resumo(lista.filter(r => r.operacao === 'Permanência'))], ['Captação', 'Permanência'], METRICAS_DUELO, [COR.s1, COR.s2], ['briefcase', 'headset']);
   G.duelo(F('compPerfil'), [resumo(lista.filter(r => r.perfil === 'Vendas')), resumo(lista.filter(r => r.perfil === 'Não vendas'))], ['Vendas', 'Não vendas'], METRICAS_DUELO, [COR.s1, COR.s2], ['briefcase', 'headset']);
   G.duelo(F('compAtestado'), [cA, sA], ['Com atestado', 'Sem atestado'], METRICAS_DUELO, [COR.s2, COR.s1], ['medical', 'check']);
 
@@ -678,7 +685,7 @@ F('btnExemploDash').onclick = () => carregarExemplo();
 /* =========================================================
    BASE DE DADOS
    ========================================================= */
-const COLS_BASE = [['nome', 'Nome'], ['turma', 'Turma'], ['dataInicio', 'Início'], ['cidade', 'Cidade'], ['bairro', 'Bairro'], ['perfil', 'Perfil'], ['atestado', 'Atestado'], ['notaFinal', 'Nota final', 1], ['status', 'Situação'], ['atualizadoEm', 'Atualizado']];
+const COLS_BASE = [['nome', 'Nome'], ['turma', 'Turma'], ['instituicao', 'IES'], ['operacao', 'Operação'], ['dataInicio', 'Início'], ['cidade', 'Cidade'], ['bairro', 'Bairro'], ['perfil', 'Perfil'], ['atestado', 'Atestado'], ['notaFinal', 'Nota final', 1], ['status', 'Situação'], ['atualizadoEm', 'Atualizado']];
 function renderBase() {
   const q = norm(F('buscaBase').value), o = ESTADO.ordBase;
   let rows = registros.filter(r => !q || norm([r.nome, r.email, r.turma, r.cidade, r.bairro, r.instrutor].join(' ')).includes(q));
@@ -686,7 +693,7 @@ function renderBase() {
   const M = meta();
   const st = s => ({ Aprovado: 'bom', Reprovado: 'ruim', Desistente: 'alerta', Desligado: 'ruim' }[s] || 'neutro');
   F('tBase').innerHTML = `<thead><tr>${COLS_BASE.map(([k, t, n]) => `<th data-k="${k}" class="${n ? 'dir' : ''} ${o.k === k ? 'ord' + (o.asc ? ' asc' : '') : ''}">${t}</th>`).join('')}<th></th></tr></thead>
-  <tbody>${rows.map(r => `<tr><td class="lk" data-edit="${r.id}">${esc(r.nome)}${r.exemplo ? ' <span class="tag neutro">exemplo</span>' : ''}</td><td>${esc(r.turma)}</td><td>${dataBR(r.dataInicio)}</td><td>${esc(r.cidade)}</td><td>${esc(r.bairro)}</td>
+  <tbody>${rows.map(r => `<tr><td class="lk" data-edit="${r.id}">${esc(r.nome)}${r.exemplo ? ' <span class="tag neutro">exemplo</span>' : ''}</td><td>${esc(r.turma)}</td><td>${esc(r.instituicao || '—')}</td><td>${esc(r.operacao || '—')}</td><td>${dataBR(r.dataInicio)}</td><td>${esc(r.cidade)}</td><td>${esc(r.bairro)}</td>
     <td>${esc(r.perfil)}</td><td>${esc(r.atestado)}</td><td class="dir"><b style="color:${(r.notaFinal ?? 0) >= M ? 'var(--bom-txt)' : 'var(--ruim)'}">${fmt(r.notaFinal)}</b></td>
     <td><span class="tag ${st(r.status)}">${G.ic(({ Aprovado: 'check', Reprovado: 'alert', Desistente: 'down', Desligado: 'trash', 'Em treinamento': 'clock' })[r.status] || 'clock', '')}${esc(r.status)}</span></td><td>${r.atualizadoEm ? new Date(r.atualizadoEm).toLocaleDateString('pt-BR') : ''}</td>
     <td><div class="acoes-linha"><button class="btn-icone" data-edit="${r.id}" title="Editar" aria-label="Editar">${G.ic('edit', '')}</button><button class="btn-icone" data-del="${r.id}" title="Excluir" aria-label="Excluir">${G.ic('trash', '')}</button></div></td></tr>`).join('')
@@ -710,7 +717,7 @@ F('btnApagarTudo').onclick = () => {
 /* ---------------- exportar / importar ---------------- */
 function csvCel(v) { const s = String(v ?? ''); return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
 const MAPA_CSV = [
-  ['Turma', 'turma'], ['Início', 'dataInicio'], ['Fim', 'dataFim'], ['Instrutor', 'instrutor'], ['Operação', 'operacao'], ['Turno da turma', 'turnoTurma'], ['Modalidade', 'modalidade'],
+  ['Turma', 'turma'], ['Início', 'dataInicio'], ['Fim', 'dataFim'], ['Instrutor', 'instrutor'], ['Instituição', 'instituicao'], ['Operação', 'operacao'], ['Turno da turma', 'turnoTurma'], ['Modalidade', 'modalidade'],
   ['Nome', 'nome'], ['E-mail', 'email'], ['Telefone', 'telefone'], ['Nascimento', 'nascimento'], ['Signo', 'signo'], ['Escolaridade', 'escolaridade'],
   ['Estado', 'estado'], ['Cidade', 'cidade'], ['Bairro', 'bairro'], ['Região', 'regiao'], ['Deslocamento', 'deslocamento'], ['Transporte', 'transporte'],
   ['Perfil', 'perfil'], ['Experiência call center', 'experiencia'], ['Experiência vendas', 'expVendas'], ['Origem da vaga', 'origemVaga'], ['Equipamento', 'equipamento'],
@@ -822,7 +829,7 @@ function carregarExemplo() {
     const atDia = new Date(t[1] + 'T12:00'); atDia.setDate(atDia.getDate() + Math.floor(rnd() * 14));
     novos.push({
       id: uid() + i, exemplo: true, criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
-      turma: t[0], dataInicio: t[1], dataFim: t[2], instrutor: t[3], operacao: perfil === 'Vendas' ? 'Captação' : 'Permanência', turnoTurma: pick(['Manhã', 'Tarde']), modalidade: 'Presencial',
+      turma: t[0], dataInicio: t[1], dataFim: t[2], instrutor: t[3], instituicao: rnd() < .68 ? 'UVA' : 'Unijorge', operacao: perfil === 'Vendas' ? 'Captação' : 'Permanência', turnoTurma: pick(['Manhã', 'Tarde']), modalidade: 'Presencial',
       nome: `${n1} ${n2}`, email: `${norm(n1)}.${norm(n2)}${i}@exemplo.com`, telefone: `(71) 9${Math.floor(1000 + rnd() * 8999)}-${Math.floor(1000 + rnd() * 8999)}`,
       nascimento: nasc, signo: signoDe(nasc), escolaridade: pick(['Ensino médio completo', 'Ensino médio completo', 'Superior cursando', 'Superior completo']),
       estado: 'BA', cidade, bairro, regiao: regiaoDe(cidade), deslocamento: emSsa ? pick(['Até 30 min', '30 a 60 min', '1h a 1h30']) : pick(['1h a 1h30', 'Mais de 1h30']), transporte: pick(['Ônibus', 'Metrô', 'Ônibus + metrô']),

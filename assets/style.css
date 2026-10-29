@@ -533,3 +533,15 @@ input:disabled{background:var(--sup-2);cursor:not-allowed}
 @media (max-width:620px){.area small{display:none}.area{padding:6px 8px}.area>i{width:28px;height:28px}.subbarra .abas{padding:6px 12px;overflow-x:auto}.ad-linha{grid-template-columns:1fr 1fr;}.ad-seta{display:none}.ad-res{grid-column:1/-1}}
 @media print{.subbarra{display:none!important}#aba-at-cadastro,#aba-at-base{display:none!important}}
 .ad-seta{font-size:18px;font-weight:700}
+.mini-link{font-size:11.5px;margin-left:6px;font-weight:600}
+.dlg{border:0;border-radius:16px;padding:0;width:min(560px,94vw);box-shadow:0 24px 60px rgba(0,20,50,.35)}
+.dlg::backdrop{background:rgba(0,30,60,.45);backdrop-filter:blur(2px)}
+.dlg-in{padding:20px 22px;display:flex;flex-direction:column;gap:14px}
+.dlg-add{display:flex;gap:8px}
+.sup-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto}
+.sup-lista li{display:grid;grid-template-columns:32px minmax(0,1fr) auto 30px;gap:10px;align-items:center;border:1px solid var(--borda);border-radius:10px;padding:6px 8px}
+.sup-lista input{border-color:transparent;background:transparent;font-weight:600;font-size:13px;min-height:32px}
+.sup-lista input:focus{background:#fff;border-color:var(--marca)}
+.sup-lista small{color:var(--tinta-3);font-size:11.5px;white-space:nowrap}
+.sup-av{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--marca-clara);color:var(--marca);font-weight:800;font-size:11.5px}
+.dlg-rod{display:flex;justify-content:space-between;align-items:center;gap:10px}

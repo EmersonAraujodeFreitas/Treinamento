@@ -76,8 +76,10 @@
         <label class="campo"><span>Início do treinamento <i class="obr">*</i></span><input type="date" id="dataInicio" required></label>
         <label class="campo"><span>Fim do treinamento</span><input type="date" id="dataFim"></label>
         <label class="campo"><span>Instrutor(a)</span><input id="instrutor" list="listaInstrutores" placeholder="Nome do instrutor"><datalist id="listaInstrutores"></datalist></label>
-        <label class="campo"><span>Operação / produto</span>
-          <select id="operacao"><option value="">Selecione</option><option>Captação</option><option>Permanência</option></select></label>
+        <label class="campo"><span>Instituição <i class="obr">*</i></span>
+          <select id="instituicao" required><option value="">Selecione</option><option>UVA</option><option>Unijorge</option></select></label>
+        <label class="campo"><span>Operação <i class="obr">*</i></span>
+          <select id="operacao" required><option value="">Selecione</option><option>Captação</option><option>Permanência</option></select></label>
         <label class="campo"><span>Turno da turma</span>
           <select id="turnoTurma"><option value="">Selecione</option><option>Manhã</option><option>Tarde</option><option>Noite</option><option>Integral</option></select></label>
         <label class="campo"><span>Modalidade</span>
@@ -221,6 +223,8 @@
 
   <div class="filtros" id="filtros">
     <label>Turma<select data-f="turma"></select></label>
+    <label>Instituição<select data-f="instituicao"><option value="">Todas</option><option>UVA</option><option>Unijorge</option></select></label>
+    <label>Operação<select data-f="operacao"><option value="">Todas</option><option>Captação</option><option>Permanência</option></select></label>
     <label>Início de<input type="date" data-f="de"></label>
     <label>até<input type="date" data-f="ate"></label>
     <label>Abrangência<select data-f="abrangencia">
@@ -272,6 +276,16 @@
       <article class="cartao">
         <header class="cab-card"><span class="icb" data-ic="histogram"></span><div><h2>Distribuição das notas finais</h2><p>Quantidade de treinandos por faixa de nota</p></div></header>
         <div class="graf" id="gDistrib"></div>
+      </article>
+
+      <article class="cartao">
+        <header class="cab-card"><span class="icb" data-ic="building"></span><div><h2>UVA × Unijorge</h2><p>Resultados por instituição</p></div></header>
+        <div class="comparativo" id="compInst"></div>
+      </article>
+
+      <article class="cartao">
+        <header class="cab-card"><span class="icb" data-ic="layers"></span><div><h2>Captação × Permanência</h2><p>Resultados por operação</p></div></header>
+        <div class="comparativo" id="compOper"></div>
       </article>
 
       <article class="cartao">
@@ -364,16 +378,18 @@
           </div></div>
         <label class="campo c2"><span>Tema / conteúdo <i class="obr">*</i></span>
           <input id="atTema" list="atListaTemas" placeholder="Ex.: Nova política de bolsas, Script de retenção…" required><datalist id="atListaTemas"></datalist></label>
-        <label class="campo"><span>Data <i class="obr">*</i></span><input type="date" id="atData" required></label>
-        <label class="campo"><span>Carga horária (horas)</span><input id="atCarga" inputmode="decimal" placeholder="Ex.: 2"></label>
+        <label class="campo"><span>Instituição <i class="obr">*</i></span>
+          <select id="atInstituicao" required><option value="">Selecione</option><option>UVA</option><option>Unijorge</option></select></label>
         <label class="campo"><span>Operação <i class="obr">*</i></span>
           <select id="atOperacao" required><option value="">Selecione</option><option>Captação</option><option>Permanência</option></select></label>
+        <label class="campo"><span>Data <i class="obr">*</i></span><input type="date" id="atData" required></label>
+        <label class="campo"><span>Carga horária (horas)</span><input id="atCarga" inputmode="decimal" placeholder="Ex.: 2"></label>
         <label class="campo"><span>Instrutor(a)</span><input id="atInstrutor" list="atListaInstrutores" placeholder="Quem aplicou"><datalist id="atListaInstrutores"></datalist></label>
         <label class="campo"><span>Modalidade</span>
           <select id="atModalidade"><option value="">Selecione</option><option>Presencial</option><option>Remoto</option><option>Híbrido</option><option>Na posição (side by side)</option></select></label>
         <label class="campo"><span>Motivo</span>
           <select id="atMotivo"><option value="">Selecione</option><option>Cronograma / rotina</option><option>Indicação da qualidade</option><option>Baixa performance</option><option>Mudança de processo</option><option>Lançamento de produto</option><option>Solicitação da supervisão</option><option>Retorno de afastamento</option></select></label>
-        <label class="campo c2"><span>Objetivo da ação</span><input id="atObjetivo" placeholder="O que o colaborador precisa sair sabendo fazer"></label>
+        <label class="campo"><span>Objetivo da ação</span><input id="atObjetivo" placeholder="O que o colaborador precisa sair sabendo fazer"></label>
       </div>
     </fieldset>
 
@@ -385,7 +401,8 @@
           <small class="dica" id="atDicaNome">Busca entre colaboradores já registrados e aprovados na formação inicial</small></div>
         <label class="campo"><span>Matrícula / login</span><input id="atMatricula" placeholder="Opcional"></label>
         <label class="campo"><span>E-mail</span><input type="email" id="atEmail" placeholder="nome@email.com"></label>
-        <label class="campo"><span>Supervisor(a)</span><input id="atSupervisor" list="atListaSupervisores" placeholder="Nome do supervisor"><datalist id="atListaSupervisores"></datalist></label>
+        <div class="campo"><span>Supervisor(a) <button type="button" class="btn btn-link mini-link" id="atGerSup">gerenciar</button></span>
+          <div class="auto" id="atAutoSup"><input id="atSupervisor" placeholder="Digite para buscar…" autocomplete="off"><ul class="auto-lista" hidden></ul></div></div>
         <label class="campo"><span>Tempo de casa</span>
           <select id="atTempoCasa"><option value="">Selecione</option><option>Até 3 meses</option><option>3 a 6 meses</option><option>6 meses a 1 ano</option><option>1 a 2 anos</option><option>Mais de 2 anos</option></select></label>
         <label class="campo"><span>Turno</span>
@@ -457,6 +474,7 @@
   </div>
   <div class="filtros" id="atFiltros">
     <label>Tipo<select data-f="tipo"></select></label>
+    <label>Instituição<select data-f="instituicao"><option value="">Todas</option><option>UVA</option><option>Unijorge</option></select></label>
     <label>Operação<select data-f="operacao"><option value="">Todas</option><option>Captação</option><option>Permanência</option></select></label>
     <label>Tema<select data-f="tema"></select></label>
     <label>Supervisor<select data-f="supervisor"></select></label>
@@ -497,7 +515,11 @@
         <header class="cab-card"><span class="icb" data-ic="users"></span><div><h2>Ganho na qualidade por supervisor</h2><p>Equipes que mais evoluíram</p></div></header>
         <div class="graf" id="atGSupervisor"></div>
       </article>
-      <article class="cartao c-largo">
+      <article class="cartao">
+        <header class="cab-card"><span class="icb" data-ic="building"></span><div><h2>UVA × Unijorge</h2><p>Resultados por instituição</p></div></header>
+        <div class="comparativo" id="atCompInst"></div>
+      </article>
+      <article class="cartao">
         <header class="cab-card"><span class="icb" data-ic="scale"></span><div><h2>Captação × Permanência</h2><p>Resultados por operação</p></div></header>
         <div class="comparativo" id="atCompOperacao"></div>
       </article>
@@ -535,6 +557,15 @@
 </main>
 
 <footer class="rodape">Inovação Casa · Área de Treinamento</footer>
+
+<dialog id="dlgSup" class="dlg">
+  <form method="dialog" class="dlg-in" id="dlgSupForm">
+    <header class="cab-card"><span class="icb" data-ic="users"></span><div><h2>Supervisores</h2><p>Cadastre, renomeie ou remova supervisores da lista</p></div></header>
+    <div class="dlg-add"><input id="supNovo" placeholder="Nome do novo supervisor" autocomplete="off"><button type="button" class="btn btn-pri" id="supAdd"><i data-ic="plus"></i>Adicionar</button></div>
+    <ul class="sup-lista" id="supLista"></ul>
+    <div class="dlg-rod"><small class="dica" id="supInfo"></small><button class="btn btn-sec" value="fechar">Fechar</button></div>
+  </form>
+</dialog>
 
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="tip" class="tip" hidden></div>
