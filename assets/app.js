@@ -36,6 +36,7 @@ const KEY_META = 'inovacao_treinamento_meta_v1';
 const ler = (k, def) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch (e) { return def; } };
 const gravar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { toast('Não foi possível salvar no navegador.'); } };
 let registros = ler(KEY, []);
+registros.forEach(r => { if (r.indicacao === 'Operação de vendas') r.indicacao = 'Captação'; else if (r.indicacao === 'Operação de não vendas') r.indicacao = 'Permanência'; });
 let bairrosAprendidos = ler(KEY_B, {});
 const salvarRegistros = () => { gravar(KEY, registros); $('#contBase').textContent = registros.length; };
 
@@ -224,7 +225,7 @@ function setSeg(id, v) {
 // linhas dinâmicas
 function linhaVazia(lista, txt) { if (!$('.linha', lista)) lista.innerHTML = `<div class="vazio-linha">${txt}</div>`; }
 function renumerar(lista) { $$('.linha', lista).forEach((l, i) => $('.idx', l).textContent = i + 1); }
-const BTN_X = '<button type="button" class="btn-icone" title="Remover" aria-label="Remover">✕</button>';
+const BTN_X = '<button type="button" class="btn-icone" title="Remover" aria-label="Remover">' + G.ic('trash', '') + '</button>';
 function addProva(p = {}) {
   const l = F('listaProvas'); $('.vazio-linha', l)?.remove();
   const n = $$('.linha', l).length + 1;
@@ -326,7 +327,7 @@ function limparForm() {
   $$('#comportamental .escala').forEach(e => { e.dataset.v = ''; $$('button', e).forEach(b => b.classList.remove('on')); });
   F('notaFinal').dataset.auto = '1';
   $$('.invalido').forEach(e => e.classList.remove('invalido'));
-  F('modoEdicao').hidden = true; F('btnSalvar').textContent = 'Salvar cadastro';
+  F('modoEdicao').hidden = true; F('salvarTxt').textContent = 'Salvar cadastro'; F('btnNovo').lastChild.textContent = 'Novo cadastro';
   atualizarNascimento(); atualizarResumo(); msg('');
 }
 function preencherForm(r) {
@@ -345,7 +346,8 @@ function preencherForm(r) {
   if (r.atestado === 'Sim' && !(r.atestados || []).length) addAtestado();
   Object.entries(r.comportamental || {}).forEach(([k, v]) => { const e = $(`#comportamental .escala[data-k="${k}"]`); if (e) { e.dataset.v = String(v); $$('button', e).forEach(b => b.classList.toggle('on', b.dataset.n === String(v))); } });
   F('notaFinal').value = r.notaFinal ?? ''; F('notaFinal').dataset.auto = r.notaAuto ? '1' : '0';
-  F('modoEdicao').hidden = false; F('btnSalvar').textContent = 'Salvar alterações';
+  F('modoEdicao').hidden = false; F('modoTxt').textContent = 'Editando: ' + (r.nome || '').split(' ').slice(0, 2).join(' ');
+  F('salvarTxt').textContent = 'Salvar alterações'; F('btnNovo').lastChild.textContent = 'Cancelar edição';
   atualizarNascimento(); atualizarResumo();
 }
 
@@ -399,11 +401,12 @@ F('form').addEventListener('submit', e => {
   aprenderBairro(r.cidade, r.bairro);
   salvarRegistros(); atualizarDatalists();
   const turma = r.turma, ini = r.dataInicio, fim = r.dataFim, instr = r.instrutor, op = r.operacao, tt = r.turnoTurma, mod = r.modalidade;
+  if (idAtual) { preencherForm(r); msg('Alterações salvas. Você pode continuar editando ou buscar outro cadastro.', 'ok'); toast('Cadastro atualizado'); return; }
   limparForm();
   if (!idAtual) { F('turma').value = turma; F('dataInicio').value = ini; F('dataFim').value = fim; F('instrutor').value = instr; F('operacao').value = op; F('turnoTurma').value = tt; F('modalidade').value = mod; atualizarFrequencia(); }
   msg(idAtual ? 'Alterações salvas.' : `Cadastro de ${r.nome.split(' ')[0]} salvo. A turma foi mantida para o próximo.`, 'ok');
   toast(idAtual ? 'Cadastro atualizado' : 'Cadastro salvo');
-  if (idAtual) abrirAba('base'); else F('nome').focus();
+  F('nome').focus();
 });
 
 /* =========================================================
@@ -491,65 +494,18 @@ function agrupar(lista, chave) {
   return m;
 }
 
-const graficos = {};
-Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
-Chart.defaults.font.size = 12;
-Chart.defaults.color = '#4a5668';
-Chart.defaults.plugins.tooltip.backgroundColor = '#13202f';
-Chart.defaults.plugins.tooltip.padding = 10;
-Chart.defaults.plugins.tooltip.cornerRadius = 6;
-Chart.defaults.plugins.legend.labels.boxWidth = 10;
-Chart.defaults.plugins.legend.labels.boxHeight = 10;
-const COR = { s1: '#2a78d6', s2: '#eb6834', s3: '#1baf7a', grade: '#e8ebf0', eixo: '#c6cfdc', meta: '#13202f' };
-const linhaMeta = {
-  id: 'linhaMeta',
-  afterDatasetsDraw(c, _a, o) {
-    if (o.valor === undefined || o.valor === null) return;
-    const horiz = c.options.indexAxis === 'y';
-    const esc_ = horiz ? c.scales.x : c.scales.y, a = c.chartArea, ctx = c.ctx;
-    const p = esc_.getPixelForValue(o.valor);
-    ctx.save(); ctx.strokeStyle = COR.meta; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
-    ctx.beginPath();
-    if (horiz) { ctx.moveTo(p, a.top); ctx.lineTo(p, a.bottom); } else { ctx.moveTo(a.left, p); ctx.lineTo(a.right, p); }
-    ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = COR.meta; ctx.font = '600 11px ' + Chart.defaults.font.family;
-    if (horiz) { ctx.textAlign = 'left'; ctx.fillText('meta ' + fmt(o.valor), p + 4, a.top + 10); }
-    else { ctx.textAlign = 'right'; ctx.fillText('meta ' + fmt(o.valor), a.right, p - 5); }
-    ctx.restore();
-  }
-};
-Chart.register(linhaMeta);
-const tickNum = v => fmt(v, 0);
-function grafico(id, cfg) {
-  if (graficos[id]) graficos[id].destroy();
-  graficos[id] = new Chart(F(id), cfg);
-}
-function barras(id, rotulos, valores, { horiz = false, cores, metaVal, rotuloValor = 'Nota final média', extras, max = 10, legenda } = {}) {
-  grafico(id, {
-    type: 'bar',
-    data: { labels: rotulos, datasets: [{ label: rotuloValor, data: valores, backgroundColor: cores || COR.s1, borderRadius: 4, borderSkipped: 'start', maxBarThickness: horiz ? 18 : 42, categoryPercentage: .8, barPercentage: .9 }] },
-    options: {
-      indexAxis: horiz ? 'y' : 'x', responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
-      scales: {
-        [horiz ? 'x' : 'y']: { beginAtZero: true, max, grid: { color: COR.grade }, border: { display: false }, ticks: { callback: tickNum } },
-        [horiz ? 'y' : 'x']: { grid: { display: false }, border: { color: COR.eixo }, ticks: { autoSkip: false } }
-      },
-      plugins: {
-        legend: legenda ? { display: true, position: 'top', align: 'end', labels: { generateLabels: () => legenda.map(([t, c]) => ({ text: t, fillStyle: c, strokeStyle: c, lineWidth: 0 })) } } : { display: false },
-        linhaMeta: { valor: metaVal },
-        tooltip: { callbacks: { label: c => ` ${rotuloValor}: ${max === 100 ? fmt(c.raw, 0) : fmt(c.raw)}`, afterLabel: extras ? c => extras[c.dataIndex] : undefined } }
-      }
-    }
+const COR = { s1: '#2a78d6', s2: '#eb6834', s3: '#1baf7a', s4: '#6250d6' };
+const COR_STATUS = { 'Em treinamento': ['#2a78d6', 'clock'], 'Aprovado': ['#0ca30c', 'check'], 'Reprovado': ['#d03b3b', 'alert'], 'Desistente': ['#eda100', 'down'], 'Desligado': ['#ec835a', 'trash'] };
+const METRICAS_DUELO = [['Nota final', 'nota', 10, 'award'], ['Média das provas', 'provas', 10, 'exam'], ['Média da qualidade', 'qual', 10, 'headset'], ['Aprovação', 'aprov', 1, 'check', true]];
+const tipH = (titulo, linhas) => `<b>${esc(titulo)}</b>` + linhas.map(l => `<br>${esc(l)}`).join('');
+function animarNumeros(raiz) {
+  $$('[data-conta]', raiz).forEach(el => {
+    const alvo = +el.dataset.conta, dec = +(el.dataset.dec || 0), suf = el.dataset.suf || '';
+    if (!isFinite(alvo)) return;
+    const t0 = performance.now(), dur = 900;
+    const passo = t => { const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3); el.textContent = fmt(alvo * e, dec) + suf; if (p < 1) requestAnimationFrame(passo); };
+    requestAnimationFrame(passo);
   });
-}
-
-function comparativo(el, grupos, nomes) {
-  const metricas = [['Nota final', 'nota', 10], ['Média das provas', 'provas', 10], ['Média da qualidade', 'qual', 10], ['Aprovação', 'aprov', 1]];
-  const cores = [COR.s1, COR.s2];
-  el.innerHTML = `<div class="cmp-leg">${nomes.map((n, i) => `<span><i style="background:${cores[i]}"></i>${esc(n)} <span class="cmp-n">(${grupos[i].n} treinandos)</span></span>`).join('')}</div>
-  <div class="cmp-grid">${metricas.map(([t, k, mx]) => `<div class="cmp-item"><span>${t}</span>${grupos.map((g, i) => {
-    const v = g[k]; const w = v === null ? 0 : Math.max(0, Math.min(1, v / mx)) * 100;
-    return `<div class="cmp-row" title="${esc(nomes[i])}"><div class="cmp-bar"><i style="width:${w}%;background:${cores[i]}"></i></div><b>${k === 'aprov' ? pct(v) : fmt(v)}</b></div>`;
-  }).join('')}</div>`).join('')}</div>`;
 }
 
 function renderDashboard() {
@@ -566,15 +522,20 @@ function renderDashboard() {
   // KPIs
   const bairrosUnicos = new Set(lista.map(r => r.cidade + '|' + r.bairro)).size;
   const turmas = new Set(lista.map(r => r.turma)).size;
+  const kpi = (t, icone, cor, valor, dec, suf, sub, barra, destaque) => `<div class="kpi${destaque ? ' destaque' : ''}" style="--c:${cor}">
+    <div class="kpi-top"><span>${t}</span><span class="kpi-ic">${G.ic(icone)}</span></div>
+    <b ${valor === null ? '' : `data-conta="${valor}" data-dec="${dec}" data-suf="${suf}"`}>${valor === null ? '—' : fmt(0, dec) + suf}</b>
+    ${barra !== undefined ? `<div class="kpi-bar"><i style="--w:${Math.max(0, Math.min(100, (barra || 0) * 100))}%"></i></div>` : ''}<small>${sub}</small></div>`;
   F('kpis').innerHTML = [
-    ['Treinandos', R.n.toLocaleString('pt-BR'), `${turmas} turma${turmas > 1 ? 's' : ''} · ${bairrosUnicos} bairros`, true],
-    ['Nota final média', fmt(R.nota), `${pct(R.naMeta)} na meta (${fmt(M)})`],
-    ['Taxa de aprovação', pct(R.aprov), `${R.nConc} com resultado final`],
-    ['Média das provas', fmt(R.provas), 'provas do treinamento'],
-    ['Média da qualidade', fmt(R.qual), 'últimas monitorias'],
-    ['Com atestado', pct(R.atest), `faltas: ${fmt(R.faltas)} em média`],
-    ['Perfil de vendas', pct(R.vendas), `${pct(R.vendas === null ? null : 1 - R.vendas)} não vendas`],
-  ].map(([t, v, s, d]) => `<div class="kpi${d ? ' destaque' : ''}"><span>${t}</span><b>${v}</b><small>${s}</small></div>`).join('');
+    kpi('Treinandos', 'users', '#22c3a6', R.n, 0, '', `${turmas} turma${turmas > 1 ? 's' : ''} · ${bairrosUnicos} bairros`, undefined, true),
+    kpi('Nota final média', 'award', COR.s1, R.nota, 1, '', `${pct(R.naMeta)} na meta (${fmt(M)})`, R.nota === null ? 0 : R.nota / 10),
+    kpi('Taxa de aprovação', 'check', '#0ca30c', R.aprov === null ? null : R.aprov * 100, 0, '%', `${R.nConc} com resultado final`, R.aprov),
+    kpi('Média das provas', 'exam', COR.s4, R.provas, 1, '', 'provas do treinamento', R.provas === null ? 0 : R.provas / 10),
+    kpi('Média da qualidade', 'headset', COR.s3, R.qual, 1, '', 'últimas monitorias', R.qual === null ? 0 : R.qual / 10),
+    kpi('Com atestado', 'medical', COR.s2, R.atest === null ? null : R.atest * 100, 0, '%', `faltas: ${fmt(R.faltas)} em média`, R.atest),
+    kpi('Perfil de vendas', 'briefcase', '#e87ba4', R.vendas === null ? null : R.vendas * 100, 0, '%', `${pct(R.vendas === null ? null : 1 - R.vendas)} não vendas`, R.vendas),
+  ].join('');
+  animarNumeros(F('kpis'));
 
   // por bairro
   const porBairro = [...agrupar(lista, r => r.bairro ? r.cidade + '|' + r.bairro : '').entries()].map(([k, rs]) => {
@@ -588,69 +549,60 @@ function renderDashboard() {
   const ord = elegiveis.slice().sort((a, b) => b.nota - a.nota);
   if (ord.length) {
     const m = ord[0], p = ord[ord.length - 1];
-    ins.push(['bom', 'Melhor bairro', `${m.bairro} · ${m.cidade}`, `Nota final ${fmt(m.nota)} com ${m.n} treinandos · aprovação ${pct(m.aprov)}`]);
-    if (ord.length > 1) ins.push(['ruim', 'Bairro com menor nota', `${p.bairro} · ${p.cidade}`, `Nota final ${fmt(p.nota)} com ${p.n} treinandos · aprovação ${pct(p.aprov)}`]);
+    ins.push(['bom', 'trophy', 'Melhor bairro', `${m.bairro} · ${m.cidade}`, `Nota final ${fmt(m.nota)} com ${m.n} treinandos · aprovação ${pct(m.aprov)}`]);
+    if (ord.length > 1) ins.push(['ruim', 'down', 'Bairro com menor nota', `${p.bairro} · ${p.cidade}`, `Nota final ${fmt(p.nota)} com ${p.n} treinandos · aprovação ${pct(p.aprov)}`]);
   }
-  const abaixo = elegiveis.filter(b => b.nota < M);
-  ins.push([abaixo.length ? 'alerta' : 'bom', 'Bairros abaixo da meta', `${abaixo.length} de ${elegiveis.length} bairros`, abaixo.length ? abaixo.sort((a, b) => a.nota - b.nota).slice(0, 4).map(b => b.bairro).join(', ') + (abaixo.length > 4 ? '…' : '') : `Todos com nota final ≥ ${fmt(M)} (mín. ${minA} treinandos)`]);
+  const abaixo = elegiveis.filter(b => +b.nota.toFixed(1) < M);
+  ins.push([abaixo.length ? 'alerta' : 'bom', abaixo.length ? 'alert' : 'target', 'Bairros abaixo da meta', `${abaixo.length} de ${elegiveis.length} bairros`, abaixo.length ? abaixo.sort((a, b) => a.nota - b.nota).slice(0, 4).map(b => b.bairro).join(', ') + (abaixo.length > 4 ? '…' : '') : `Todos com nota final ≥ ${fmt(M)} (mín. ${minA} treinandos)`]);
   const ssa = resumo(lista.filter(ehSsa)), fora = resumo(lista.filter(r => !ehSsa(r)));
-  if (ssa.n && fora.n) { const d = ssa.nota - fora.nota; ins.push(['', 'Salvador × fora', d >= 0 ? `Salvador ${fmt(Math.abs(d))} pt acima` : `Fora de Salvador ${fmt(Math.abs(d))} pt acima`, `Salvador ${fmt(ssa.nota)} (${ssa.n}) · fora ${fmt(fora.nota)} (${fora.n})`]); }
+  if (ssa.n && fora.n) { const d = ssa.nota - fora.nota; ins.push(['', 'scale', 'Salvador × fora', d >= 0 ? `Salvador ${fmt(Math.abs(d))} pt acima` : `Fora de Salvador ${fmt(Math.abs(d))} pt acima`, `Salvador ${fmt(ssa.nota)} (${ssa.n}) · fora ${fmt(fora.nota)} (${fora.n})`]); }
   const cA = resumo(lista.filter(r => r.atestado === 'Sim')), sA = resumo(lista.filter(r => r.atestado === 'Não'));
-  if (cA.n && sA.n) ins.push([cA.nota < sA.nota ? 'alerta' : '', 'Efeito do atestado', `${fmt(Math.abs(cA.nota - sA.nota))} pt ${cA.nota < sA.nota ? 'a menos' : 'a mais'} com atestado`, `Com atestado ${fmt(cA.nota)} (${cA.n}) · sem ${fmt(sA.nota)} (${sA.n})`]);
-  F('insights').innerHTML = ins.map(([c, t, b, p]) => `<div class="insight ${c}"><span>${t}</span><b>${esc(b)}</b><p>${esc(p)}</p></div>`).join('');
+  if (cA.n && sA.n) ins.push([cA.nota < sA.nota ? 'alerta' : '', 'medical', 'Efeito do atestado', `${fmt(Math.abs(cA.nota - sA.nota))} pt ${cA.nota < sA.nota ? 'a menos' : 'a mais'} com atestado`, `Com atestado ${fmt(cA.nota)} (${cA.n}) · sem ${fmt(sA.nota)} (${sA.n})`]);
+  F('insights').innerHTML = ins.map(([c, icone, t, b, p], i) => `<div class="insight ${c}" style="--d:${i * 70}ms"><span class="ins-ic">${G.ic(icone)}</span><div><span>${t}</span><b>${esc(b)}</b><p>${esc(p)}</p></div></div>`).join('');
 
-  // Salvador x fora
-  comparativo(F('comparativo'), [ssa, fora], ['Salvador', 'Fora de Salvador']);
-  comparativo(F('compPerfil'), [resumo(lista.filter(r => r.perfil === 'Vendas')), resumo(lista.filter(r => r.perfil === 'Não vendas'))], ['Vendas', 'Não vendas']);
-  comparativo(F('compAtestado'), [cA, sA], ['Com atestado', 'Sem atestado']);
+  // comparativos
+  G.duelo(F('comparativo'), [ssa, fora], ['Salvador', 'Fora de Salvador'], METRICAS_DUELO, [COR.s1, COR.s2]);
+  G.duelo(F('compPerfil'), [resumo(lista.filter(r => r.perfil === 'Vendas')), resumo(lista.filter(r => r.perfil === 'Não vendas'))], ['Vendas', 'Não vendas'], METRICAS_DUELO, [COR.s1, COR.s2], ['briefcase', 'headset']);
+  G.duelo(F('compAtestado'), [cA, sA], ['Com atestado', 'Sem atestado'], METRICAS_DUELO, [COR.s2, COR.s1], ['medical', 'check']);
 
-  // ranking bairros
-  const topN = +F('topN').value;
-  const rk = ord.slice(0, topN);
-  F('wrapRanking').style.height = Math.max(220, rk.length * 26 + 70) + 'px';
-  const multiCidade = new Set(rk.map(b => b.cidade)).size > 1;
-  barras('gRanking', rk.map(b => multiCidade && b.cidade !== 'Salvador' ? `${b.bairro} (${b.cidade})` : b.bairro), rk.map(b => +b.nota.toFixed(2)),
-    { horiz: true, cores: rk.map(b => b.nota >= M ? COR.s1 : COR.s2), metaVal: M, extras: rk.map(b => [`${b.n} treinandos · ${b.regiao}`, `Aprovação: ${pct(b.aprov)}`, `Provas: ${fmt(b.provas)} · Qualidade: ${fmt(b.qual)}`]),
-      legenda: [['Na meta', COR.s1], ['Abaixo da meta', COR.s2]] });
+  // ranking de bairros
+  const rk = ord.slice(0, +F('topN').value);
+  G.ranking(F('gRanking'), rk.map(b => ({
+    rotulo: b.bairro, sub: `${b.cidade} · ${b.n} treinando${b.n > 1 ? 's' : ''}`, valor: b.nota, cor: +b.nota.toFixed(1) >= M ? COR.s1 : COR.s2,
+    tip: tipH(`${b.bairro} · ${b.cidade}`, [`Nota final: ${fmt(b.nota)}`, `${b.n} treinandos · ${b.regiao}`, `Aprovação: ${pct(b.aprov)}`, `Provas ${fmt(b.provas)} · Qualidade ${fmt(b.qual)}`])
+  })), { max: 10, meta: M, posicao: true, legenda: [['Na meta', COR.s1], ['Abaixo da meta', COR.s2]], vazio: `Nenhum bairro com ${minA} ou mais treinandos` });
 
   // cidades
-  const porCidade = [...agrupar(lista, r => r.cidade).entries()].map(([c, rs]) => ({ c, ...resumo(rs) })).filter(x => x.nota !== null).sort((a, b) => b.n - a.n).slice(0, 12).sort((a, b) => b.nota - a.nota);
-  F('wrapCidades').style.height = Math.max(260, porCidade.length * 26 + 50) + 'px';
-  barras('gCidades', porCidade.map(x => x.c), porCidade.map(x => +x.nota.toFixed(2)), { horiz: true, cores: porCidade.map(x => x.c === 'Salvador' ? COR.s1 : COR.s2), metaVal: M, extras: porCidade.map(x => [`${x.n} treinandos`, `Aprovação: ${pct(x.aprov)}`]), legenda: [['Salvador', COR.s1], ['Fora de Salvador', COR.s2]] });
+  const porCidade = [...agrupar(lista, r => r.cidade).entries()].map(([c, rs]) => ({ c, ...resumo(rs) })).filter(x => x.nota !== null).sort((a, b) => b.n - a.n).slice(0, 10).sort((a, b) => b.nota - a.nota);
+  G.ranking(F('gCidades'), porCidade.map(x => ({
+    rotulo: x.c, sub: `${x.n} treinandos · ${regiaoDe(x.c)}`, valor: x.nota, cor: x.c === 'Salvador' ? COR.s1 : COR.s2,
+    tip: tipH(x.c, [`Nota final: ${fmt(x.nota)}`, `${x.n} treinandos`, `Aprovação: ${pct(x.aprov)}`])
+  })), { max: 10, meta: M, legenda: [['Salvador', COR.s1], ['Fora de Salvador', COR.s2]] });
 
-  // evolução provas
+  // evolução nas provas
   const maxP = Math.min(10, Math.max(0, ...lista.map(r => (r.provas || []).length)));
   const serieProva = g => Array.from({ length: maxP }, (_, i) => { const v = media(g.map(r => (r.provas || [])[i]?.nota ?? null)); return v === null ? null : +v.toFixed(2); });
   const grpS = lista.filter(ehSsa), grpF = lista.filter(r => !ehSsa(r));
-  const ds = [];
-  if (grpS.length) ds.push({ label: 'Salvador', data: serieProva(grpS), borderColor: COR.s1, backgroundColor: COR.s1 });
-  if (grpF.length) ds.push({ label: 'Fora de Salvador', data: serieProva(grpF), borderColor: COR.s2, backgroundColor: COR.s2 });
-  grafico('gProvas', {
-    type: 'line',
-    data: { labels: Array.from({ length: maxP }, (_, i) => `Prova ${i + 1}`), datasets: ds.map(d => ({ ...d, borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, pointBorderColor: '#fff', pointBorderWidth: 2, tension: .25, spanGaps: true })) },
-    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-      scales: { y: { min: 0, max: 10, grid: { color: COR.grade }, border: { display: false } }, x: { grid: { display: false }, border: { color: COR.eixo } } },
-      plugins: { legend: { position: 'top', align: 'end' }, linhaMeta: { valor: M }, tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.raw)}` } } } }
-  });
+  const series = [];
+  if (grpS.length) series.push({ nome: 'Salvador', cor: COR.s1, valores: serieProva(grpS) });
+  if (grpF.length) series.push({ nome: 'Fora de Salvador', cor: COR.s2, valores: serieProva(grpF) });
+  G.linhas(F('gProvas'), Array.from({ length: maxP }, (_, i) => `Prova ${i + 1}`), series, { meta: M, titulo: 'Evolução nas provas' });
 
   // distribuição
   const faixasN = [['< 5', 0, 5], ['5 a 5,9', 5, 6], ['6 a 6,9', 6, 7], ['7 a 7,9', 7, 8], ['8 a 8,9', 8, 9], ['9 a 10', 9, 10.01]];
-  const dist = faixasN.map(([, a, b]) => lista.filter(r => r.notaFinal !== null && r.notaFinal >= a && r.notaFinal < b).length);
-  barras('gDistrib', faixasN.map(f => f[0]), dist, { cores: faixasN.map(f => f[1] >= M ? COR.s1 : COR.s2), rotuloValor: 'Treinandos', max: undefined, legenda: [['Na meta', COR.s1], ['Abaixo da meta', COR.s2]] });
-  graficos.gDistrib.options.plugins.tooltip.callbacks.label = c => ` ${c.raw} treinandos (${pct(c.raw / lista.length)})`;
-  graficos.gDistrib.options.scales.y.ticks.precision = 0; graficos.gDistrib.update('none');
+  G.colunas(F('gDistrib'), faixasN.map(([rot, a, b]) => {
+    const n = lista.filter(r => r.notaFinal !== null && r.notaFinal >= a && r.notaFinal < b).length;
+    return { rotulo: rot, valor: n, rotuloValor: String(n), cor: a >= M ? COR.s1 : COR.s2, tip: tipH(`Nota ${rot}`, [`${n} treinandos (${pct(n / lista.length)})`]) };
+  }), { legenda: [['Na meta', COR.s1], ['Abaixo da meta', COR.s2]], titulo: 'Distribuição das notas finais' });
 
-  // status
-  const sts = ['Em treinamento', 'Aprovado', 'Reprovado', 'Desistente', 'Desligado'].map(s => [s, lista.filter(r => r.status === s).length]).filter(x => x[1]);
-  barras('gStatus', sts.map(s => s[0]), sts.map(s => s[1]), { rotuloValor: 'Treinandos', max: undefined });
-  graficos.gStatus.options.plugins.tooltip.callbacks.label = c => ` ${c.raw} treinandos (${pct(c.raw / lista.length)})`;
-  graficos.gStatus.options.scales.y.ticks.precision = 0; graficos.gStatus.update('none');
+  // situação final
+  G.rosca(F('gStatus'), Object.keys(COR_STATUS).map(s => ({ rotulo: s, valor: lista.filter(r => r.status === s).length, cor: COR_STATUS[s][0], icone: COR_STATUS[s][1] })), { rotuloTotal: 'treinandos', titulo: 'Situação final' });
 
   // idade e signo
-  const porFaixa = FAIXAS.map(f => { const g = lista.filter(r => r._faixa === f[0]); return [f[0], media(g.map(r => r.notaFinal)), g.length]; }).filter(x => x[2]);
-  barras('gIdade', porFaixa.map(x => x[0]), porFaixa.map(x => +x[1].toFixed(2)), { metaVal: M, extras: porFaixa.map(x => `${x[2]} treinandos`) });
+  const porFaixa = FAIXAS.map(f => { const g = lista.filter(r => r._faixa === f[0]); return [f[0].replace(' anos', '').replace(' ou mais', '+'), media(g.map(r => r.notaFinal)), g.length]; }).filter(x => x[2]);
+  G.colunas(F('gIdade'), porFaixa.map(x => ({ rotulo: x[0], valor: x[1], cor: +x[1].toFixed(1) >= M ? COR.s1 : COR.s2, tip: tipH(x[0] + ' anos', [`Nota final: ${fmt(x[1])}`, `${x[2]} treinandos`]) })), { max: 10, ticks: [0, 2, 4, 6, 8, 10], meta: M, legenda: [['Na meta', COR.s1], ['Abaixo da meta', COR.s2]] });
   const porSigno = LISTA_SIGNOS.map(s => { const g = lista.filter(r => r.signo === s); return [s, media(g.map(r => r.notaFinal)), g.length]; }).filter(x => x[2]);
-  barras('gSigno', porSigno.map(x => x[0]), porSigno.map(x => +x[1].toFixed(2)), { metaVal: M, extras: porSigno.map(x => `${x[2]} treinandos`) });
+  G.colunas(F('gSigno'), porSigno.map(x => ({ rotulo: x[0], valor: x[1], cor: +x[1].toFixed(1) >= M ? COR.s1 : COR.s2, tip: tipH(x[0], [`Nota final: ${fmt(x[1])}`, `${x[2]} treinandos`]) })), { max: 10, ticks: [0, 2, 4, 6, 8, 10], meta: M, legenda: [['Na meta', COR.s1], ['Abaixo da meta', COR.s2]] });
 
   // tabela de bairros
   ESTADO.bairros = porBairro;
@@ -663,7 +615,7 @@ function renderDashboard() {
   const cob = bSsa.length ? (bSsa.length - sem.length) / bSsa.length : 0;
   F('barraCob').style.width = (cob * 100) + '%';
   F('coberturaTxt').textContent = `${bSsa.length - sem.length} de ${bSsa.length} bairros de Salvador têm treinandos nos registros filtrados (${pct(cob)}). Os ${sem.length} abaixo ainda não têm nenhum.`;
-  F('semTreinandos').innerHTML = sem.map(b => `<span class="chip">${esc(b)}</span>`).join('') || '<span class="dica">Todos os bairros de Salvador têm ao menos um treinando.</span>';
+  F('semTreinandos').innerHTML = sem.map((b, i) => `<span class="chip" style="--d:${Math.min(i, 60) * 12}ms">${G.ic('pin', '')}${esc(b)}</span>`).join('') || '<span class="dica">Todos os bairros de Salvador têm ao menos um treinando.</span>';
 }
 ['minAmostra', 'topN'].forEach(id => F(id).addEventListener('change', renderDashboard));
 
@@ -676,7 +628,7 @@ function renderTabelaBairros() {
   let rows = (ESTADO.bairros || []).filter(b => !q || norm(b.bairro + ' ' + b.cidade).includes(q));
   rows.forEach(b => b.sit = b.nota === null ? 0 : b.nota >= M ? 2 : 1);
   rows.sort((a, b) => { const x = a[o.k], y = b[o.k]; const r = typeof x === 'string' ? cmpTxt(x, y) : (x ?? -1) - (y ?? -1); return o.asc ? r : -r; });
-  const tag = b => b.nota === null ? '<span class="tag neutro">Sem nota</span>' : b.nota >= M ? '<span class="tag bom">✓ Na meta</span>' : '<span class="tag ruim">▼ Abaixo</span>';
+  const tag = b => b.nota === null ? '<span class="tag neutro">Sem nota</span>' : b.nota >= M ? `<span class="tag bom">${G.ic('check', '')}Na meta</span>` : `<span class="tag ruim">${G.ic('down', '')}Abaixo</span>`;
   F('tBairros').innerHTML = `<thead><tr>${COLS_BAIRRO.map(([k, t, n]) => `<th data-k="${k}" class="${n ? 'dir' : ''} ${o.k === k ? 'ord' + (o.asc ? ' asc' : '') : ''}">${t}</th>`).join('')}</tr></thead>
   <tbody>${rows.map(b => `<tr><td class="lk" data-c="${esc(b.cidade)}" data-b="${esc(b.bairro)}">${esc(b.bairro)}</td><td>${esc(b.cidade)}</td><td>${esc(b.regiao)}</td>
     <td class="dir">${b.n}</td><td class="dir"><span class="mbar"><i style="width:${(b.nota || 0) * 10}%"></i></span>${fmt(b.nota)}</td><td class="dir">${fmt(b.provas)}</td><td class="dir">${fmt(b.qual)}</td>
@@ -710,8 +662,8 @@ function renderBase() {
   F('tBase').innerHTML = `<thead><tr>${COLS_BASE.map(([k, t, n]) => `<th data-k="${k}" class="${n ? 'dir' : ''} ${o.k === k ? 'ord' + (o.asc ? ' asc' : '') : ''}">${t}</th>`).join('')}<th></th></tr></thead>
   <tbody>${rows.map(r => `<tr><td class="lk" data-edit="${r.id}">${esc(r.nome)}${r.exemplo ? ' <span class="tag neutro">exemplo</span>' : ''}</td><td>${esc(r.turma)}</td><td>${dataBR(r.dataInicio)}</td><td>${esc(r.cidade)}</td><td>${esc(r.bairro)}</td>
     <td>${esc(r.perfil)}</td><td>${esc(r.atestado)}</td><td class="dir"><b style="color:${(r.notaFinal ?? 0) >= M ? 'var(--bom-txt)' : 'var(--ruim)'}">${fmt(r.notaFinal)}</b></td>
-    <td><span class="tag ${st(r.status)}">${esc(r.status)}</span></td><td>${r.atualizadoEm ? new Date(r.atualizadoEm).toLocaleDateString('pt-BR') : ''}</td>
-    <td><div class="acoes-linha"><button class="btn-icone" data-edit="${r.id}" title="Editar" aria-label="Editar">✎</button><button class="btn-icone" data-del="${r.id}" title="Excluir" aria-label="Excluir">🗑</button></div></td></tr>`).join('')
+    <td><span class="tag ${st(r.status)}">${G.ic(({ Aprovado: 'check', Reprovado: 'alert', Desistente: 'down', Desligado: 'trash', 'Em treinamento': 'clock' })[r.status] || 'clock', '')}${esc(r.status)}</span></td><td>${r.atualizadoEm ? new Date(r.atualizadoEm).toLocaleDateString('pt-BR') : ''}</td>
+    <td><div class="acoes-linha"><button class="btn-icone" data-edit="${r.id}" title="Editar" aria-label="Editar">${G.ic('edit', '')}</button><button class="btn-icone" data-del="${r.id}" title="Excluir" aria-label="Excluir">${G.ic('trash', '')}</button></div></td></tr>`).join('')
     || `<tr><td colspan="${COLS_BASE.length + 1}" class="dica" style="padding:20px">${registros.length ? 'Nenhum registro encontrado.' : 'Nenhum cadastro ainda. Use a aba Cadastro de formação ou importe uma planilha.'}</td></tr>`}</tbody>`;
 }
 F('tBase').addEventListener('click', e => {
@@ -858,6 +810,37 @@ function carregarExemplo() {
   toast('140 treinandos de exemplo carregados');
 }
 F('btnExemplo').onclick = carregarExemplo;
+
+
+/* ---------------- buscar cadastro para editar ---------------- */
+(function () {
+  const wrap = F('buscaEdit'), inp = F('buscaEditar'), ul = $('ul', wrap);
+  let itens = [], ativo = -1;
+  function abrir() {
+    const q = norm(inp.value);
+    itens = registros.filter(r => !q || norm([r.nome, r.email, r.turma, r.bairro, r.cidade].join(' ')).includes(q))
+      .sort((a, b) => (b.atualizadoEm || '').localeCompare(a.atualizadoEm || '')).slice(0, 12);
+    ul.innerHTML = itens.length ? itens.map((r, i) => `<li data-i="${i}"><span><b>${esc(r.nome)}</b><br><small>${esc(r.turma)} · ${esc(r.bairro)}, ${esc(r.cidade)}</small></span><small>${fmt(r.notaFinal)}</small></li>`).join('')
+      : `<li class="sem">${registros.length ? 'Nenhum cadastro encontrado' : 'Nenhum cadastro salvo ainda'}</li>`;
+    ativo = itens.length ? 0 : -1; marcar(); ul.hidden = false;
+  }
+  function marcar() { $$('li', ul).forEach((li, i) => li.classList.toggle('ativo', i === ativo)); }
+  function escolher(i) { const r = itens[i]; if (!r) return; ul.hidden = true; inp.value = ''; inp.blur(); preencherForm(r); msg('Cadastro carregado para edição. Altere o que precisar e clique em Salvar alterações.', ''); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  inp.addEventListener('input', abrir); inp.addEventListener('focus', abrir);
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); ativo = Math.min(ativo + 1, itens.length - 1); marcar(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); ativo = Math.max(ativo - 1, 0); marcar(); }
+    else if (e.key === 'Enter') { e.preventDefault(); escolher(ativo); }
+    else if (e.key === 'Escape') ul.hidden = true;
+  });
+  ul.addEventListener('mousedown', e => { const li = e.target.closest('li[data-i]'); if (li) { e.preventDefault(); escolher(+li.dataset.i); } });
+  inp.addEventListener('blur', () => setTimeout(() => ul.hidden = true, 120));
+})();
+
+/* ---------------- ícones, tooltip e redimensionamento ---------------- */
+G.icones(); G.iniciarTooltip();
+let _rz; let _larg = innerWidth;
+window.addEventListener('resize', () => { clearTimeout(_rz); _rz = setTimeout(() => { if (Math.abs(innerWidth - _larg) > 40 && $('#aba-dashboard').classList.contains('ativo')) { _larg = innerWidth; renderDashboard(); } }, 250); });
 
 /* ---------------- início ---------------- */
 salvarRegistros(); atualizarDatalists(); limparForm();

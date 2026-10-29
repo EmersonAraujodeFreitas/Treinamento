@@ -5,9 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Treinamento | Inovação Casa</title>
 <meta name="description" content="Formação inicial de turmas para habilitação ao call center — cadastro e painel de desempenho por bairro.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f2a4a'/%3E%3Cpath d='M8 16l8-7 8 7v8h-5v-5h-6v5H8z' fill='%23fff'/%3E%3Ccircle cx='24' cy='8' r='3' fill='%2322c3a6'/%3E%3C/svg%3E">
+<link rel="icon" href="assets/logo-simbolo.png"><link rel="alternate icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f2a4a'/%3E%3Cpath d='M8 16l8-7 8 7v8h-5v-5h-6v5H8z' fill='%23fff'/%3E%3Ccircle cx='24' cy='8' r='3' fill='%2322c3a6'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="assets/style.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="assets/dados-bahia.js"></script>
 </head>
 <body>
@@ -15,21 +14,16 @@
 <header class="topo">
   <div class="topo-in">
     <div class="marca">
-      <svg class="logo" viewBox="0 0 48 48" aria-hidden="true">
-        <rect width="48" height="48" rx="12" fill="var(--marca-escura)"/>
-        <path d="M11 24.5 24 13l13 11.5V36h-8.5v-8h-9v8H11z" fill="#fff"/>
-        <circle cx="36.5" cy="11.5" r="4.5" fill="var(--marca-acento)"/>
-        <path d="M36.5 4.5v2.2M36.5 16.3v2.2M29.5 11.5h2.2M41.3 11.5h2.2" stroke="var(--marca-acento)" stroke-width="1.6" stroke-linecap="round"/>
-      </svg>
+      <img class="logo" src="assets/logo-simbolo.png" alt="Inovação Casa">
       <div>
         <div class="marca-nome">Inovação <b>Casa</b></div>
         <div class="marca-sub">Treinamento · Formação inicial call center</div>
       </div>
     </div>
     <nav class="abas" role="tablist">
-      <button class="aba ativa" data-aba="cadastro" role="tab">Cadastro de formação</button>
-      <button class="aba" data-aba="dashboard" role="tab">Dashboard</button>
-      <button class="aba" data-aba="base" role="tab">Base de dados <span class="contador" id="contBase">0</span></button>
+      <button class="aba ativa" data-aba="cadastro" role="tab"><i data-ic="clipboard"></i>Cadastro de formação</button>
+      <button class="aba" data-aba="dashboard" role="tab"><i data-ic="chart"></i>Dashboard</button>
+      <button class="aba" data-aba="base" role="tab"><i data-ic="database"></i>Base de dados <span class="contador" id="contBase">0</span></button>
     </nav>
   </div>
 </header>
@@ -44,8 +38,9 @@
       <p class="sub">Registro do treinando na turma de habilitação ao call center. Campos com <span class="obr">*</span> são obrigatórios.</p>
     </div>
     <div class="cab-acoes">
-      <span id="modoEdicao" class="selo selo-aviso" hidden>Editando cadastro</span>
-      <button type="button" class="btn btn-sec" id="btnNovo">Novo cadastro</button>
+      <span id="modoEdicao" class="selo selo-aviso" hidden><i data-ic="edit"></i><span id="modoTxt">Editando cadastro</span></span>
+      <div class="busca-edit" id="buscaEdit"><i data-ic="search" data-a=""></i><input id="buscaEditar" placeholder="Buscar cadastro para editar (nome, e-mail ou turma)" autocomplete="off"><ul class="auto-lista" hidden></ul></div>
+      <button type="button" class="btn btn-sec" id="btnNovo"><i data-ic="plus"></i>Novo cadastro</button>
     </div>
   </div>
 
@@ -53,7 +48,7 @@
     <input type="hidden" id="id">
 
     <fieldset class="bloco">
-      <legend><span class="num">1</span> Turma</legend>
+      <legend><span class="icb" data-ic="users"></span><span class="passo">1</span> Turma</legend>
       <div class="grade g4">
         <label class="campo"><span>Código da turma <i class="obr">*</i></span>
           <input id="turma" list="listaTurmas" placeholder="Ex.: T-2026-11-A" required>
@@ -71,7 +66,7 @@
     </fieldset>
 
     <fieldset class="bloco">
-      <legend><span class="num">2</span> Dados pessoais</legend>
+      <legend><span class="icb" data-ic="user"></span><span class="passo">2</span> Dados pessoais</legend>
       <div class="grade g4">
         <label class="campo c2"><span>Nome completo <i class="obr">*</i></span><input id="nome" required placeholder="Nome e sobrenome"></label>
         <label class="campo"><span>E-mail <i class="obr">*</i></span><input type="email" id="email" required placeholder="nome@email.com"></label>
@@ -86,7 +81,7 @@
     </fieldset>
 
     <fieldset class="bloco">
-      <legend><span class="num">3</span> Endereço</legend>
+      <legend><span class="icb" data-ic="pin"></span><span class="passo">3</span> Endereço</legend>
       <div class="grade g4">
         <label class="campo"><span>Estado</span><input value="Bahia (BA)" readonly tabindex="-1" class="fixo"></label>
         <div class="campo"><span>Cidade / município <i class="obr">*</i></span>
@@ -104,7 +99,7 @@
     </fieldset>
 
     <fieldset class="bloco">
-      <legend><span class="num">4</span> Perfil profissional</legend>
+      <legend><span class="icb" data-ic="briefcase"></span><span class="passo">4</span> Perfil profissional</legend>
       <div class="grade g4">
         <div class="campo c2"><span>Perfil do consultor <i class="obr">*</i></span>
           <div class="seg" id="perfil" data-valor="">
@@ -123,7 +118,7 @@
     </fieldset>
 
     <fieldset class="bloco">
-      <legend><span class="num">5</span> Frequência e atestados</legend>
+      <legend><span class="icb" data-ic="medical"></span><span class="passo">5</span> Frequência e atestados</legend>
       <div class="grade g4">
         <div class="campo"><span>Apresentou atestado? <i class="obr">*</i></span>
           <div class="seg" id="atestado" data-valor="">
@@ -135,34 +130,34 @@
         <label class="campo"><span>Frequência</span><input id="frequencia" readonly tabindex="-1" class="calc" placeholder="—"></label>
       </div>
       <div id="blocoAtestados" class="sub-bloco" hidden>
-        <div class="sub-cab"><b>Atestados apresentados</b><button type="button" class="btn btn-link" id="addAtestado">+ adicionar atestado</button></div>
+        <div class="sub-cab"><b class="com-ic"><i data-ic="calendar"></i>Atestados apresentados</b><button type="button" class="btn btn-link" id="addAtestado"><i data-ic="plus"></i>adicionar atestado</button></div>
         <div id="listaAtestados" class="linhas"></div>
       </div>
     </fieldset>
 
     <fieldset class="bloco">
-      <legend><span class="num">6</span> Notas e desempenho <small>escala de 0 a 10</small></legend>
+      <legend><span class="icb" data-ic="award"></span><span class="passo">6</span> Notas e desempenho <small>escala de 0 a 10</small></legend>
 
       <div class="sub-bloco">
-        <div class="sub-cab"><b>Provas aplicadas nos dias de treinamento</b><button type="button" class="btn btn-link" id="addProva">+ adicionar prova</button></div>
+        <div class="sub-cab"><b class="com-ic"><i data-ic="exam"></i>Provas aplicadas nos dias de treinamento</b><button type="button" class="btn btn-link" id="addProva"><i data-ic="plus"></i>adicionar prova</button></div>
         <div id="listaProvas" class="linhas"></div>
       </div>
 
       <div class="sub-bloco">
-        <div class="sub-cab"><b>Últimas notas da qualidade (monitorias)</b><button type="button" class="btn btn-link" id="addQualidade">+ adicionar monitoria</button></div>
+        <div class="sub-cab"><b class="com-ic"><i data-ic="headset"></i>Últimas notas da qualidade (monitorias)</b><button type="button" class="btn btn-link" id="addQualidade"><i data-ic="plus"></i>adicionar monitoria</button></div>
         <div id="listaQualidade" class="linhas"></div>
       </div>
 
       <div class="sub-bloco">
-        <div class="sub-cab"><b>Avaliação comportamental do instrutor</b><small class="dica">1 = precisa melhorar · 5 = excelente</small></div>
+        <div class="sub-cab"><b class="com-ic"><i data-ic="star"></i>Avaliação comportamental do instrutor</b><small class="dica">1 = precisa melhorar · 5 = excelente</small></div>
         <div class="grade g5" id="comportamental"></div>
       </div>
 
       <div class="resumo-notas">
-        <div class="rn"><span>Média das provas</span><b id="rMediaProvas">—</b></div>
-        <div class="rn"><span>Média da qualidade</span><b id="rMediaQual">—</b></div>
-        <div class="rn"><span>Comportamental</span><b id="rComport">—</b></div>
-        <label class="rn rn-final"><span>Nota final do treinamento <i class="obr">*</i></span>
+        <div class="rn"><span><i data-ic="exam"></i>Média das provas</span><b id="rMediaProvas">—</b></div>
+        <div class="rn"><span><i data-ic="headset"></i>Média da qualidade</span><b id="rMediaQual">—</b></div>
+        <div class="rn"><span><i data-ic="star"></i>Comportamental</span><b id="rComport">—</b></div>
+        <label class="rn rn-final"><span><i data-ic="award"></i>Nota final do treinamento <i class="obr">*</i></span>
           <input type="number" id="notaFinal" min="0" max="10" step="0.1" placeholder="0,0" required>
           <small class="dica"><button type="button" class="btn btn-link" id="calcFinal">Calcular automaticamente</button> · 60% provas + 30% qualidade + 10% comportamental</small>
         </label>
@@ -170,13 +165,13 @@
     </fieldset>
 
     <fieldset class="bloco">
-      <legend><span class="num">7</span> Resultado</legend>
+      <legend><span class="icb" data-ic="flag"></span><span class="passo">7</span> Resultado</legend>
       <div class="grade g4">
         <label class="campo"><span>Situação final <i class="obr">*</i></span>
           <select id="status" required><option value="">Selecione</option><option>Em treinamento</option><option>Aprovado</option><option>Reprovado</option><option>Desistente</option><option>Desligado</option></select></label>
         <label class="campo"><span>Data de habilitação</span><input type="date" id="dataHabilitacao"></label>
         <label class="campo"><span>Indicado para</span>
-          <select id="indicacao"><option value="">Selecione</option><option>Operação de vendas</option><option>Operação de não vendas</option><option>Reciclagem</option><option>Não indicado</option></select></label>
+          <select id="indicacao"><option value="">Selecione</option><option>Captação</option><option>Permanência</option><option>Reciclagem</option><option>Não indicado</option></select></label>
         <label class="campo"><span>Potencial de liderança</span>
           <select id="potencial"><option value="">Selecione</option><option>Alto</option><option>Médio</option><option>Baixo</option></select></label>
         <label class="campo c4"><span>Observações do instrutor</span><textarea id="observacoes" rows="3" placeholder="Pontos fortes, pontos de atenção, combinados…"></textarea></label>
@@ -186,7 +181,7 @@
     <div class="barra-acoes">
       <div id="msgForm" class="msg" role="status"></div>
       <button type="button" class="btn btn-sec" id="btnLimpar">Limpar</button>
-      <button type="submit" class="btn btn-pri" id="btnSalvar">Salvar cadastro</button>
+      <button type="submit" class="btn btn-pri" id="btnSalvar"><i data-ic="check"></i><span id="salvarTxt">Salvar cadastro</span></button>
     </div>
   </form>
 </section>
@@ -200,7 +195,7 @@
     </div>
     <div class="cab-acoes">
       <label class="campo-inline">Meta da nota final <input type="number" id="meta" min="0" max="10" step="0.5" value="7"></label>
-      <button class="btn btn-sec" id="btnImprimir" type="button">Imprimir / PDF</button>
+      <button class="btn btn-sec" id="btnImprimir" type="button"><i data-ic="print"></i>Imprimir / PDF</button>
     </div>
   </div>
 
@@ -233,65 +228,65 @@
 
     <div class="grade-dash">
       <article class="cartao c-largo">
-        <header><h2>Salvador × fora de Salvador</h2><p>Médias e taxa de aprovação lado a lado</p></header>
+        <header class="cab-card"><span class="icb" data-ic="scale"></span><div><h2>Salvador × fora de Salvador</h2><p>Médias e taxa de aprovação lado a lado</p></div></header>
         <div class="comparativo" id="comparativo"></div>
       </article>
 
       <article class="cartao c-largo">
-        <header><h2>Ranking de bairros pela nota final</h2>
+        <header class="cab-card"><span class="icb" data-ic="trophy"></span><div><h2>Ranking de bairros pela nota final</h2>
           <p>Linha tracejada = meta · <label class="mini">mínimo de treinandos por bairro <select id="minAmostra"><option>1</option><option selected>2</option><option>3</option><option>5</option></select></label>
-          <label class="mini">mostrar <select id="topN"><option value="15">15</option><option value="25" selected>25</option><option value="50">50</option><option value="999">todos</option></select></label></p></header>
-        <div class="area-graf alta" id="wrapRanking"><canvas id="gRanking"></canvas></div>
+          <label class="mini">mostrar <select id="topN"><option value="15">15</option><option value="25" selected>25</option><option value="50">50</option><option value="999">todos</option></select></label></p></div></header>
+        <div class="graf" id="gRanking"></div>
       </article>
 
       <article class="cartao">
-        <header><h2>Nota final por cidade</h2><p>Média dos treinandos de cada município</p></header>
-        <div class="area-graf" id="wrapCidades"><canvas id="gCidades"></canvas></div>
+        <header class="cab-card"><span class="icb" data-ic="building"></span><div><h2>Nota final por cidade</h2><p>Média dos treinandos de cada município</p></div></header>
+        <div class="graf" id="gCidades"></div>
       </article>
 
       <article class="cartao">
-        <header><h2>Evolução nas provas</h2><p>Média por ordem da prova no treinamento</p></header>
-        <div class="area-graf"><canvas id="gProvas"></canvas></div>
+        <header class="cab-card"><span class="icb" data-ic="activity"></span><div><h2>Evolução nas provas</h2><p>Média por ordem da prova no treinamento</p></div></header>
+        <div class="graf" id="gProvas"></div>
       </article>
 
       <article class="cartao">
-        <header><h2>Distribuição das notas finais</h2><p>Quantidade de treinandos por faixa de nota</p></header>
-        <div class="area-graf"><canvas id="gDistrib"></canvas></div>
+        <header class="cab-card"><span class="icb" data-ic="histogram"></span><div><h2>Distribuição das notas finais</h2><p>Quantidade de treinandos por faixa de nota</p></div></header>
+        <div class="graf" id="gDistrib"></div>
       </article>
 
       <article class="cartao">
-        <header><h2>Perfil de vendas × não vendas</h2><p>Nota final média e aprovação</p></header>
+        <header class="cab-card"><span class="icb" data-ic="briefcase"></span><div><h2>Perfil de vendas × não vendas</h2><p>Nota final média e aprovação</p></div></header>
         <div class="comparativo" id="compPerfil"></div>
       </article>
 
       <article class="cartao">
-        <header><h2>Situação final</h2><p>Quantidade de treinandos</p></header>
-        <div class="area-graf"><canvas id="gStatus"></canvas></div>
+        <header class="cab-card"><span class="icb" data-ic="pie"></span><div><h2>Situação final</h2><p>Quantidade de treinandos</p></div></header>
+        <div class="graf" id="gStatus"></div>
       </article>
 
       <article class="cartao">
-        <header><h2>Atestado × desempenho</h2><p>Quem apresentou atestado contra quem não apresentou</p></header>
+        <header class="cab-card"><span class="icb" data-ic="medical"></span><div><h2>Atestado × desempenho</h2><p>Quem apresentou atestado contra quem não apresentou</p></div></header>
         <div class="comparativo" id="compAtestado"></div>
       </article>
 
       <article class="cartao">
-        <header><h2>Nota final por faixa etária</h2><p>Média por faixa</p></header>
-        <div class="area-graf"><canvas id="gIdade"></canvas></div>
+        <header class="cab-card"><span class="icb" data-ic="cake"></span><div><h2>Nota final por faixa etária</h2><p>Média por faixa</p></div></header>
+        <div class="graf" id="gIdade"></div>
       </article>
 
       <article class="cartao">
-        <header><h2>Nota final por signo</h2><p>Média por signo (curiosidade)</p></header>
-        <div class="area-graf"><canvas id="gSigno"></canvas></div>
+        <header class="cab-card"><span class="icb" data-ic="sparkles"></span><div><h2>Nota final por signo</h2><p>Média por signo (curiosidade)</p></div></header>
+        <div class="graf" id="gSigno"></div>
       </article>
 
       <article class="cartao c-largo">
-        <header class="cab-tabela"><div><h2>Panorama completo por bairro</h2><p>Clique no cabeçalho para ordenar · clique no bairro para filtrar o painel</p></div>
-          <div class="cab-acoes"><input type="search" id="buscaBairro" placeholder="Buscar bairro ou cidade"><button class="btn btn-sec" id="expBairros" type="button">Exportar CSV</button></div></header>
+        <header class="cab-card cab-tabela"><span class="icb" data-ic="map"></span><div><h2>Panorama completo por bairro</h2><p>Clique no cabeçalho para ordenar · clique no bairro para filtrar o painel</p></div>
+          <div class="cab-acoes"><input type="search" id="buscaBairro" placeholder="Buscar bairro ou cidade"><button class="btn btn-sec" id="expBairros" type="button"><i data-ic="download"></i>Exportar CSV</button></div></header>
         <div class="tabela-wrap"><table class="tabela" id="tBairros"></table></div>
       </article>
 
       <article class="cartao c-largo">
-        <header><h2>Bairros de Salvador sem treinandos</h2><p id="coberturaTxt">Cobertura dos bairros da capital nos registros filtrados</p></header>
+        <header class="cab-card"><span class="icb" data-ic="pin"></span><div><h2>Bairros de Salvador sem treinandos</h2><p id="coberturaTxt">Cobertura dos bairros da capital nos registros filtrados</p></div></header>
         <div class="cobertura"><div class="barra-cob"><i id="barraCob"></i></div></div>
         <div class="chips" id="semTreinandos"></div>
       </article>
@@ -307,9 +302,9 @@
       <p class="sub">Os cadastros ficam salvos neste navegador. Exporte o backup regularmente ou importe uma planilha.</p>
     </div>
     <div class="cab-acoes wrap">
-      <button class="btn btn-sec" id="expCsv" type="button">Exportar planilha (CSV)</button>
-      <button class="btn btn-sec" id="expJson" type="button">Baixar backup</button>
-      <label class="btn btn-sec">Importar backup / CSV<input type="file" id="impArquivo" accept=".json,.csv" hidden></label>
+      <button class="btn btn-sec" id="expCsv" type="button"><i data-ic="download"></i>Exportar planilha (CSV)</button>
+      <button class="btn btn-sec" id="expJson" type="button"><i data-ic="database"></i>Baixar backup</button>
+      <label class="btn btn-sec"><i data-ic="upload"></i>Importar backup / CSV<input type="file" id="impArquivo" accept=".json,.csv" hidden></label>
       <button class="btn btn-sec" id="btnExemplo" type="button">Dados de exemplo</button>
       <button class="btn btn-perigo" id="btnApagarTudo" type="button">Apagar tudo</button>
     </div>
@@ -325,6 +320,7 @@
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="tip" class="tip" hidden></div>
 
+<script src="assets/graficos.js"></script>
 <script src="assets/app.js"></script>
 </body>
 </html>
