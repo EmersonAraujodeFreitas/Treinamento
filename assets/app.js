@@ -36,6 +36,7 @@ const KEY_META = 'inovacao_treinamento_meta_v1';
 const ler = (k, def) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch (e) { return def; } };
 const gravar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { toast('Não foi possível salvar no navegador.'); } };
 let registros = ler(KEY, []);
+registros.forEach(r => { if (r.operacao && !['Captação', 'Permanência'].includes(r.operacao)) r.operacao = r.operacao === 'Serviços' || r.operacao === 'Rematrícula' ? 'Permanência' : ''; });
 registros.forEach(r => { if (r.indicacao === 'Operação de vendas') r.indicacao = 'Captação'; else if (r.indicacao === 'Operação de não vendas') r.indicacao = 'Permanência'; });
 let bairrosAprendidos = ler(KEY_B, {});
 const salvarRegistros = () => { gravar(KEY, registros); $('#contBase').textContent = registros.length; };
@@ -796,7 +797,7 @@ function carregarExemplo() {
     const atDia = new Date(t[1] + 'T12:00'); atDia.setDate(atDia.getDate() + Math.floor(rnd() * 14));
     novos.push({
       id: uid() + i, exemplo: true, criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
-      turma: t[0], dataInicio: t[1], dataFim: t[2], instrutor: t[3], operacao: perfil === 'Vendas' ? 'Captação' : 'Serviços', turnoTurma: pick(['Manhã', 'Tarde']), modalidade: 'Presencial',
+      turma: t[0], dataInicio: t[1], dataFim: t[2], instrutor: t[3], operacao: perfil === 'Vendas' ? 'Captação' : 'Permanência', turnoTurma: pick(['Manhã', 'Tarde']), modalidade: 'Presencial',
       nome: `${n1} ${n2}`, email: `${norm(n1)}.${norm(n2)}${i}@exemplo.com`, telefone: `(71) 9${Math.floor(1000 + rnd() * 8999)}-${Math.floor(1000 + rnd() * 8999)}`,
       nascimento: nasc, signo: signoDe(nasc), escolaridade: pick(['Ensino médio completo', 'Ensino médio completo', 'Superior cursando', 'Superior completo']),
       estado: 'BA', cidade, bairro, regiao: regiaoDe(cidade), deslocamento: emSsa ? pick(['Até 30 min', '30 a 60 min', '1h a 1h30']) : pick(['1h a 1h30', 'Mais de 1h30']), transporte: pick(['Ônibus', 'Metrô', 'Ônibus + metrô']),
