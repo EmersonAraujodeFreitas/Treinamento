@@ -292,11 +292,12 @@ async function rotaAdmin(env, u, req, partes) {
 
 /* ---------------- diagnóstico (não mostra nenhum valor secreto) ---------------- */
 async function diagnostico(env) {
-  const d = { servico: 'treinamento-inovacao-casa', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
+  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-10-29-v3', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
   if (d.banco_ligado) {
     try { await garantirTabelas(env); } catch (e) { d.erro_criar_tabelas = String(e.message || e).slice(0, 200); }
-    try { d.tabelas = (await todos(env, "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")).map(r => r.name).filter(n => !n.startsWith('_') && !n.startsWith('sqlite')); }
-    catch (e) { d.erro_banco = String(e.message || e).slice(0, 200); }
+    for (const t of ['usuarios', 'registros', 'valores', 'tentativas', 'log']) {
+      try { await um(env, `SELECT 1 AS x FROM ${t} LIMIT 1`); d.tabelas.push(t); } catch (e) { d.erro_banco = String(e.message || e).slice(0, 200); }
+    }
   }
   const faltam = ['usuarios', 'registros', 'valores', 'tentativas', 'log'].filter(t => !d.tabelas.includes(t));
   d.problemas = [];
