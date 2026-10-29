@@ -166,9 +166,9 @@
         <div class="rn"><span><i data-ic="exam"></i>Média das provas</span><b id="rMediaProvas">—</b></div>
         <div class="rn"><span><i data-ic="headset"></i>Média da qualidade</span><b id="rMediaQual">—</b></div>
         <div class="rn"><span><i data-ic="star"></i>Comportamental</span><b id="rComport">—</b></div>
-        <label class="rn rn-final"><span><i data-ic="award"></i>Nota final do treinamento <i class="obr">*</i></span>
-          <input type="number" id="notaFinal" min="0" max="10" step="0.1" placeholder="0,0" required>
-          <small class="dica"><button type="button" class="btn btn-link" id="calcFinal">Calcular automaticamente</button> · 60% provas + 30% qualidade + 10% comportamental</small>
+        <label class="rn rn-final"><span><i data-ic="award"></i>Nota final do treinamento <small class="auto-tag">automática</small></span>
+          <input id="notaFinal" readonly tabindex="-1" class="nota-calc" placeholder="—" aria-live="polite">
+          <small class="dica" id="formulaNota">Calculada automaticamente: 60% provas + 30% qualidade + 10% comportamental</small>
         </label>
       </div>
     </fieldset>
