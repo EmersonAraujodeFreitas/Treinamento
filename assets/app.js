@@ -667,6 +667,8 @@ function renderDashboard() {
   const porSigno = LISTA_SIGNOS.map(s => { const g = lista.filter(r => r.signo === s); return [s, media(g.map(r => r.notaFinal)), g.length]; }).filter(x => x[2]);
   G.colunas(F('gSigno'), porSigno.map(x => ({ rotulo: x[0], valor: x[1], cor: +x[1].toFixed(1) >= M ? COR.s1 : COR.s2, tip: tipH(x[0], [`Nota final: ${fmt(x[1])}`, `${x[2]} treinandos`]) })), { max: 10, ticks: [0, 2, 4, 6, 8, 10], meta: M, legenda: [['Na meta', COR.s1], ['Abaixo da meta', COR.s2]] });
 
+  document.dispatchEvent(new CustomEvent('dashboard-formacao'));
+
   // tabela de bairros
   ESTADO.bairros = porBairro;
   renderTabelaBairros();
@@ -916,7 +918,14 @@ document.addEventListener('click', () => setTimeout(obs, 0));
 
 /* utilitários compartilhados com a área de colaboradores ativos */
 window.APP = { $, $$, norm, num, media, fmt, pct, esc, uid, hoje, dataBR, cmpTxt, toast, baixar, ler, gravar, autocomplete, abrirAba,
-  MUN, MUN_NORM, regiaoDe, bairrosDaCidade, aprenderBairro, acharBairro, nomeProprio, csvCel, parseCSV, dataISO, formacao: () => registros };
+  MUN, MUN_NORM, regiaoDe, bairrosDaCidade, aprenderBairro, acharBairro, nomeProprio, csvCel, parseCSV, dataISO, formacao: () => registros, formacaoFiltrada: () => aplicaFiltros(registros.map(enriquecer)), meta: () => meta(), regiaoDe };
 const inicial = (location.hash || '').slice(1);
-window.addEventListener('load', () => { if (['cadastro', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base'].includes(inicial)) abrirAba(inicial); });
+window.addEventListener('load-app', () => { if (['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base'].includes(inicial)) abrirAba(inicial); });
+/* atualização vinda de outro usuário (sincronização) */
+window.addEventListener('dados-atualizados', () => {
+  registros = ler(KEY, []); bairrosAprendidos = ler(KEY_B, {}); F('meta').value = ler(KEY_META, 7);
+  $('#contBase').textContent = registros.length; atualizarDatalists();
+  if ($('#aba-dashboard').classList.contains('ativo')) renderDashboard();
+  if ($('#aba-base').classList.contains('ativo')) renderBase();
+});
 })();

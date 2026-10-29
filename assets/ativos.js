@@ -795,7 +795,7 @@ F('atImpBD').addEventListener('change', async e => {
     quadro.compartilhado = false; gravar(KEY_QUADRO, quadro);
     renderQuadro(); renderBase();
     toast(`${r.ativos} colaboradores ativos importados${r.novosSup ? ` · ${r.novosSup} supervisores novos` : ''}`);
-    setTimeout(() => tentarPublicar(false), 600);
+    if (window.NUVEM && NUVEM.ativo()) NUVEM.publicarAgora().then(ok => { renderCompart(); toast(ok ? 'BD publicado para todos' : 'O BD não foi publicado: verifique o Administrativo → Publicação'); });
   } catch (err) { console.error(err); alert('Não foi possível importar: ' + err.message); }
 });
 function renderQuadro() {
@@ -917,11 +917,12 @@ function renderCompart() {
   if (!quadro.itens.length) { el.innerHTML = ''; return; }
   const aviso = quadroAntigo() ? `<div class="aviso-bd">${G.ic('alert', '')}<span>Este BD foi importado numa versão anterior do site e está <b>sem data de nascimento, signo e HubSpot</b>. Clique em <b>Importar BD da operação</b> e escolha o arquivo de novo: ele é atualizado e republicado para todos.</span></div>` : '';
   const quando = d => new Date(d).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-  el.innerHTML = quadro.compartilhado && quadro.publicadoEm
-    ? `<span class="tag bom">${G.ic('check', '')}Compartilhado com todos</span><span>publicado em ${quando(quadro.publicadoEm)} · criptografado com a senha da equipe</span><button type="button" class="btn btn-link" id="atRepublicar">publicar de novo</button>`
-    : `<span class="tag alerta">${G.ic('alert', '')}Só neste navegador</span><span>Publique para que todos vejam o mesmo BD.</span><button type="button" class="btn btn-pri btn-mini" id="atPublicar">${G.ic('upload', '')}Publicar para todos</button>`;
+  const nv = window.NUVEM, ativo = nv && nv.ativo(), st = nv ? nv.status() : {};
+  el.innerHTML = ativo
+    ? `<span class="tag bom">${G.ic('check', '')}Compartilhado com todos</span><span>${st.estado === 'ok' ? 'sincronizado' : st.estado === 'erro' ? 'erro ao sincronizar: ' + esc(st.msg) : 'enviando…'} · criptografado · aparece para todos os usuários</span>`
+    : `<span class="tag alerta">${G.ic('alert', '')}Só neste navegador</span><span>O administrador precisa ativar o compartilhamento em Administrativo → Publicação.</span>${nv && nv.ehAdmin() ? `<button type="button" class="btn btn-pri btn-mini" id="atPublicar">${G.ic('upload', '')}Abrir Administrativo</button>` : ''}`;
+  const b = F('atPublicar'); if (b) b.onclick = () => NUVEM.abrirAdmin();
   el.innerHTML = aviso + el.innerHTML;
-  const b = F('atPublicar') || F('atRepublicar'); if (b) b.onclick = () => pedirPublicacao(false);
 }
 // leitura para todos: ao abrir o site, busca o BD publicado
 let pacotePendente = null;
@@ -990,11 +991,18 @@ function exemplo() {
 F('atBtnExemplo').onclick = exemplo; F('atBtnExemploDash').onclick = exemplo;
 
 /* ---------------- início ---------------- */
+window.addEventListener('dados-atualizados', () => {
+  regs = ler(KEY, []); quadro = ler(KEY_QUADRO, { itens: [], arquivo: '', importadoEm: '' }); supervisores = ler(KEY_SUP, null) || SUP_PADRAO.slice();
+  F('atContBase').textContent = regs.length; rotuloExemplo(); datalists();
+  if (F('aba-at-dashboard').classList.contains('ativo')) render();
+  if (F('aba-at-registros').classList.contains('ativo')) renderBase();
+  if (F('aba-at-base').classList.contains('ativo')) renderQuadro();
+});
+document.addEventListener('nuvem-status', () => { if (F('aba-at-base').classList.contains('ativo')) renderCompart(); });
 document.addEventListener('aba-aberta', e => { if (e.detail === 'at-dashboard') render(); if (e.detail === 'at-base') renderQuadro(); if (e.detail === 'at-registros') renderBase(); });
 let rz; let larg = innerWidth;
 window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (Math.abs(innerWidth - larg) > 40 && F('aba-at-dashboard').classList.contains('ativo')) { larg = innerWidth; render(); } }, 250); });
 G.icones(document);
 salvarSup(); salvar(); datalists(); limpar(false);
-buscarPublicado();
 F('atData').value = hoje();
 })();

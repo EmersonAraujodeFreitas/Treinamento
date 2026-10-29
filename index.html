@@ -8,10 +8,26 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/favicon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap">
-<link rel="stylesheet" href="assets/style.css?v=20261029-1318">
-<script src="assets/dados-bahia.js?v=20261029-1318"></script>
+<link rel="stylesheet" href="assets/style.css?v=20261029-1530">
+<script src="assets/dados-bahia.js?v=20261029-1530"></script>
 </head>
-<body>
+<body class="bloqueado">
+
+<div class="login" id="login">
+  <form class="login-card" id="loginForm" autocomplete="on">
+    <video class="login-logo" autoplay muted loop playsinline poster="assets/logo-inovacao-poster.png" aria-hidden="true"><source src="assets/logo-inovacao.webm" type="video/webm"><source src="assets/logo-inovacao.mp4" type="video/mp4"></video>
+    <i class="logo-linha"></i>
+    <span class="logo-nome">INOVAÇÃO CASA</span>
+    <h1>Treinamento</h1>
+    <p class="sub">Entre com seu usuário e senha</p>
+    <label class="campo"><span>Usuário</span><input id="loginUsuario" autocomplete="username" autocapitalize="characters" required></label>
+    <label class="campo"><span>Senha</span><input id="loginSenha" type="password" autocomplete="current-password" required></label>
+    <label class="chk"><input type="checkbox" id="loginManter">Manter conectado neste computador</label>
+    <button class="btn btn-pri" id="loginBtn" type="submit"><span>Entrar</span></button>
+    <p class="msg erro" id="loginMsg" role="alert"></p>
+  </form>
+</div>
+
 
 <header class="topo">
   <div class="topo-in">
@@ -37,6 +53,8 @@
   <div class="subbarra">
     <nav class="abas" data-area="formacao" role="tablist">
       <button class="aba ativa" data-aba="cadastro" role="tab"><i data-ic="clipboard"></i>Cadastro de formação</button>
+      <button class="aba" data-aba="analise-trein" role="tab"><i data-ic="exam"></i>Análise treinamento</button>
+      <button class="aba" data-aba="analise-sup" role="tab"><i data-ic="headset"></i>Análise supervisão</button>
       <button class="aba" data-aba="dashboard" role="tab"><i data-ic="chart"></i>Dashboard</button>
       <button class="aba" data-aba="base" role="tab"><i data-ic="database"></i>Base de dados <span class="contador" id="contBase">0</span></button>
     </nav>
@@ -209,6 +227,10 @@
   </form>
 </section>
 
+<!-- ===================== ANÁLISES ===================== -->
+<section id="aba-analise-trein" class="painel"><div class="analise" data-tipo="treinamento"></div></section>
+<section id="aba-analise-sup" class="painel"><div class="analise" data-tipo="supervisao"></div></section>
+
 <!-- ===================== DASHBOARD ===================== -->
 <section id="aba-dashboard" class="painel">
   <div class="cab-pagina">
@@ -218,7 +240,7 @@
     </div>
     <div class="cab-acoes">
       <label class="campo-inline">Meta da nota final <input type="number" id="meta" min="0" max="10" step="0.5" value="7"></label>
-      <button class="btn btn-sec" id="btnImprimir" type="button"><i data-ic="print"></i>Imprimir / PDF</button>
+      <button class="btn btn-sec" id="btnImprimir" data-perm="imprimir" type="button"><i data-ic="print"></i>Imprimir / PDF</button>
     </div>
   </div>
 
@@ -243,7 +265,7 @@
   <div id="dashVazio" class="vazio" hidden>
     <b>Nenhum treinando encontrado.</b>
     <p>Cadastre treinandos na primeira aba, importe uma planilha na Base de dados ou carregue dados de exemplo para conhecer o painel.</p>
-    <button class="btn btn-pri" type="button" id="btnExemploDash">Carregar dados de exemplo</button>
+    <button class="btn btn-pri" type="button" id="btnExemploDash" data-perm="exemplo">Carregar dados de exemplo</button>
   </div>
 
   <div id="dashConteudo">
@@ -252,6 +274,10 @@
     <div class="insights" id="insights"></div>
 
     <div class="grade-dash">
+      <article class="cartao c-largo" id="cardAnalises">
+        <header class="cab-card"><span class="icb" data-ic="users"></span><div><h2>Análise treinamento × análise supervisão</h2><p>Percepções dos dois lados sobre os mesmos treinandos</p></div></header>
+        <div id="compAnalises"></div>
+      </article>
       <article class="cartao c-largo">
         <header class="cab-card"><span class="icb" data-ic="scale"></span><div><h2>Salvador × fora de Salvador</h2><p>Médias e taxa de aprovação lado a lado</p></div></header>
         <div class="comparativo" id="comparativo"></div>
@@ -316,7 +342,7 @@
 
       <article class="cartao c-largo">
         <header class="cab-card cab-tabela"><span class="icb" data-ic="map"></span><div><h2>Panorama completo por bairro</h2><p>Clique no cabeçalho para ordenar · clique no bairro para filtrar o painel</p></div>
-          <div class="cab-acoes"><input type="search" id="buscaBairro" placeholder="Buscar bairro ou cidade"><button class="btn btn-sec" id="expBairros" type="button"><i data-ic="download"></i>Exportar CSV</button></div></header>
+          <div class="cab-acoes"><input type="search" id="buscaBairro" placeholder="Buscar bairro ou cidade"><button class="btn btn-sec" id="expBairros" data-perm="exportar" type="button"><i data-ic="download"></i>Exportar CSV</button></div></header>
         <div class="tabela-wrap"><table class="tabela" id="tBairros"></table></div>
       </article>
 
@@ -337,11 +363,11 @@
       <p class="sub">Os cadastros ficam salvos neste navegador. Exporte o backup regularmente ou importe uma planilha.</p>
     </div>
     <div class="cab-acoes wrap">
-      <button class="btn btn-sec" id="expCsv" type="button"><i data-ic="download"></i>Exportar planilha (CSV)</button>
-      <button class="btn btn-sec" id="expJson" type="button"><i data-ic="database"></i>Baixar backup</button>
-      <label class="btn btn-sec"><i data-ic="upload"></i>Importar backup / CSV<input type="file" id="impArquivo" accept=".json,.csv" hidden></label>
-      <button class="btn btn-sec" id="btnExemplo" type="button">Dados de exemplo</button>
-      <button class="btn btn-perigo" id="btnApagarTudo" type="button">Apagar tudo</button>
+      <button class="btn btn-sec" id="expCsv" data-perm="exportar" type="button"><i data-ic="download"></i>Exportar planilha (CSV)</button>
+      <button class="btn btn-sec" id="expJson" data-perm="backup" type="button"><i data-ic="database"></i>Baixar backup</button>
+      <label class="btn btn-sec" data-perm="backup"><i data-ic="upload"></i>Importar backup / CSV<input type="file" id="impArquivo" accept=".json,.csv" hidden></label>
+      <button class="btn btn-sec" id="btnExemplo" data-perm="exemplo" type="button">Dados de exemplo</button>
+      <button class="btn btn-perigo" id="btnApagarTudo" data-perm="apagar" type="button">Apagar tudo</button>
     </div>
   </div>
   <div class="barra-busca"><input type="search" id="buscaBase" placeholder="Buscar por nome, e-mail, turma, cidade ou bairro"></div>
@@ -405,7 +431,7 @@
         <label class="campo"><span>ID Olos</span><input id="atIdOlos" placeholder="—"></label>
         <label class="campo"><span>ID HubSpot</span><input id="atHubspot" placeholder="—"></label>
         <label class="campo"><span>E-mail corporativo</span><input type="email" id="atEmail" placeholder="nome@email.com"></label>
-        <div class="campo"><span>Supervisor(a) <button type="button" class="btn btn-link mini-link" id="atGerSup">gerenciar</button></span>
+        <div class="campo"><span>Supervisor(a) <button type="button" class="btn btn-link mini-link" id="atGerSup" data-perm="supervisores">gerenciar</button></span>
           <div class="auto" id="atAutoSup"><input id="atSupervisor" placeholder="Digite para buscar…" autocomplete="off"><ul class="auto-lista" hidden></ul></div></div>
         <label class="campo"><span>Turno</span>
           <select id="atTurno"><option value="">Selecione</option><option>Manhã</option><option>Tarde</option><option>Noite</option><option>Integral</option></select></label>
@@ -510,7 +536,7 @@
       <h1>Desenvolvimento de colaboradores ativos</h1>
       <p class="sub">Reciclagens, alinhamentos e novos conteúdos · <span id="atResumoFiltro">todos os registros</span></p>
     </div>
-    <div class="cab-acoes"><button class="btn btn-sec" id="atBtnImprimir" type="button"><i data-ic="print"></i>Imprimir / PDF</button></div>
+    <div class="cab-acoes"><button class="btn btn-sec" id="atBtnImprimir" data-perm="imprimir" type="button"><i data-ic="print"></i>Imprimir / PDF</button></div>
   </div>
   <div class="filtros" id="atFiltros">
     <label>Tipo<select data-f="tipo"></select></label>
@@ -529,7 +555,7 @@
   <div id="atDashVazio" class="vazio" hidden>
     <b>Nenhum treinamento registrado.</b>
     <p>Registre reciclagens, alinhamentos e novos conteúdos na primeira aba ou carregue dados de exemplo para conhecer o painel.</p>
-    <button class="btn btn-pri" type="button" id="atBtnExemploDash">Carregar dados de exemplo</button>
+    <button class="btn btn-pri" type="button" id="atBtnExemploDash" data-perm="exemplo">Carregar dados de exemplo</button>
   </div>
   <div id="atDashConteudo">
     <div class="kpis" id="atKpis"></div>
@@ -569,7 +595,7 @@
       </article>
       <article class="cartao c-largo">
         <header class="cab-card cab-tabela"><span class="icb" data-ic="user"></span><div><h2>Panorama por colaborador</h2><p>Clique no nome ou no lápis para editar · clique no supervisor para filtrar · clique no cabeçalho para ordenar</p></div>
-          <div class="cab-acoes"><input type="search" id="atBuscaColab" placeholder="Buscar colaborador"><button class="btn btn-sec" id="atExpColab" type="button"><i data-ic="download"></i>Exportar CSV</button></div></header>
+          <div class="cab-acoes"><input type="search" id="atBuscaColab" placeholder="Buscar colaborador"><button class="btn btn-sec" id="atExpColab" data-perm="exportar" type="button"><i data-ic="download"></i>Exportar CSV</button></div></header>
         <div class="tabela-wrap"><table class="tabela" id="atTColab"></table></div>
       </article>
       <article class="cartao c-largo">
@@ -587,11 +613,11 @@
       <p class="sub">Todos os treinamentos registrados de colaboradores ativos. Clique no nome ou no lápis para editar.</p>
     </div>
     <div class="cab-acoes wrap">
-      <button class="btn btn-sec" id="atExpCsv" type="button"><i data-ic="download"></i>Exportar planilha (CSV)</button>
-      <button class="btn btn-sec" id="atExpJson" type="button"><i data-ic="database"></i>Baixar backup</button>
-      <label class="btn btn-sec"><i data-ic="upload"></i>Importar backup / CSV<input type="file" id="atImpArquivo" accept=".json,.csv" hidden></label>
-      <button class="btn btn-sec" id="atBtnExemplo" type="button">Dados de exemplo</button>
-      <button class="btn btn-perigo" id="atBtnApagarTudo" type="button">Apagar tudo</button>
+      <button class="btn btn-sec" id="atExpCsv" data-perm="exportar" type="button"><i data-ic="download"></i>Exportar planilha (CSV)</button>
+      <button class="btn btn-sec" id="atExpJson" data-perm="backup" type="button"><i data-ic="database"></i>Baixar backup</button>
+      <label class="btn btn-sec" data-perm="backup"><i data-ic="upload"></i>Importar backup / CSV<input type="file" id="atImpArquivo" accept=".json,.csv" hidden></label>
+      <button class="btn btn-sec" id="atBtnExemplo" data-perm="exemplo" type="button">Dados de exemplo</button>
+      <button class="btn btn-perigo" id="atBtnApagarTudo" data-perm="apagar" type="button">Apagar tudo</button>
     </div>
   </div>
   <div class="barra-busca"><input type="search" id="atBuscaBase" placeholder="Buscar por colaborador, tema, supervisor ou instrutor"></div>
@@ -605,7 +631,7 @@
       <p class="sub">Consultores da operação importados do BD GERAL. Ao importar, o BD é compartilhado com toda a equipe.</p>
     </div>
     <div class="cab-acoes wrap">
-      <label class="btn btn-pri"><i data-ic="upload"></i>Importar BD da operação<input type="file" id="atImpBD" accept=".xlsx,.xlsm" hidden></label>
+      <label class="btn btn-pri" data-perm="importarBD"><i data-ic="upload"></i>Importar BD da operação<input type="file" id="atImpBD" accept=".xlsx,.xlsm" hidden></label>
     </div>
   </div>
   <article class="cartao quadro" id="atQuadroCard">
@@ -657,12 +683,17 @@
   </form>
 </dialog>
 
+<dialog id="dlgAdmin" class="dlg dlg-grande">
+  <form method="dialog" class="dlg-in">
+    <header class="cab-card"><span class="icb" data-ic="layers"></span><div><h2>Administrativo</h2><p>Usuários, permissões por perfil e publicação para todos</p></div><button class="btn btn-sec fechar-dlg" value="fechar">Fechar</button></header>
+    <nav class="adm-abas" id="admAbas"><button type="button" data-t="usuarios">Usuários</button><button type="button" data-t="permissoes">Permissões por perfil</button><button type="button" data-t="publicar">Publicação</button></nav>
+    <div id="admCorpo"></div>
+  </form>
+</dialog>
+
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="tip" class="tip" hidden></div>
 
-<script src="assets/graficos.js?v=20261029-1318"></script>
-<script src="assets/app.js?v=20261029-1318"></script>
-<script src="assets/xlsx-leitor.js?v=20261029-1318"></script>
-<script src="assets/ativos.js?v=20261029-1318"></script>
+<script src="assets/nuvem.js?v=20261029-1530"></script>
 </body>
 </html>

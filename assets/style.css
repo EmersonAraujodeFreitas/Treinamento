@@ -628,3 +628,75 @@ td.lk-sup:hover{color:var(--marca);text-decoration:underline}
 .regs-lista li small{display:block;font-size:12px;color:var(--tinta-3)}
 .cel-acao2{width:84px}
 .aviso-bd{flex-basis:100%;display:flex;gap:10px;align-items:flex-start;background:var(--alerta-bg);border:1px solid #f1d28a;color:#6b4a00;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:6px}.aviso-bd .ic{width:18px;height:18px;flex:none;margin-top:1px}
+
+/* =========================================================
+   Login, usuário no topo, administrativo
+   ========================================================= */
+body.bloqueado>header,body.bloqueado>main,body.bloqueado>footer{display:none!important}
+.login{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:20px;background:radial-gradient(1200px 600px at 20% -10%,#164a80 0%,transparent 60%),radial-gradient(900px 500px at 110% 110%,#3a2a6b 0%,transparent 55%),#0d2947}
+.login[hidden]{display:none}
+.login-card{width:min(400px,100%);background:#fff;border-radius:20px;padding:28px 28px 22px;box-shadow:0 30px 80px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:12px;align-items:stretch;text-align:center;animation:surge .5s ease}
+.login-card .login-logo{width:110px;height:104px;object-fit:cover;align-self:center;border-radius:20px;background:#0d2947;margin-bottom:2px}
+.login-card .logo-linha{align-self:center;width:150px}
+.login-card .logo-nome{color:var(--marca-escura);align-self:center;font-size:13px}
+.login-card h1{font-size:22px;color:var(--marca-escura);margin-top:8px}
+.login-card .sub{margin:-6px 0 6px}
+.login-card .campo{text-align:left}
+.login-card .chk{justify-content:flex-start}
+.login-card .btn{justify-content:center;padding:11px;font-size:15px}
+.login-card .msg{min-height:18px;margin:0}
+.usuario-topo{display:flex;align-items:center;gap:10px;margin-left:8px}
+.usuario-topo .quem{display:flex;flex-direction:column;line-height:1.15;color:#fff;text-align:right}
+.usuario-topo .quem b{font-size:13px}.usuario-topo .quem small{font-size:11px;color:#a9bad0}
+.btn-topo{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#e6eef8;border-radius:9px;padding:7px 10px;cursor:pointer;font-weight:600;font-size:13px}
+.btn-topo:hover{background:rgba(255,255,255,.14)}
+.ico-topo{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.admin-only{display:none}
+body.eh-admin .admin-only{display:inline-flex}
+body.eh-admin #btnAdmin{border-color:var(--marca-acento);color:var(--marca-acento)}
+.nuvem-status{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#a9bad0;white-space:nowrap}
+.nuvem-status i{width:8px;height:8px;border-radius:50%;background:#7d8899}
+.nuvem-status.ok i{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.2)}
+.nuvem-status.enviando i,.nuvem-status.pendente i{background:#f5c542;animation:pisca 1s infinite}
+.nuvem-status.erro i{background:#ef4444}.nuvem-status.erro{color:#fca5a5}
+@keyframes pisca{50%{opacity:.3}}
+.dlg-grande{width:min(980px,96vw)}
+.dlg-grande .cab-card{align-items:center}
+.dlg-grande .cab-card>div{flex:1}
+.adm-abas{display:flex;gap:4px;border-bottom:1px solid var(--borda);margin:4px 0 6px}
+.adm-abas button{border:0;background:none;padding:9px 14px;font-weight:700;color:var(--tinta-3);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.adm-abas button.on{color:var(--marca);border-bottom-color:var(--marca)}
+#admCorpo{display:flex;flex-direction:column;gap:14px;max-height:68vh;overflow:auto;padding-right:4px}
+.adm-bloco{border:1px solid var(--borda);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.adm-bloco h3{margin:0;font-size:15px;color:var(--marca-escura)}
+.adm-bloco p{margin:0}
+.adm-grade{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.adm-acoes{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.adm-ok{color:var(--bom-txt);font-weight:600}
+.adm-tab select{min-height:30px;padding:3px 8px;width:auto}
+.adm-bts{display:flex;gap:6px;justify-content:flex-end}
+.perm-tab td:first-child{white-space:normal}
+.perm-tab thead+tbody tr:last-child td{border-bottom:2px solid var(--borda-forte)}
+
+/* análises */
+.an-grade{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.an-lado{display:flex;flex-direction:column;gap:14px;position:sticky;top:150px}
+.an-filtro{margin:0 0 8px;min-height:34px}
+.an-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;max-height:300px;overflow:auto}
+.an-lista li{padding:7px 10px;border:1px solid var(--borda);border-radius:9px;cursor:pointer;background:#fff}
+.an-lista li:hover{border-color:var(--marca);background:var(--marca-clara)}
+.an-lista li b{display:block;font-size:13px}.an-lista li small{display:block;font-size:11.5px;color:var(--tinta-3)}
+.an-resumo:empty{display:none}
+.an-resumo{margin-top:12px}
+.an-chips{display:flex;flex-wrap:wrap;gap:8px}
+.an-chips span{border:1px solid var(--borda);background:var(--sup-2);border-radius:10px;padding:6px 10px;display:flex;flex-direction:column}
+.an-chips small{font-size:11px;color:var(--tinta-3);font-weight:600}.an-chips b{font-size:13px}
+.an-criterios{grid-template-columns:repeat(4,minmax(0,1fr))}
+.an-resumo-notas{grid-template-columns:repeat(2,minmax(0,1fr)) minmax(0,1.4fr)}
+.an-resumo-notas .rn-final b{font-size:26px}
+.kpis-comp{margin-bottom:14px}
+.sub-titulo{font-size:14px;color:var(--marca-escura);margin:16px 0 8px}
+.sub-titulo small{font-weight:500;color:var(--tinta-3);font-size:12px;margin-left:6px}
+.comp-tab td{white-space:nowrap}
+@media (max-width:1100px){.an-grade{grid-template-columns:1fr}.an-lado{position:static}.adm-grade{grid-template-columns:1fr 1fr}.usuario-topo .quem{display:none}}
+@media (max-width:620px){.an-criterios{grid-template-columns:1fr 1fr}.btn-topo span{display:none}.nuvem-status span{display:none}}
