@@ -8,8 +8,8 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/favicon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap">
-<link rel="stylesheet" href="assets/style.css?v=20261029-1530">
-<script src="assets/dados-bahia.js?v=20261029-1530"></script>
+<link rel="stylesheet" href="assets/style.css?v=20261029-1600">
+<script src="assets/dados-bahia.js?v=20261029-1600"></script>
 </head>
 <body class="bloqueado">
 
@@ -683,10 +683,20 @@
   </form>
 </dialog>
 
+<dialog id="dlgSenhaNova" class="dlg">
+  <form method="dialog" class="dlg-in" id="snForm">
+    <header class="cab-card"><span class="icb" data-ic="edit"></span><div><h2 id="snTitulo">Trocar minha senha</h2><p>Mínimo de 8 caracteres, com letras e números.</p></div></header>
+    <label class="campo" id="snAtualCampo"><span>Senha atual</span><input type="password" id="snAtual" autocomplete="current-password"></label>
+    <label class="campo"><span>Nova senha</span><input type="password" id="snNova" autocomplete="new-password"></label>
+    <label class="campo"><span>Confirme a nova senha</span><input type="password" id="snConf" autocomplete="new-password"></label>
+    <div class="dlg-rod"><small class="msg erro" id="snMsg"></small><span><button class="btn btn-sec" id="snCancelar" value="cancelar" formnovalidate>Cancelar</button> <button class="btn btn-pri" value="ok">Salvar senha</button></span></div>
+  </form>
+</dialog>
+
 <dialog id="dlgAdmin" class="dlg dlg-grande">
   <form method="dialog" class="dlg-in">
     <header class="cab-card"><span class="icb" data-ic="layers"></span><div><h2>Administrativo</h2><p>Usuários, permissões por perfil e publicação para todos</p></div><button class="btn btn-sec fechar-dlg" value="fechar">Fechar</button></header>
-    <nav class="adm-abas" id="admAbas"><button type="button" data-t="usuarios">Usuários</button><button type="button" data-t="permissoes">Permissões por perfil</button><button type="button" data-t="publicar">Publicação</button></nav>
+    <nav class="adm-abas" id="admAbas"><button type="button" data-t="usuarios">Usuários</button><button type="button" data-t="permissoes">Permissões por perfil</button><button type="button" data-t="servidor">Servidor e publicação</button><button type="button" data-t="log">Registro de acessos</button></nav>
     <div id="admCorpo"></div>
   </form>
 </dialog>
@@ -694,6 +704,7 @@
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="tip" class="tip" hidden></div>
 
-<script src="assets/nuvem.js?v=20261029-1530"></script>
+<script src="assets/config.js?v=20261029-1600"></script>
+<script src="assets/nuvem.js?v=20261029-1600"></script>
 </body>
 </html>

@@ -1,0 +1,15 @@
+name = "treinamento-inovacao-casa"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+ORIGENS = "https://emersonaraujodefreitas.github.io"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "treinamento"
+database_id = "COLE_AQUI_O_ID_DO_BANCO"
+
+# Segredos (não ficam no código):
+#   npx wrangler secret put SEGREDO_SESSAO
+#   npx wrangler secret put PIMENTA
