@@ -238,10 +238,10 @@ function duelo(el, grupos, nomes, metricas, cores, icones = ['pin', 'map']) {
   el.innerHTML = `<div class="duelo-cab">${nomes.map((n, i) => `<div class="dc dc${i}" style="--c:${cores[i]}"><span class="dc-ic">${ic(icones[i])}</span><div><b>${esc(n)}</b><small>${grupos[i].n} treinandos</small></div></div>`).join('<span class="dc-vs">×</span>')}</div>
   <div class="duelo-grid">${metricas.map(([titulo, k, max, icone, ehPct], mi) => {
     const a = A[k], b = B[k];
-    const f = v => v === null || v === undefined ? '—' : ehPct ? fmt(v * 100, 0) + '%' : fmt(v);
+    const f = v => v === null || v === undefined ? '—' : ehPct === 'q' ? fmt(v * 10, 2) + '%' : ehPct ? fmt(v * 100, 0) + '%' : fmt(v);
     const dif = a !== null && b !== null && a !== undefined && b !== undefined ? a - b : null;
     const lider = dif === null || Math.abs(dif) < 1e-9 ? -1 : dif > 0 ? 0 : 1;
-    const difTxt = dif === null ? '' : ehPct ? fmt(Math.abs(dif) * 100, 0) + ' p.p.' : fmt(Math.abs(dif)) + ' pt';
+    const difTxt = dif === null ? '' : ehPct === 'q' ? fmt(Math.abs(dif) * 10, 2) + ' p.p.' : ehPct ? fmt(Math.abs(dif) * 100, 0) + ' p.p.' : fmt(Math.abs(dif)) + ' pt';
     return `<div class="duelo-item" style="--d:${mi * 80}ms">
       <div class="di-cab"><span class="di-ic">${ic(icone)}</span><span>${titulo}</span>${lider >= 0 ? `<em class="di-dif" style="--c:${cores[lider]}">${ic(lider ? 'down' : 'up', '')}${difTxt}</em>` : ''}</div>
       ${[a, b].map((v, i) => `<div class="di-row${lider === i ? ' lider' : ''}" data-tip="${esc(`<b>${esc(nomes[i])}</b><br>${titulo}: ${f(v)}`)}"><div class="di-bar"><i style="--w:${v === null || v === undefined ? 0 : Math.max(2, Math.min(100, v / max * 100))}%;--c:${cores[i]}"></i></div><b>${f(v)}</b></div>`).join('')}

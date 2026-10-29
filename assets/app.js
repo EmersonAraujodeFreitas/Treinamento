@@ -11,6 +11,8 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 const num = v => { if (v === '' || v === null || v === undefined) return null; const n = Number(String(v).replace(',', '.')); return isFinite(n) ? n : null; };
 const escala10 = v => v === null || v === undefined || !isFinite(v) ? null : v > 10 ? v / 10 : v; // aceita nota de 0 a 10 ou de 0 a 100
+const qual10 = v => v === null || v === undefined || !isFinite(v) ? null : v / 10; // qualidade é lançada em % (0 a 100,00)
+const pctQ = v10 => v10 === null || v10 === undefined || !isFinite(v10) ? '—' : fmt(v10 * 10, 2) + '%';
 const media = arr => { const a = arr.filter(v => v !== null && v !== undefined && isFinite(v)); return a.length ? a.reduce((s, v) => s + v, 0) / a.length : null; };
 const fmt = (n, d = 1) => n === null || n === undefined || !isFinite(n) ? '—' : n.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const pct = (n, d = 0) => n === null || !isFinite(n) ? '—' : fmt(n * 100, d) + '%';
@@ -37,6 +39,7 @@ const KEY_META = 'inovacao_treinamento_meta_v1';
 const ler = (k, def) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch (e) { return def; } };
 const gravar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { toast('Não foi possível salvar no navegador.'); } };
 let registros = ler(KEY, []);
+registros.forEach(r => { if (r.exemplo && (r.qualidade || []).length && r.qualidade.every(q => q.nota === null || q.nota <= 10)) r.qualidade.forEach(q => { if (q.nota !== null) q.nota = +(q.nota * 10).toFixed(2); }); });
 registros.forEach(r => { if (r.provas || r.qualidade) { const n = notaCalculada(r.provas || [], r.qualidade || [], r.comportamental || {}); if (n !== null) r.notaFinal = n; } });
 registros.forEach(r => { if (r.operacao && !['Captação', 'Permanência'].includes(r.operacao)) r.operacao = r.operacao === 'Serviços' || r.operacao === 'Rematrícula' ? 'Permanência' : ''; });
 registros.forEach(r => { if (r.indicacao === 'Operação de vendas') r.indicacao = 'Captação'; else if (r.indicacao === 'Operação de não vendas') r.indicacao = 'Permanência'; });
@@ -242,7 +245,7 @@ function addQualidade(q = {}) {
   const n = $$('.linha', l).length + 1;
   l.insertAdjacentHTML('beforeend', `<div class="linha linha-qual"><span class="idx">${n}</span>
     <input class="q-data" type="date" value="${esc(q.data || '')}" title="Data da monitoria">
-    <input class="q-nota" type="number" min="0" max="100" step="0.1" placeholder="Nota (0–10 ou 0–100)" value="${q.nota ?? ''}">${BTN_X}</div>`);
+    <span class="campo-pct"><input class="q-nota" inputmode="decimal" placeholder="0,00" value="${q.nota === null || q.nota === undefined ? '' : fmt(q.nota, 2)}"><b>%</b></span>${BTN_X}</div>`);
 }
 function addAtestado(a = {}) {
   const l = F('listaAtestados'); $('.vazio-linha', l)?.remove();
@@ -279,7 +282,7 @@ function lerQualidade() { return $$('#listaQualidade .linha').map(l => ({ data: 
 function lerAtestados() { return $$('#listaAtestados .linha').map(l => ({ data: $('.a-data', l).value, dias: num($('.a-dias', l).value), obs: $('.a-obs', l).value.trim() })).filter(a => a.data || a.dias || a.obs); }
 function lerComport() { const o = {}; $$('#comportamental .escala').forEach(e => { if (e.dataset.v) o[e.dataset.k] = +e.dataset.v; }); return o; }
 function partesNota(provas, qual, comp) {
-  const mp = media(provas.map(p => escala10(p.nota))), mq = media(qual.map(q => escala10(q.nota)));
+  const mp = media(provas.map(p => escala10(p.nota))), mq = media(qual.map(q => qual10(q.nota)));
   const mc = media(Object.values(comp || {}));
   return [['Provas', mp, .6], ['Qualidade', mq, .3], ['Comportamental', mc === null ? null : mc * 2, .1]];
 }
@@ -293,7 +296,7 @@ function atualizarResumo() {
   const pv = lerProvas(), q = lerQualidade(), c = lerComport();
   const partes = partesNota(pv, q, c);
   F('rMediaProvas').textContent = fmt(partes[0][1]);
-  F('rMediaQual').textContent = fmt(partes[1][1]);
+  F('rMediaQual').textContent = pctQ(partes[1][1]);
   const mc = media(Object.values(c)); F('rComport').textContent = mc === null ? '—' : fmt(mc) + ' / 5';
   const n = notaCalculada(pv, q, c);
   F('notaFinal').value = n === null ? '' : fmt(n);
@@ -301,7 +304,7 @@ function atualizarResumo() {
   const usadas = partes.filter(p => p[1] !== null);
   const pesos = usadas.reduce((s, p) => s + p[2], 0);
   F('formulaNota').textContent = usadas.length
-    ? usadas.map(p => `${p[0]} ${fmt(p[1])} × ${fmt(p[2] / pesos * 100, 0)}%`).join(' + ') + (n === null ? '' : ` = ${fmt(n)}`)
+    ? usadas.map(p => `${p[0]} ${p[0] === 'Qualidade' ? pctQ(p[1]) + ' (' + fmt(p[1]) + ')' : fmt(p[1])} × ${fmt(p[2] / pesos * 100, 0)}%`).join(' + ') + (n === null ? '' : ` = ${fmt(n)}`)
     : 'Lance as notas das provas e da qualidade para calcular.';
   atualizarFrequencia();
 }
@@ -312,6 +315,8 @@ function atualizarFrequencia() {
 }
 ['dataInicio', 'dataFim', 'faltas'].forEach(id => F(id).addEventListener('input', atualizarFrequencia));
 F('form').addEventListener('input', e => { if (e.target.closest('#listaProvas,#listaQualidade')) atualizarResumo(); });
+F('listaQualidade').addEventListener('input', e => { if (!e.target.classList.contains('q-nota')) return; const v = e.target.value; const limpo = v.replace(/[^\d,.]/g, ''); if (limpo !== v) e.target.value = limpo; const n = num(limpo); e.target.classList.toggle('invalido', n !== null && (n < 0 || n > 100)); });
+F('listaQualidade').addEventListener('focusout', e => { if (!e.target.classList.contains('q-nota')) return; const n = num(e.target.value); if (n !== null && n >= 0 && n <= 100) e.target.value = fmt(n, 2); });
 
 // datalists de turma / instrutor
 function atualizarDatalists() {
@@ -386,8 +391,8 @@ F('form').addEventListener('submit', e => {
   exigir('notaFinal', nf !== null, 'notas das provas ou da qualidade (para calcular a nota final)');
   exigir('status', F('status').value, 'situação final');
   const provas = lerProvas(), qual = lerQualidade(), atest = lerAtestados();
-  const foraEscala = [...provas, ...qual].some(x => x.nota !== null && (x.nota < 0 || x.nota > 100));
-  if (foraEscala) erros.push(['listaProvas', 'notas entre 0 e 100']);
+  if (provas.some(x => x.nota !== null && (x.nota < 0 || x.nota > 100))) erros.push(['listaProvas', 'notas das provas entre 0 e 10 (ou 0 e 100)']);
+  if (qual.some(x => x.nota !== null && (x.nota < 0 || x.nota > 100))) erros.push(['listaQualidade', 'notas da qualidade entre 0,00% e 100,00%']);
   if (F('atestado').dataset.valor === 'Sim' && !atest.some(a => a.data)) erros.push(['listaAtestados', 'dia do atestado']);
   if (erros.length) {
     msg('Confira: ' + erros.map(x => x[1]).join(', ') + '.', 'erro');
@@ -434,7 +439,7 @@ const ehSsa = r => r.cidade === 'Salvador';
 
 function enriquecer(r) {
   const idade = idadeDe(r.nascimento, r.dataInicio || null);
-  return { ...r, _idade: idade, _faixa: faixaDe(idade), _mProvas: media((r.provas || []).map(p => escala10(p.nota))), _mQual: media((r.qualidade || []).map(q => escala10(q.nota))), _regiao: regiaoDe(r.cidade) };
+  return { ...r, _idade: idade, _faixa: faixaDe(idade), _mProvas: media((r.provas || []).map(p => escala10(p.nota))), _mQual: media((r.qualidade || []).map(q => qual10(q.nota))), _regiao: regiaoDe(r.cidade) };
 }
 function aplicaFiltros(lista, ignorar) {
   const f = ESTADO.filtros;
@@ -509,7 +514,7 @@ function agrupar(lista, chave) {
 
 const COR = { s1: '#2a78d6', s2: '#eb6834', s3: '#1baf7a', s4: '#6250d6' };
 const COR_STATUS = { 'Em treinamento': ['#2a78d6', 'clock'], 'Aprovado': ['#0ca30c', 'check'], 'Reprovado': ['#d03b3b', 'alert'], 'Desistente': ['#eda100', 'down'], 'Desligado': ['#ec835a', 'trash'] };
-const METRICAS_DUELO = [['Nota final', 'nota', 10, 'award'], ['Média das provas', 'provas', 10, 'exam'], ['Média da qualidade', 'qual', 10, 'headset'], ['Aprovação', 'aprov', 1, 'check', true]];
+const METRICAS_DUELO = [['Nota final', 'nota', 10, 'award'], ['Média das provas', 'provas', 10, 'exam'], ['Média da qualidade', 'qual', 10, 'headset', 'q'], ['Aprovação', 'aprov', 1, 'check', true]];
 const tipH = (titulo, linhas) => `<b>${esc(titulo)}</b>` + linhas.map(l => `<br>${esc(l)}`).join('');
 function animarNumeros(raiz) {
   $$('[data-conta]', raiz).forEach(el => {
@@ -544,7 +549,7 @@ function renderDashboard() {
     kpi('Nota final média', 'award', COR.s1, R.nota, 1, '', `${pct(R.naMeta)} na meta (${fmt(M)})`, R.nota === null ? 0 : R.nota / 10),
     kpi('Taxa de aprovação', 'check', '#0ca30c', R.aprov === null ? null : R.aprov * 100, 0, '%', `${R.nConc} com resultado final`, R.aprov),
     kpi('Média das provas', 'exam', COR.s4, R.provas, 1, '', 'provas do treinamento', R.provas === null ? 0 : R.provas / 10),
-    kpi('Média da qualidade', 'headset', COR.s3, R.qual, 1, '', 'últimas monitorias', R.qual === null ? 0 : R.qual / 10),
+    kpi('Média da qualidade', 'headset', COR.s3, R.qual === null ? null : R.qual * 10, 2, '%', 'últimas monitorias', R.qual === null ? 0 : R.qual / 10),
     kpi('Com atestado', 'medical', COR.s2, R.atest === null ? null : R.atest * 100, 0, '%', `faltas: ${fmt(R.faltas)} em média`, R.atest),
     kpi('Perfil de vendas', 'briefcase', '#e87ba4', R.vendas === null ? null : R.vendas * 100, 0, '%', `${pct(R.vendas === null ? null : 1 - R.vendas)} não vendas`, R.vendas),
   ].join('');
@@ -582,7 +587,7 @@ function renderDashboard() {
   const rk = ord.slice(0, +F('topN').value);
   G.ranking(F('gRanking'), rk.map(b => ({
     rotulo: b.bairro, sub: `${b.cidade} · ${b.n} treinando${b.n > 1 ? 's' : ''}`, valor: b.nota, cor: +b.nota.toFixed(1) >= M ? COR.s1 : COR.s2,
-    tip: tipH(`${b.bairro} · ${b.cidade}`, [`Nota final: ${fmt(b.nota)}`, `${b.n} treinandos · ${b.regiao}`, `Aprovação: ${pct(b.aprov)}`, `Provas ${fmt(b.provas)} · Qualidade ${fmt(b.qual)}`])
+    tip: tipH(`${b.bairro} · ${b.cidade}`, [`Nota final: ${fmt(b.nota)}`, `${b.n} treinandos · ${b.regiao}`, `Aprovação: ${pct(b.aprov)}`, `Provas ${fmt(b.provas)} · Qualidade ${pctQ(b.qual)}`])
   })), { max: 10, meta: M, posicao: true, legenda: [['Na meta', COR.s1], ['Abaixo da meta', COR.s2]], vazio: `Nenhum bairro com ${minA} ou mais treinandos` });
 
   // cidades
@@ -644,7 +649,7 @@ function renderTabelaBairros() {
   const tag = b => b.nota === null ? '<span class="tag neutro">Sem nota</span>' : b.nota >= M ? `<span class="tag bom">${G.ic('check', '')}Na meta</span>` : `<span class="tag ruim">${G.ic('down', '')}Abaixo</span>`;
   F('tBairros').innerHTML = `<thead><tr>${COLS_BAIRRO.map(([k, t, n]) => `<th data-k="${k}" class="${n ? 'dir' : ''} ${o.k === k ? 'ord' + (o.asc ? ' asc' : '') : ''}">${t}</th>`).join('')}</tr></thead>
   <tbody>${rows.map(b => `<tr><td class="lk" data-c="${esc(b.cidade)}" data-b="${esc(b.bairro)}">${esc(b.bairro)}</td><td>${esc(b.cidade)}</td><td>${esc(b.regiao)}</td>
-    <td class="dir">${b.n}</td><td class="dir"><span class="mbar"><i style="width:${(b.nota || 0) * 10}%"></i></span>${fmt(b.nota)}</td><td class="dir">${fmt(b.provas)}</td><td class="dir">${fmt(b.qual)}</td>
+    <td class="dir">${b.n}</td><td class="dir"><span class="mbar"><i style="width:${(b.nota || 0) * 10}%"></i></span>${fmt(b.nota)}</td><td class="dir">${fmt(b.provas)}</td><td class="dir">${pctQ(b.qual)}</td>
     <td class="dir">${pct(b.aprov)}</td><td class="dir">${pct(b.naMeta)}</td><td class="dir">${pct(b.atest)}</td><td class="dir">${fmt(b.faltas)}</td><td class="dir">${pct(b.vendas)}</td><td>${tag(b)}</td></tr>`).join('')
     || `<tr><td colspan="${COLS_BAIRRO.length}" class="dica">Nenhum bairro encontrado.</td></tr>`}</tbody>`;
 }
@@ -656,7 +661,7 @@ F('tBairros').addEventListener('click', e => {
 });
 F('buscaBairro').addEventListener('input', renderTabelaBairros);
 F('expBairros').onclick = () => {
-  const linhas = [COLS_BAIRRO.map(c => c[1])].concat((ESTADO.bairros || []).map(b => [b.bairro, b.cidade, b.regiao, b.n, fmt(b.nota, 2), fmt(b.provas, 2), fmt(b.qual, 2), pct(b.aprov, 1), pct(b.naMeta, 1), pct(b.atest, 1), fmt(b.faltas, 2), pct(b.vendas, 1), b.nota === null ? 'Sem nota' : b.nota >= meta() ? 'Na meta' : 'Abaixo da meta']));
+  const linhas = [COLS_BAIRRO.map(c => c[1])].concat((ESTADO.bairros || []).map(b => [b.bairro, b.cidade, b.regiao, b.n, fmt(b.nota, 2), fmt(b.provas, 2), pctQ(b.qual), pct(b.aprov, 1), pct(b.naMeta, 1), pct(b.atest, 1), fmt(b.faltas, 2), pct(b.vendas, 1), b.nota === null ? 'Sem nota' : b.nota >= meta() ? 'Na meta' : 'Abaixo da meta']));
   baixar(`panorama-bairros-${hoje()}.csv`, '﻿' + linhas.map(l => l.map(csvCel).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
 };
 F('btnImprimir').onclick = () => window.print();
@@ -709,12 +714,12 @@ function exportarCSV() {
   const maxQ = Math.max(0, ...registros.map(r => (r.qualidade || []).length));
   const cab = MAPA_CSV.map(m => m[0]).concat(['Datas dos atestados', 'Dias de atestado'],
     Array.from({ length: maxP }, (_, i) => `Prova ${i + 1}`), Array.from({ length: maxP }, (_, i) => `Prova ${i + 1} tema`),
-    Array.from({ length: maxQ }, (_, i) => `Qualidade ${i + 1}`), COMPORT.map(c => 'Comportamental ' + c[1]));
+    Array.from({ length: maxQ }, (_, i) => `Qualidade ${i + 1} (%)`), COMPORT.map(c => 'Comportamental ' + c[1]));
   const linhas = registros.map(r => MAPA_CSV.map(([, k]) => {
     const v = r[k]; if (['dataInicio', 'dataFim', 'nascimento', 'dataHabilitacao'].includes(k)) return dataBR(v); if (k === 'notaFinal') return fmt(v); return v;
   }).concat([(r.atestados || []).map(a => dataBR(a.data)).join(', '), (r.atestados || []).reduce((s, a) => s + (a.dias || 0), 0) || '',
     ...Array.from({ length: maxP }, (_, i) => fmt(r.provas?.[i]?.nota ?? null).replace('—', '')), ...Array.from({ length: maxP }, (_, i) => r.provas?.[i]?.nome || ''),
-    ...Array.from({ length: maxQ }, (_, i) => fmt(r.qualidade?.[i]?.nota ?? null).replace('—', '')), ...COMPORT.map(c => r.comportamental?.[c[0]] ?? '')]));
+    ...Array.from({ length: maxQ }, (_, i) => fmt(r.qualidade?.[i]?.nota ?? null, 2).replace('—', '')), ...COMPORT.map(c => r.comportamental?.[c[0]] ?? '')]));
   baixar(`treinamento-${hoje()}.csv`, '﻿' + [cab, ...linhas].map(l => l.map(csvCel).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
 }
 F('expCsv').onclick = () => registros.length ? exportarCSV() : toast('Nenhum cadastro para exportar');
@@ -748,7 +753,7 @@ function importarCSV(txt) {
     r.signo = r.signo || signoDe(r.nascimento); r.email = (r.email || '').toLowerCase();
     r.provas = []; r.qualidade = []; r.comportamental = {};
     for (let i = 1; i <= 30; i++) { const a = idx(`Prova ${i}`); if (a < 0) break; const n = num(l[a]); const t = idx(`Prova ${i} tema`); if (n !== null || (t >= 0 && l[t])) r.provas.push({ nome: t >= 0 ? l[t] : '', data: '', nota: n }); }
-    for (let i = 1; i <= 30; i++) { const a = idx(`Qualidade ${i}`); if (a < 0) break; const n = num(l[a]); if (n !== null) r.qualidade.push({ data: '', nota: n }); }
+    for (let i = 1; i <= 30; i++) { let a = idx(`Qualidade ${i} (%)`); if (a < 0) a = idx(`Qualidade ${i}`); if (a < 0) break; const n = num(l[a]); if (n !== null) r.qualidade.push({ data: '', nota: n }); }
     COMPORT.forEach(([k, t]) => { const a = idx('Comportamental ' + t); if (a >= 0 && num(l[a])) r.comportamental[k] = num(l[a]); });
     const da = idx('Datas dos atestados'); r.atestados = da >= 0 && l[da] ? l[da].split(',').map(s => ({ data: dataISO(s), dias: null, obs: '' })) : [];
     if (!r.atestado) r.atestado = r.atestados.length ? 'Sim' : 'Não';
@@ -798,7 +803,7 @@ function carregarExemplo() {
     const base = 6.9 + ef + (atest === 'Sim' ? -.7 : 0) + (rnd() - .5) * 2.2;
     const nota = v => Math.max(2, Math.min(10, Math.round((v + (rnd() - .5) * 1.4) * 10) / 10));
     const provas = temas.map((nm, k) => ({ nome: nm, data: '', nota: nota(base + k * .18 - .3) }));
-    const qual = [0, 1, 2].map(() => ({ data: '', nota: nota(base + .4) }));
+    const qual = [0, 1, 2].map(() => ({ data: '', nota: Math.min(100, +(nota(base + .4) * 10 + rnd() * 0.99).toFixed(2)) }));
     const comp = {}; COMPORT.forEach(([k]) => comp[k] = Math.max(1, Math.min(5, Math.round(3 + (base - 6.5) * .7 + (rnd() - .5) * 2))));
     const nf = notaCalculada(provas, qual, comp);
     const ano = 1980 + Math.floor(rnd() * 27), mes = 1 + Math.floor(rnd() * 12), dia = 1 + Math.floor(rnd() * 28);
