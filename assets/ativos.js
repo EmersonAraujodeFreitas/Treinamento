@@ -176,10 +176,11 @@ function limpar(manterAcao) {
   $$('#atForm .invalido').forEach(e => e.classList.remove('invalido'));
   F('atModoEdicao').hidden = true; F('atSalvarTxt').textContent = 'Salvar registro'; F('atBtnNovo').lastChild.textContent = 'Novo registro';
   if (acao) { setSeg('atTipo', acao.tipo); ACAO.forEach(([id, k]) => F(id).value = acao[k]); F('atCarga').value = acao.carga; }
+  if (!manterAcao) { LOTE.clear(); RES.clear(); modo('um'); }
   evolucao(); msg('');
 }
 function preencher(r) {
-  limpar(false);
+  limpar(false); modo('um');
   F('atId').value = r.id;
   setSeg('atTipo', r.tipo); setSeg('atPresenca', r.presenca);
   [...ACAO, ...COLAB].forEach(([id, k]) => F(id).value = r[k] ?? '');
@@ -202,6 +203,7 @@ F('atBtnNovo').onclick = () => { limpar(false); F('atTema').focus(); };
 F('atForm').addEventListener('submit', e => {
   e.preventDefault();
   $$('#atForm .invalido').forEach(x => x.classList.remove('invalido'));
+  if (F('atModo').dataset.valor === 'lote') { salvarLote(); return; }
   const erros = [];
   const exigir = (id, ok, txt) => { if (!ok) { F(id).classList.add('invalido'); erros.push([id, txt]); } };
   exigir('atTipo', F('atTipo').dataset.valor, 'tipo de treinamento');
@@ -310,6 +312,116 @@ F('supLista').addEventListener('click', e => {
   if (!confirm(`Remover ${n} da lista? Os registros já salvos continuam com o nome.`)) return;
   supervisores.splice(+b.dataset.del, 1); salvarSup(); listaSup();
 });
+
+
+/* =========================================================
+   VÁRIOS CONSULTORES (registro em lote)
+   ========================================================= */
+const LOTE = new Map();   // chave -> pessoa
+const RES = new Map();    // chave -> { presenca, pre, pos, qa, qd }
+const chaveP = c => c.mat || c.matricula || norm(c.email || c.nome);
+function pessoasLote() {
+  if (quadro.itens.length) return quadro.itens.map(c => ({ k: chaveP(c), nome: c.nome, matricula: c.mat, email: c.email, supervisor: c.supervisor, ies: c.ies, operacao: c.operacao, turno: c.turno, tempoCasa: c.tempoCasa, cidade: c.cidade, bairro: c.bairro, status: c.status, login: c.login }));
+  return colaboradores().map(c => ({ k: chaveP(c), nome: c.nome, matricula: c.matricula, email: c.email, supervisor: c.supervisor, ies: c.instituicao, operacao: c.operacao, turno: c.turno, tempoCasa: c.tempoCasa, cidade: c.cidade, bairro: c.bairro, status: 'Ativo', login: '' }));
+}
+function modo(m) {
+  const lote = m === 'lote';
+  F('atModo').dataset.valor = m; $$('#atModo button').forEach(b => b.classList.toggle('on', b.dataset.v === m));
+  F('atLote').hidden = !lote; F('atUm').hidden = lote; F('atLoteRes').hidden = !lote;
+  $$('#atForm .so-um').forEach(el => el.hidden = lote);
+  $$('#atForm .so-um-i').forEach(el => el.hidden = lote);
+  F('atModoDica').textContent = lote ? 'Filtre, marque os consultores e preencha o resultado de cada um no bloco 3. Instituição e operação vêm do BD de cada consultor.' : 'Para registrar uma turma inteira de uma vez, escolha "Vários consultores".';
+  F('atSalvarTxt').textContent = lote ? `Salvar ${LOTE.size || ''} registros`.replace('  ', ' ') : (F('atId').value ? 'Salvar alterações' : 'Salvar registro');
+  if (lote) { montarFiltrosLote(); renderLote(); }
+}
+F('atModo').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (F('atId').value && b.dataset.v === 'lote') { toast('Termine ou cancele a edição antes'); return; } modo(b.dataset.v); });
+function montarFiltrosLote() {
+  const sel = F('atLoteSup'), atual = sel.value;
+  const sups = [...new Set(pessoasLote().map(p => p.supervisor).filter(Boolean))].sort(cmpTxt);
+  sel.innerHTML = '<option value="">Todos os supervisores</option>' + sups.map(x => `<option${x === atual ? ' selected' : ''}>${esc(x)}</option>`).join('');
+}
+function filtradosLote() {
+  const termos = norm(F('atLoteBusca').value).split(/\s+/).filter(Boolean);
+  const sp = F('atLoteSup').value, ies = F('atLoteIes').value, op = F('atLoteOp').value, tu = F('atLoteTurno').value, so = F('atLoteSoAtivos').checked;
+  return pessoasLote().filter(p => p.status !== 'Desligado' && (!so || p.status === 'Ativo') && (!sp || p.supervisor === sp) && (!ies || p.ies === ies) && (!op || p.operacao === op) && (!tu || p.turno === tu)
+    && termos.every(t => norm([p.nome, p.login, p.matricula, p.email].join(' ')).includes(t))).sort((a, b) => cmpTxt(a.nome, b.nome));
+}
+const sig = n => n.split(' ').filter(Boolean).slice(0, 2).map(x => x[0]).join('');
+function renderLote() {
+  const lista = filtradosLote();
+  F('atLoteInfo').textContent = pessoasLote().length ? `${lista.length} consultor${lista.length === 1 ? '' : 'es'} na lista` : 'Importe o BD da operação na Base de dados para listar os consultores';
+  F('atLoteLista').innerHTML = lista.map(p => `<li class="${LOTE.has(p.k) ? 'on' : ''}" data-k="${esc(p.k)}"><span class="ck">${G.ic('check', '')}</span><span class="av">${esc(sig(p.nome))}</span>
+    <span class="lt"><b>${esc(p.nome)}</b><small>${esc([p.ies, p.operacao, p.turno, p.supervisor].filter(Boolean).join(' · '))}</small></span>${p.status !== 'Ativo' ? `<em class="tag alerta">${esc(p.status)}</em>` : ''}</li>`).join('') || '<li class="vazio-lote">Ninguém encontrado com esses filtros.</li>';
+  F('atLoteQtd').textContent = LOTE.size;
+  F('atLoteChips').innerHTML = [...LOTE.values()].map(p => `<span class="lchip" data-k="${esc(p.k)}"><span class="av">${esc(sig(p.nome))}</span>${esc(p.nome.split(' ').slice(0, 2).join(' '))}<button type="button" aria-label="Remover">×</button></span>`).join('') || '<span class="dica">Marque os consultores na lista ao lado.</span>';
+  F('atLoteTodos').textContent = lista.length && lista.every(p => LOTE.has(p.k)) ? 'Desmarcar todos da lista' : 'Marcar todos da lista';
+  renderLoteRes();
+  F('atSalvarTxt').textContent = LOTE.size ? `Salvar ${LOTE.size} registro${LOTE.size > 1 ? 's' : ''}` : 'Salvar registros';
+}
+['atLoteBusca', 'atLoteSup', 'atLoteIes', 'atLoteOp', 'atLoteTurno', 'atLoteSoAtivos'].forEach(id => F(id).addEventListener(id === 'atLoteBusca' ? 'input' : 'change', renderLote));
+F('atLoteBusca').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const l = filtradosLote(); if (l.length === 1) alternar(l[0]); } });
+function alternar(p) { if (LOTE.has(p.k)) { LOTE.delete(p.k); } else { LOTE.set(p.k, p); if (!RES.has(p.k)) RES.set(p.k, { presenca: 'Presente' }); } renderLote(); }
+F('atLoteLista').addEventListener('click', e => { const li = e.target.closest('li[data-k]'); if (!li) return; const p = pessoasLote().find(x => x.k === li.dataset.k); if (p) alternar(p); });
+F('atLoteChips').addEventListener('click', e => { const c = e.target.closest('.lchip'); if (c && e.target.closest('button')) { LOTE.delete(c.dataset.k); renderLote(); } });
+F('atLoteTodos').onclick = () => { const l = filtradosLote(); const todos = l.length && l.every(p => LOTE.has(p.k)); l.forEach(p => { if (todos) LOTE.delete(p.k); else { LOTE.set(p.k, p); if (!RES.has(p.k)) RES.set(p.k, { presenca: 'Presente' }); } }); renderLote(); };
+F('atLoteNenhum').onclick = () => { LOTE.clear(); renderLote(); };
+function renderLoteRes() {
+  const v = (x, d) => x === null || x === undefined || x === '' ? '' : (typeof x === 'number' ? fmt(x, d) : x);
+  F('atLoteTab').innerHTML = LOTE.size ? `<thead><tr><th>Consultor</th><th>Presença</th><th class="dir">Pré-teste</th><th class="dir">Pós-teste</th><th class="dir">Qualidade antes</th><th class="dir">Qualidade depois</th><th class="dir">Evolução</th></tr></thead><tbody>${[...LOTE.values()].map(p => {
+    const r = RES.get(p.k) || {}; const dq = r.qa !== undefined && r.qd !== undefined && r.qa !== null && r.qd !== null ? r.qd - r.qa : null;
+    return `<tr data-k="${esc(p.k)}"><td><b>${esc(p.nome)}</b><br><small class="dica">${esc([p.ies, p.operacao, p.supervisor].filter(Boolean).join(' · '))}</small></td>
+    <td><select data-c="presenca">${PRESENCAS.map(x => `<option value="${x}"${(r.presenca || 'Presente') === x ? ' selected' : ''}>${x === 'Justificado' ? 'Falta justificada' : x}</option>`).join('')}</select></td>
+    <td><input data-c="pre" inputmode="decimal" placeholder="—" value="${esc(v(r.pre, 1))}"></td><td><input data-c="pos" inputmode="decimal" placeholder="—" value="${esc(v(r.pos, 1))}"></td>
+    <td><span class="campo-pct"><input data-c="qa" inputmode="decimal" placeholder="0,00" value="${esc(v(r.qa, 2))}"><b>%</b></span></td><td><span class="campo-pct"><input data-c="qd" inputmode="decimal" placeholder="0,00" value="${esc(v(r.qd, 2))}"><b>%</b></span></td>
+    <td class="dir"><span class="ad-res mini ${dq === null ? '' : dq > 0 ? 'sobe' : dq < 0 ? 'desce' : ''}">${dq === null ? '—' : sinal(dq, 2, ' p.p.')}</span></td></tr>`; }).join('')}</tbody>`
+    : '<tbody><tr><td class="dica" style="padding:14px">Marque os consultores no bloco 2 para lançar o resultado de cada um.</td></tr></tbody>';
+}
+F('atLoteTab').addEventListener('input', e => {
+  const el = e.target.closest('[data-c]'); if (!el) return; const k = el.closest('tr').dataset.k; const r = RES.get(k) || {}; RES.set(k, r);
+  if (el.tagName === 'SELECT') { r.presenca = el.value; return; }
+  const limpo = el.value.replace(/[^\d,.]/g, ''); if (limpo !== el.value) el.value = limpo;
+  const n = num(limpo), max = el.dataset.c === 'qa' || el.dataset.c === 'qd' ? 100 : 10;
+  r[el.dataset.c] = n; el.classList.toggle('invalido', n !== null && (n < 0 || n > max));
+  const tr = el.closest('tr'), res = $('.ad-res', tr), dq = r.qa !== null && r.qa !== undefined && r.qd !== null && r.qd !== undefined ? r.qd - r.qa : null;
+  res.textContent = dq === null ? '—' : sinal(dq, 2, ' p.p.'); res.className = 'ad-res mini' + (dq === null ? '' : dq > 0 ? ' sobe' : dq < 0 ? ' desce' : '');
+});
+F('atLoteTab').addEventListener('change', e => { const el = e.target.closest('select[data-c]'); if (el) { const r = RES.get(el.closest('tr').dataset.k) || {}; r.presenca = el.value; RES.set(el.closest('tr').dataset.k, r); } });
+F('atLoteTab').addEventListener('focusout', e => { const el = e.target.closest('input[data-c]'); if (!el) return; const n = num(el.value); if (n === null) return; const pctC = el.dataset.c === 'qa' || el.dataset.c === 'qd'; if (n <= (pctC ? 100 : 10)) el.value = fmt(n, pctC ? 2 : 1); });
+$$('#atLoteRes [data-todos]').forEach(b => b.onclick = () => { LOTE.forEach((p, k) => { const r = RES.get(k) || {}; r.presenca = b.dataset.todos; RES.set(k, r); }); renderLoteRes(); });
+function salvarLote() {
+  const erros = [];
+  const exigir = (id, ok, txt) => { if (!ok) { F(id).classList.add('invalido'); erros.push([id, txt]); } };
+  exigir('atTipo', F('atTipo').dataset.valor, 'tipo de treinamento');
+  exigir('atTema', F('atTema').value.trim(), 'tema');
+  exigir('atData', F('atData').value, 'data');
+  if (!LOTE.size) erros.push(['atLoteBusca', 'marque ao menos um consultor']);
+  const semIes = [...LOTE.values()].filter(p => !p.ies), semOp = [...LOTE.values()].filter(p => !p.operacao);
+  if (semIes.length) exigir('atInstituicao', F('atInstituicao').value, `instituição (${semIes.length} consultor(es) sem IES no BD)`);
+  if (semOp.length) exigir('atOperacao', F('atOperacao').value, `operação (${semOp.length} consultor(es) sem operação no BD)`);
+  const carga = num(F('atCarga').value);
+  if (carga !== null) exigir('atCarga', carga > 0 && carga <= 200, 'carga horária válida');
+  if ($$('#atLoteTab .invalido').length) erros.push(['atLoteTab', 'notas fora da escala (0 a 10 e 0,00% a 100,00%)']);
+  if (erros.length) { msg('Confira: ' + erros.map(x => x[1]).join(', ') + '.', 'erro'); const alvo = F(erros[0][0]); alvo.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+  const dups = [...LOTE.values()].filter(p => regs.some(r => norm(r.nome) === norm(p.nome) && norm(r.tema) === norm(F('atTema').value) && r.data === F('atData').value));
+  if (dups.length && !confirm(`${dups.length} consultor(es) já têm registro de "${F('atTema').value}" nesta data:\n${dups.slice(0, 8).map(p => '• ' + p.nome).join('\n')}${dups.length > 8 ? '\n…' : ''}\n\nSalvar mesmo assim?`)) return;
+  const agora = new Date().toISOString(); let n = 0;
+  LOTE.forEach((p, k) => {
+    const res = RES.get(k) || {}; const presenca = res.presenca || 'Presente';
+    const r = { id: uid(), criadoEm: agora, atualizadoEm: agora, tipo: F('atTipo').dataset.valor };
+    ACAO.forEach(([id, kk]) => r[kk] = F(id).value.trim());
+    r.instituicao = p.ies || r.instituicao; r.operacao = p.operacao || r.operacao; r.carga = carga;
+    Object.assign(r, { nome: p.nome, matricula: p.matricula || '', email: (p.email || '').toLowerCase(), supervisor: supReal(p.supervisor) || p.supervisor || '', tempoCasa: p.tempoCasa || '', turno: p.turno || '', cidade: p.cidade || '', bairro: p.bairro || '' });
+    r.presenca = presenca; r.status = presenca === 'Presente' ? (F('atStatus').value || 'Concluído') : 'Reagendado';
+    r.proxima = F('atProxima').value; r.obs = F('atObs').value.trim(); r.assimilacao = null;
+    r.pre = res.pre ?? null; r.pos = res.pos ?? null; r.qualAntes = res.qa ?? null; r.qualDepois = res.qd ?? null;
+    if (r.supervisor && !supReal(r.supervisor)) { supervisores.push(r.supervisor); salvarSup(); }
+    regs.push(r); n++;
+  });
+  salvar(); datalists();
+  const tema = F('atTema').value;
+  LOTE.clear(); RES.clear(); limpar(true); modo('lote');
+  msg(`${n} registros de "${tema}" salvos. A ação continua preenchida para outra turma, se precisar.`, 'ok'); toast(`${n} registros salvos`);
+}
 
 /* =========================================================
    DASHBOARD
@@ -638,8 +750,10 @@ F('atImpBD').addEventListener('change', async e => {
   try {
     toast('Lendo a planilha…');
     const r = await importarBD(f);
+    quadro.compartilhado = false; gravar(KEY_QUADRO, quadro);
     renderQuadro(); renderBase();
     toast(`${r.ativos} colaboradores ativos importados${r.novosSup ? ` · ${r.novosSup} supervisores novos` : ''}`);
+    setTimeout(() => tentarPublicar(false), 600);
   } catch (err) { console.error(err); alert('Não foi possível importar: ' + err.message); }
 });
 function renderQuadro() {
@@ -662,12 +776,30 @@ function renderQuadro() {
   const q = norm(F('atBuscaQuadro').value), st = selSt.value;
   const rows = quadro.itens.filter(c => (!st || c.status === st) && (!q || norm([c.nome, c.login, c.mat, c.supervisor, c.grupo, c.bairro].join(' ')).includes(q)));
   const tagSt = x => `<span class="tag ${x === 'Ativo' ? 'bom' : x === 'Desligado' ? 'ruim' : 'alerta'}">${esc(x)}</span>`;
-  F('atTQuadro').innerHTML = `<thead><tr><th>Colaborador</th><th>Matrícula</th><th>Login</th><th>Supervisor</th><th>IES</th><th>Operação</th><th>Grupo</th><th>Status</th><th>Turno</th><th>Tempo de casa</th><th class="dir">Treinamentos</th><th>Último</th><th></th></tr></thead>
+  const todosMarc = rows.length && rows.filter(c => c.status !== 'Desligado').every(c => QSEL.has(c.mat || c.nome));
+  F('atTQuadro').innerHTML = `<thead><tr><th class="cel-ck"><input type="checkbox" id="atQuadroTodos" title="Marcar todos da lista"${todosMarc ? ' checked' : ''}></th><th>Colaborador</th><th>Matrícula</th><th>Login</th><th>Supervisor</th><th>IES</th><th>Operação</th><th>Grupo</th><th>Status</th><th>Turno</th><th>Tempo de casa</th><th class="dir">Treinamentos</th><th>Último</th><th></th></tr></thead>
   <tbody>${rows.slice(0, 600).map(c => { const t = treinos(c).sort((a, b) => (b.data || '').localeCompare(a.data || '')); return `<tr>
-    <td><b>${esc(c.nome)}</b></td><td>${esc(c.mat)}</td><td>${esc(c.login)}</td><td>${esc(c.supervisor)}</td><td>${esc(c.ies || '—')}</td><td>${esc(c.operacao || '—')}</td><td>${esc(c.grupo)}</td><td>${tagSt(c.status)}</td><td>${esc(c.turno)}</td><td>${esc(c.tempoCasa)}</td>
+    <td class="cel-ck">${c.status !== 'Desligado' ? `<input type="checkbox" data-sel="${esc(c.mat || c.nome)}"${QSEL.has(c.mat || c.nome) ? ' checked' : ''}>` : ''}</td><td><b>${esc(c.nome)}</b></td><td>${esc(c.mat)}</td><td>${esc(c.login)}</td><td>${esc(c.supervisor)}</td><td>${esc(c.ies || '—')}</td><td>${esc(c.operacao || '—')}</td><td>${esc(c.grupo)}</td><td>${tagSt(c.status)}</td><td>${esc(c.turno)}</td><td>${esc(c.tempoCasa)}</td>
     <td class="dir">${t.length || '—'}</td><td>${t[0] ? `${dataBR(t[0].data)} · ${esc(t[0].tema)}` : '<span class="dica">nunca treinado</span>'}</td>
-    <td>${c.status !== 'Desligado' ? `<button class="btn btn-sec btn-mini" data-treinar="${esc(c.mat || c.nome)}">${G.ic('plus', '')}Registrar</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="13" class="dica">Ninguém encontrado.</td></tr>'}</tbody>`;
+    <td>${c.status !== 'Desligado' ? `<button class="btn btn-sec btn-mini" data-treinar="${esc(c.mat || c.nome)}">${G.ic('plus', '')}Registrar</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="14" class="dica">Ninguém encontrado.</td></tr>'}</tbody>`;
+  F('atQuadroSel').hidden = !QSEL.size; F('atQuadroSelTxt').textContent = `${QSEL.size} consultor${QSEL.size > 1 ? 'es' : ''} selecionado${QSEL.size > 1 ? 's' : ''}`;
+  renderCompart();
 }
+const QSEL = new Set();
+F('atTQuadro').addEventListener('change', e => {
+  if (e.target.id === 'atQuadroTodos') { const q = norm(F('atBuscaQuadro').value), st = F('atQuadroStatus').value;
+    quadro.itens.filter(c => c.status !== 'Desligado' && (!st || c.status === st) && (!q || norm([c.nome, c.login, c.mat, c.supervisor, c.grupo, c.bairro].join(' ')).includes(q))).forEach(c => e.target.checked ? QSEL.add(c.mat || c.nome) : QSEL.delete(c.mat || c.nome));
+    renderQuadro(); return; }
+  const ck = e.target.closest('[data-sel]'); if (!ck) return;
+  ck.checked ? QSEL.add(ck.dataset.sel) : QSEL.delete(ck.dataset.sel);
+  F('atQuadroSel').hidden = !QSEL.size; F('atQuadroSelTxt').textContent = `${QSEL.size} consultor${QSEL.size > 1 ? 'es' : ''} selecionado${QSEL.size > 1 ? 's' : ''}`;
+});
+F('atQuadroSelLimpar').onclick = () => { QSEL.clear(); renderQuadro(); };
+F('atQuadroSelReg').onclick = () => {
+  limpar(false);
+  const ps = pessoasLote(); QSEL.forEach(k => { const p = ps.find(x => (x.matricula || x.nome) === k || x.k === k); if (p) { LOTE.set(p.k, p); RES.set(p.k, { presenca: 'Presente' }); } });
+  QSEL.clear(); F('atData').value = hoje(); A.abrirAba('at-cadastro'); modo('lote'); setTimeout(() => F('atTema').focus(), 100);
+};
 F('atBuscaQuadro').addEventListener('input', renderQuadro);
 F('atQuadroStatus').addEventListener('change', renderQuadro);
 F('atTQuadro').addEventListener('click', e => {
@@ -679,6 +811,97 @@ F('atTQuadro').addEventListener('click', e => {
   if (c.cidade) { F('atCidade').value = c.cidade; F('atCidade').dataset.ok = c.cidade; F('atBairro').disabled = false; F('atBairro').value = c.bairro; }
   F('atDicaNome').textContent = 'Dados preenchidos a partir de: BD da operação · ' + c.status;
   F('atData').value = hoje(); A.abrirAba('at-cadastro'); setTimeout(() => F('atTema').focus(), 100);
+});
+
+
+/* =========================================================
+   COMPARTILHAR O BD COM TODOS (arquivo criptografado no repositório)
+   ========================================================= */
+const REPO = 'EmersonAraujodeFreitas/Treinamento', ARQ_BD = 'dados/quadro.json';
+const K_TOKEN = 'inovacao_treinamento_gh_token', K_SENHA = 'inovacao_treinamento_senha_equipe';
+const b64 = u8 => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+const deb64 = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
+async function chaveDe(senha, sal) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: sal, iterations: 150000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function cifrar(obj, senha) {
+  const sal = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const dados = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await chaveDe(senha, sal), new TextEncoder().encode(JSON.stringify(obj))));
+  return { formato: 'inovacao-casa-bd-v1', publicadoEm: obj.publicadoEm, arquivo: obj.arquivo, total: obj.itens.length, sal: b64(sal), iv: b64(iv), dados: b64(dados) };
+}
+async function decifrar(pkg, senha) {
+  const txt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: deb64(pkg.iv) }, await chaveDe(senha, deb64(pkg.sal)), deb64(pkg.dados));
+  return JSON.parse(new TextDecoder().decode(txt));
+}
+async function publicarQuadro(token, senha) {
+  const pub = { ...quadro, publicadoEm: new Date().toISOString() };
+  const pkg = await cifrar(pub, senha);
+  const url = `https://api.github.com/repos/${REPO}/contents/${ARQ_BD}`;
+  const cab = { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+  let sha;
+  const atual = await fetch(url + '?ref=main', { headers: cab, cache: 'no-store' });
+  if (atual.status === 200) sha = (await atual.json()).sha;
+  else if (atual.status === 401 || atual.status === 403) throw new Error('o token do GitHub não tem acesso ao repositório Treinamento (confira a permissão Contents: Read and write).');
+  const resp = await fetch(url, { method: 'PUT', headers: cab, body: JSON.stringify({ message: `Atualiza BD da operação (${pub.itens.length} consultores) — ${pub.arquivo}`, content: b64(new TextEncoder().encode(JSON.stringify(pkg))), branch: 'main', ...(sha ? { sha } : {}) }) });
+  if (!resp.ok) { const j = await resp.json().catch(() => ({})); throw new Error(resp.status === 401 ? 'token do GitHub inválido ou expirado.' : (j.message || 'erro ' + resp.status)); }
+  quadro.publicadoEm = pub.publicadoEm; quadro.compartilhado = true; gravar(KEY_QUADRO, quadro);
+}
+function pedirPublicacao(automatico) {
+  F('pubSenha').value = ler(K_SENHA, '') || ''; F('pubToken').value = ler(K_TOKEN, '') || ''; F('pubMsg').textContent = automatico ? 'Configure uma vez; nas próximas importações o BD é publicado sozinho.' : ''; F('pubMsg').className = 'msg';
+  F('dlgPublicar').showModal();
+}
+async function tentarPublicar(silencioso) {
+  const token = ler(K_TOKEN, ''), senha = ler(K_SENHA, '');
+  if (!token || !senha) { if (!silencioso) pedirPublicacao(true); return false; }
+  try { toast('Publicando o BD para todos…'); await publicarQuadro(token, senha); renderQuadro(); toast('BD publicado. Em cerca de 1 minuto todos passam a ver.'); return true; }
+  catch (err) { console.error(err); quadro.compartilhado = false; gravar(KEY_QUADRO, quadro); renderCompart(); alert('O BD foi importado neste navegador, mas não foi publicado: ' + err.message); return false; }
+}
+F('dlgPublicarForm').addEventListener('submit', async e => {
+  if (e.submitter && e.submitter.value !== 'ok') return;
+  e.preventDefault();
+  const senha = F('pubSenha').value, token = F('pubToken').value.trim();
+  if (senha.length < 6) { F('pubMsg').textContent = 'A senha da equipe precisa ter ao menos 6 caracteres.'; F('pubMsg').className = 'msg erro'; return; }
+  if (!token) { F('pubMsg').textContent = 'Informe o token do GitHub.'; F('pubMsg').className = 'msg erro'; return; }
+  gravar(K_SENHA, senha); gravar(K_TOKEN, token);
+  F('pubOk').disabled = true; F('pubMsg').textContent = 'Publicando…'; F('pubMsg').className = 'msg';
+  try { await publicarQuadro(token, senha); F('dlgPublicar').close(); renderQuadro(); toast('BD publicado. Em cerca de 1 minuto todos passam a ver.'); }
+  catch (err) { F('pubMsg').textContent = 'Não foi possível publicar: ' + err.message; F('pubMsg').className = 'msg erro'; }
+  finally { F('pubOk').disabled = false; }
+});
+function renderCompart() {
+  const el = F('atCompart'); if (!el) return;
+  if (!quadro.itens.length) { el.innerHTML = ''; return; }
+  const quando = d => new Date(d).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  el.innerHTML = quadro.compartilhado && quadro.publicadoEm
+    ? `<span class="tag bom">${G.ic('check', '')}Compartilhado com todos</span><span>publicado em ${quando(quadro.publicadoEm)} · criptografado com a senha da equipe</span><button type="button" class="btn btn-link" id="atRepublicar">publicar de novo</button>`
+    : `<span class="tag alerta">${G.ic('alert', '')}Só neste navegador</span><span>Publique para que todos vejam o mesmo BD.</span><button type="button" class="btn btn-pri btn-mini" id="atPublicar">${G.ic('upload', '')}Publicar para todos</button>`;
+  const b = F('atPublicar') || F('atRepublicar'); if (b) b.onclick = () => pedirPublicacao(false);
+}
+// leitura para todos: ao abrir o site, busca o BD publicado
+let pacotePendente = null;
+async function buscarPublicado() {
+  try {
+    const r = await fetch(`${ARQ_BD}?t=${Date.now()}`, { cache: 'no-store' }); if (!r.ok) return;
+    const pkg = await r.json(); if (pkg.formato !== 'inovacao-casa-bd-v1') return;
+    if (quadro.publicadoEm && quadro.publicadoEm >= pkg.publicadoEm) return;
+    const senha = ler(K_SENHA, '');
+    if (senha) { try { await aplicarPublicado(pkg, senha); return; } catch (e) { /* senha mudou */ } }
+    pacotePendente = pkg; F('senhaMsg').textContent = ''; F('senhaEquipe').value = ''; F('dlgSenha').showModal();
+  } catch (e) { /* sem BD publicado ainda */ }
+}
+async function aplicarPublicado(pkg, senha) {
+  const q = await decifrar(pkg, senha);
+  quadro = { ...q, compartilhado: true }; gravar(KEY_QUADRO, quadro); gravar(K_SENHA, senha);
+  quadro.itens.forEach(c => { if (c.supervisor && !supReal(c.supervisor)) supervisores.push(c.supervisor); }); salvarSup();
+  renderQuadro(); if (F('aba-at-base').classList.contains('ativo')) renderBase(); if (F('aba-at-dashboard').classList.contains('ativo')) render();
+  toast(`BD da operação atualizado: ${ativosQuadro().length} consultores ativos`);
+}
+F('dlgSenha').addEventListener('submit', async e => {
+  if (e.submitter && e.submitter.value !== 'ok') return;
+  e.preventDefault();
+  try { await aplicarPublicado(pacotePendente, F('senhaEquipe').value); F('dlgSenha').close(); }
+  catch (err) { F('senhaMsg').textContent = 'Senha incorreta. Peça a senha da equipe ao responsável pelo treinamento.'; }
 });
 
 /* ---------------- dados de exemplo ---------------- */
@@ -727,5 +950,6 @@ let rz; let larg = innerWidth;
 window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (Math.abs(innerWidth - larg) > 40 && F('aba-at-dashboard').classList.contains('ativo')) { larg = innerWidth; render(); } }, 250); });
 G.icones(document);
 salvarSup(); salvar(); datalists(); limpar(false);
+buscarPublicado();
 F('atData').value = hoje();
 })();

@@ -395,7 +395,34 @@
 
     <fieldset class="bloco">
       <legend><span class="icb" data-ic="user"></span>Colaborador<span class="passo">2</span></legend>
-      <div class="grade g4">
+      <div class="modo-linha">
+        <div class="seg modo" id="atModo" data-valor="um">
+          <button type="button" data-v="um" class="on"><i data-ic="user"></i>Um consultor</button>
+          <button type="button" data-v="lote"><i data-ic="users"></i>Vários consultores</button>
+        </div>
+        <small class="dica" id="atModoDica">Para registrar uma turma inteira de uma vez, escolha "Vários consultores".</small>
+      </div>
+      <div id="atLote" hidden>
+        <div class="lote-filtros">
+          <div class="busca-edit"><i data-ic="search" data-a=""></i><input id="atLoteBusca" placeholder="Buscar consultor, login ou matrícula" autocomplete="off"></div>
+          <select id="atLoteSup"><option value="">Todos os supervisores</option></select>
+          <select id="atLoteIes"><option value="">UVA e Unijorge</option><option>UVA</option><option>Unijorge</option></select>
+          <select id="atLoteOp"><option value="">Captação e Permanência</option><option>Captação</option><option>Permanência</option></select>
+          <select id="atLoteTurno"><option value="">Todos os turnos</option><option>Manhã</option><option>Tarde</option><option>Noite</option><option>Integral</option></select>
+          <label class="chk"><input type="checkbox" id="atLoteSoAtivos" checked>Só status Ativo</label>
+        </div>
+        <div class="lote-grid">
+          <div class="lote-col">
+            <div class="lote-cab"><span id="atLoteInfo"></span><span><button type="button" class="btn btn-link" id="atLoteTodos">Marcar todos da lista</button></span></div>
+            <ul id="atLoteLista" class="lote-lista"></ul>
+          </div>
+          <div class="lote-col lote-sel">
+            <div class="lote-cab"><b>Selecionados: <span id="atLoteQtd">0</span></b><button type="button" class="btn btn-link" id="atLoteNenhum">Limpar seleção</button></div>
+            <div id="atLoteChips" class="lote-chips"></div>
+          </div>
+        </div>
+      </div>
+      <div class="grade g4" id="atUm">
         <div class="campo c2"><span>Nome do colaborador <i class="obr">*</i></span>
           <div class="auto" id="atAutoNome"><input id="atNome" placeholder="Digite para buscar quem já está na base…" required><ul class="auto-lista" hidden></ul></div>
           <small class="dica" id="atDicaNome">Busca entre colaboradores já registrados e aprovados na formação inicial</small></div>
@@ -417,17 +444,22 @@
     <fieldset class="bloco">
       <legend><span class="icb" data-ic="award"></span>Resultado<span class="passo">3</span></legend>
       <div class="grade g4">
-        <div class="campo c2"><span>Presença <i class="obr">*</i></span>
+        <div class="campo c2 so-um"><span>Presença <i class="obr">*</i></span>
           <div class="seg" id="atPresenca" data-valor="">
             <button type="button" data-v="Presente">Presente</button>
             <button type="button" data-v="Ausente">Ausente</button>
             <button type="button" data-v="Justificado">Falta justificada</button>
           </div></div>
-        <label class="campo"><span>Situação <i class="obr">*</i></span>
+        <label class="campo"><span>Situação <i class="obr so-um-i">*</i></span>
           <select id="atStatus" required><option value="">Selecione</option><option>Concluído</option><option>Pendente</option><option>Reagendado</option><option>Cancelado</option></select></label>
         <label class="campo"><span>Próxima ação / acompanhamento</span><input type="date" id="atProxima"></label>
       </div>
-      <div class="antes-depois">
+      <div id="atLoteRes" hidden>
+        <div class="lote-res-cab"><b>Resultado de cada consultor</b><small class="dica">Presença, pré e pós-teste (0 a 10) e qualidade antes e depois (%). Deixe em branco o que não tiver.</small>
+          <span class="lote-res-acoes">Marcar todos como <button type="button" class="btn btn-link" data-todos="Presente">Presente</button> · <button type="button" class="btn btn-link" data-todos="Ausente">Ausente</button></span></div>
+        <div class="tabela-wrap"><table class="tabela lote-tab" id="atLoteTab"></table></div>
+      </div>
+      <div class="antes-depois so-um">
         <div class="ad-card">
           <div class="ad-cab"><i data-ic="exam"></i><b>Avaliação de conhecimento</b><small>nota de 0 a 10</small></div>
           <div class="ad-linha">
@@ -448,7 +480,7 @@
         </div>
       </div>
       <div class="grade g4" style="margin-top:14px">
-        <div class="campo c2"><span>Assimilação do conteúdo (avaliação do instrutor)</span>
+        <div class="campo c2 so-um"><span>Assimilação do conteúdo (avaliação do instrutor)</span>
           <div class="escala" id="atAssimilacao" data-v="">
             <button type="button" data-n="1">1</button><button type="button" data-n="2">2</button><button type="button" data-n="3">3</button><button type="button" data-n="4">4</button><button type="button" data-n="5">5</button>
           </div><small class="dica">1 = não assimilou · 5 = domina o conteúdo</small></div>
@@ -558,7 +590,9 @@
   <article class="cartao quadro" id="atQuadroCard">
     <header class="cab-card cab-tabela"><span class="icb" data-ic="users"></span><div><h2>Quadro da operação</h2><p id="atQuadroInfo">Importe o BD GERAL (.xlsm) para trazer todos os colaboradores da operação</p></div>
       <div class="cab-acoes"><select id="atQuadroStatus"><option value="">Todos os status</option></select><input type="search" id="atBuscaQuadro" placeholder="Buscar no quadro"></div></header>
+    <div class="compart" id="atCompart"></div>
     <div class="quadro-resumo" id="atQuadroResumo"></div>
+    <div class="quadro-sel" id="atQuadroSel" hidden><span id="atQuadroSelTxt"></span><button type="button" class="btn btn-pri btn-mini" id="atQuadroSelReg"><i data-ic="clipboard"></i>Registrar treinamento para os selecionados</button><button type="button" class="btn btn-link" id="atQuadroSelLimpar">limpar seleção</button></div>
     <div class="tabela-wrap"><table class="tabela" id="atTQuadro"></table></div>
   </article>
   <h2 class="titulo-secao"><i data-ic="clipboard"></i>Registros de treinamento</h2>
@@ -576,6 +610,24 @@
     <div class="dlg-add"><input id="supNovo" placeholder="Nome do novo supervisor" autocomplete="off"><button type="button" class="btn btn-pri" id="supAdd"><i data-ic="plus"></i>Adicionar</button></div>
     <ul class="sup-lista" id="supLista"></ul>
     <div class="dlg-rod"><small class="dica" id="supInfo"></small><button class="btn btn-sec" value="fechar">Fechar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgPublicar" class="dlg">
+  <form method="dialog" class="dlg-in" id="dlgPublicarForm">
+    <header class="cab-card"><span class="icb" data-ic="upload"></span><div><h2>Compartilhar o BD com todos</h2><p>O BD vai para o repositório do site criptografado. Só quem tiver a senha da equipe consegue abrir.</p></div></header>
+    <label class="campo"><span>Senha da equipe <i class="obr">*</i></span><input type="password" id="pubSenha" autocomplete="new-password" placeholder="Mínimo de 6 caracteres"></label>
+    <label class="campo"><span>Token do GitHub <i class="obr">*</i></span><input type="password" id="pubToken" autocomplete="off" placeholder="github_pat_…"></label>
+    <small class="dica">Crie em GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens: repositório <b>Treinamento</b>, permissão <b>Contents: Read and write</b>. O token e a senha ficam salvos só neste navegador.</small>
+    <div class="dlg-rod"><small class="msg" id="pubMsg"></small><span><button class="btn btn-sec" value="cancelar" formnovalidate>Cancelar</button> <button class="btn btn-pri" id="pubOk" value="ok">Publicar</button></span></div>
+  </form>
+</dialog>
+
+<dialog id="dlgSenha" class="dlg">
+  <form method="dialog" class="dlg-in">
+    <header class="cab-card"><span class="icb" data-ic="database"></span><div><h2>BD da operação disponível</h2><p>Digite a senha da equipe para carregar o quadro de consultores neste navegador.</p></div></header>
+    <label class="campo"><span>Senha da equipe</span><input type="password" id="senhaEquipe" autocomplete="current-password"></label>
+    <div class="dlg-rod"><small class="msg erro" id="senhaMsg"></small><span><button class="btn btn-sec" value="depois" formnovalidate>Agora não</button> <button class="btn btn-pri" id="senhaOk" value="ok">Carregar BD</button></span></div>
   </form>
 </dialog>
 
