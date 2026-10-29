@@ -625,7 +625,7 @@
     <header class="cab-card"><span class="icb" data-ic="upload"></span><div><h2>Compartilhar o BD com todos</h2><p>O BD vai para o repositório do site criptografado. Só quem tiver a senha da equipe consegue abrir.</p></div></header>
     <label class="campo"><span>Senha da equipe <i class="obr">*</i></span><input type="password" id="pubSenha" autocomplete="new-password" placeholder="Mínimo de 6 caracteres"></label>
     <label class="campo"><span>Token do GitHub <i class="obr">*</i></span><input type="password" id="pubToken" autocomplete="off" placeholder="github_pat_…"></label>
-    <small class="dica">Crie em GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens: repositório <b>Treinamento</b>, permissão <b>Contents: Read and write</b>. O token e a senha ficam salvos só neste navegador.</small>
+    <small class="dica"><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener"><b>Clique aqui para criar o token no GitHub</b></a> → em <i>Repository access</i> escolha <b>Only select repositories</b> → <b>Treinamento</b>; em <i>Permissions</i> adicione <b>Contents</b> como <b>Read and write</b> → <b>Generate token</b> e cole aqui. O token e a senha ficam salvos só neste navegador.</small>
     <div class="dlg-rod"><small class="msg" id="pubMsg"></small><span><button class="btn btn-sec" value="cancelar" formnovalidate>Cancelar</button> <button class="btn btn-pri" id="pubOk" value="ok">Publicar</button></span></div>
   </form>
 </dialog>
