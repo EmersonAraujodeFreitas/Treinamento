@@ -8,7 +8,7 @@ ORIGENS = "https://emersonaraujodefreitas.github.io"
 [[d1_databases]]
 binding = "DB"
 database_name = "treinamento"
-database_id = "COLE_AQUI_O_ID_DO_BANCO"
+database_id = "c0064373-472b-4b21-82df-f4104fd27a04"
 
 # Segredos (não ficam no código):
 #   npx wrangler secret put SEGREDO_SESSAO
