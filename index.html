@@ -41,9 +41,10 @@
       <button class="aba" data-aba="base" role="tab"><i data-ic="database"></i>Base de dados <span class="contador" id="contBase">0</span></button>
     </nav>
     <nav class="abas" data-area="ativos" role="tablist" hidden>
-      <button class="aba" data-aba="at-cadastro" role="tab"><i data-ic="clipboard"></i>Registrar treinamento</button>
+      <button class="aba" data-aba="at-cadastro" role="tab"><i data-ic="plus"></i>Registrar treinamento</button>
+      <button class="aba" data-aba="at-registros" role="tab"><i data-ic="clipboard"></i>Registros <span class="contador" id="atContBase">0</span></button>
       <button class="aba" data-aba="at-dashboard" role="tab"><i data-ic="chart"></i>Dashboard</button>
-      <button class="aba" data-aba="at-base" role="tab"><i data-ic="database"></i>Base de dados <span class="contador" id="atContBase">0</span></button>
+      <button class="aba" data-aba="at-base" role="tab"><i data-ic="database"></i>Base de dados</button>
     </nav>
   </div>
 </header>
@@ -579,19 +580,32 @@
   </div>
 </section>
 
-<section id="aba-at-base" class="painel">
+<section id="aba-at-registros" class="painel">
   <div class="cab-pagina">
     <div>
-      <h1>Base de dados · colaboradores ativos</h1>
-      <p class="sub">Quadro da operação e registros de treinamento, salvos neste navegador. Exporte o backup regularmente.</p>
+      <h1>Registros de treinamento</h1>
+      <p class="sub">Todos os treinamentos registrados de colaboradores ativos. Clique no nome ou no lápis para editar.</p>
     </div>
     <div class="cab-acoes wrap">
-      <label class="btn btn-pri"><i data-ic="upload"></i>Importar BD da operação<input type="file" id="atImpBD" accept=".xlsx,.xlsm" hidden></label>
       <button class="btn btn-sec" id="atExpCsv" type="button"><i data-ic="download"></i>Exportar planilha (CSV)</button>
       <button class="btn btn-sec" id="atExpJson" type="button"><i data-ic="database"></i>Baixar backup</button>
       <label class="btn btn-sec"><i data-ic="upload"></i>Importar backup / CSV<input type="file" id="atImpArquivo" accept=".json,.csv" hidden></label>
       <button class="btn btn-sec" id="atBtnExemplo" type="button">Dados de exemplo</button>
       <button class="btn btn-perigo" id="atBtnApagarTudo" type="button">Apagar tudo</button>
+    </div>
+  </div>
+  <div class="barra-busca"><input type="search" id="atBuscaBase" placeholder="Buscar por colaborador, tema, supervisor ou instrutor"></div>
+  <div class="cartao"><div class="tabela-wrap"><table class="tabela" id="atTBase"></table></div></div>
+</section>
+
+<section id="aba-at-base" class="painel">
+  <div class="cab-pagina">
+    <div>
+      <h1>Base de dados · quadro da operação</h1>
+      <p class="sub">Consultores da operação importados do BD GERAL. Ao importar, o BD é compartilhado com toda a equipe.</p>
+    </div>
+    <div class="cab-acoes wrap">
+      <label class="btn btn-pri"><i data-ic="upload"></i>Importar BD da operação<input type="file" id="atImpBD" accept=".xlsx,.xlsm" hidden></label>
     </div>
   </div>
   <article class="cartao quadro" id="atQuadroCard">
@@ -602,9 +616,6 @@
     <div class="quadro-sel" id="atQuadroSel" hidden><span id="atQuadroSelTxt"></span><button type="button" class="btn btn-pri btn-mini" id="atQuadroSelReg"><i data-ic="clipboard"></i>Registrar treinamento para os selecionados</button><button type="button" class="btn btn-link" id="atQuadroSelLimpar">limpar seleção</button></div>
     <div class="tabela-wrap"><table class="tabela" id="atTQuadro"></table></div>
   </article>
-  <h2 class="titulo-secao"><i data-ic="clipboard"></i>Registros de treinamento</h2>
-  <div class="barra-busca"><input type="search" id="atBuscaBase" placeholder="Buscar por colaborador, tema, supervisor ou instrutor"></div>
-  <div class="cartao"><div class="tabela-wrap"><table class="tabela" id="atTBase"></table></div></div>
 </section>
 
 </main>

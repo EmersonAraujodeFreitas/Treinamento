@@ -666,10 +666,10 @@ function renderBase() {
   const rows = regs.filter(r => !q || norm([r.nome, r.tema, r.supervisor, r.instrutor, r.email, r.tipo].join(' ')).includes(q))
     .sort((a, b) => { const x = a[o.k], y = b[o.k]; const r = typeof x === 'number' || typeof y === 'number' ? (x ?? -1) - (y ?? -1) : cmpTxt(x || '', y || ''); return o.asc ? r : -r; });
   const st = s => ({ 'Concluído': 'bom', 'Pendente': 'alerta', 'Reagendado': 'alerta', 'Cancelado': 'ruim' }[s] || 'neutro');
-  F('atTBase').innerHTML = `<thead><tr>${COLS_B.map(([k, t, n]) => `<th data-k="${k}" class="${n ? 'dir' : ''} ${o.k === k ? 'ord' + (o.asc ? ' asc' : '') : ''}">${t}</th>`).join('')}<th></th></tr></thead>
-  <tbody>${rows.map(r => `<tr><td class="lk" data-edit="${r.id}">${esc(r.nome)}${r.exemplo ? ' <span class="tag neutro">exemplo</span>' : ''}</td><td>${esc(r.instituicao || '—')}</td><td>${esc(r.tipo)}</td><td>${esc(r.tema)}</td><td>${dataBR(r.data)}</td><td>${esc(r.operacao)}</td><td>${esc(r.supervisor || '—')}</td>
+  F('atTBase').innerHTML = `<thead><tr><th class="cel-acao2"></th>${COLS_B.map(([k, t, n]) => `<th data-k="${k}" class="${n ? 'dir' : ''} ${o.k === k ? 'ord' + (o.asc ? ' asc' : '') : ''}">${t}</th>`).join('')}</tr></thead>
+  <tbody>${rows.map(r => `<tr><td class="cel-acao2"><div class="acoes-linha"><button class="btn-icone" data-edit="${r.id}" title="Editar" aria-label="Editar">${G.ic('edit', '')}</button><button class="btn-icone" data-del="${r.id}" title="Excluir" aria-label="Excluir">${G.ic('trash', '')}</button></div></td><td class="lk" data-edit="${r.id}">${esc(r.nome)}${r.exemplo ? ' <span class="tag neutro">exemplo</span>' : ''}</td><td>${esc(r.instituicao || '—')}</td><td>${esc(r.tipo)}</td><td>${esc(r.tema)}</td><td>${dataBR(r.data)}</td><td>${esc(r.operacao)}</td><td>${esc(r.supervisor || '—')}</td>
     <td>${esc(r.presenca)}</td><td class="dir">${fmt(r.pos)}</td><td class="dir">${pctQ(r.qualDepois)}</td><td><span class="tag ${st(r.status)}">${esc(r.status)}</span></td>
-    <td><div class="acoes-linha"><button class="btn-icone" data-edit="${r.id}" title="Editar" aria-label="Editar">${G.ic('edit', '')}</button><button class="btn-icone" data-del="${r.id}" title="Excluir" aria-label="Excluir">${G.ic('trash', '')}</button></div></td></tr>`).join('')
+</tr>`).join('')
     || `<tr><td colspan="${COLS_B.length + 1}" class="dica" style="padding:20px">${regs.length ? 'Nenhum registro encontrado.' : 'Nenhum treinamento registrado ainda.'}</td></tr>`}</tbody>`;
 }
 F('atTBase').addEventListener('click', e => {
@@ -987,7 +987,7 @@ function exemplo() {
 F('atBtnExemplo').onclick = exemplo; F('atBtnExemploDash').onclick = exemplo;
 
 /* ---------------- início ---------------- */
-document.addEventListener('aba-aberta', e => { if (e.detail === 'at-dashboard') render(); if (e.detail === 'at-base') { renderQuadro(); renderBase(); } });
+document.addEventListener('aba-aberta', e => { if (e.detail === 'at-dashboard') render(); if (e.detail === 'at-base') renderQuadro(); if (e.detail === 'at-registros') renderBase(); });
 let rz; let larg = innerWidth;
 window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (Math.abs(innerWidth - larg) > 40 && F('aba-at-dashboard').classList.contains('ativo')) { larg = innerWidth; render(); } }, 250); });
 G.icones(document);

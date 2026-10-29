@@ -918,5 +918,5 @@ document.addEventListener('click', () => setTimeout(obs, 0));
 window.APP = { $, $$, norm, num, media, fmt, pct, esc, uid, hoje, dataBR, cmpTxt, toast, baixar, ler, gravar, autocomplete, abrirAba,
   MUN, MUN_NORM, regiaoDe, bairrosDaCidade, aprenderBairro, acharBairro, nomeProprio, csvCel, parseCSV, dataISO, formacao: () => registros };
 const inicial = (location.hash || '').slice(1);
-window.addEventListener('load', () => { if (['cadastro', 'dashboard', 'base', 'at-cadastro', 'at-dashboard', 'at-base'].includes(inicial)) abrirAba(inicial); });
+window.addEventListener('load', () => { if (['cadastro', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base'].includes(inicial)) abrirAba(inicial); });
 })();
