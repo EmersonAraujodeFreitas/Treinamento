@@ -515,6 +515,10 @@
         <header class="cab-card"><span class="icb" data-ic="users"></span><div><h2>Ganho na qualidade por supervisor</h2><p>Equipes que mais evoluíram</p></div></header>
         <div class="graf" id="atGSupervisor"></div>
       </article>
+      <article class="cartao c-largo">
+        <header class="cab-card"><span class="icb" data-ic="target"></span><div><h2>Cobertura do quadro por supervisor</h2><p id="atCobInfo">Colaboradores ativos do BD da operação que já participaram de treinamento no período</p></div></header>
+        <div class="graf" id="atGCobertura"></div>
+      </article>
       <article class="cartao">
         <header class="cab-card"><span class="icb" data-ic="building"></span><div><h2>UVA × Unijorge</h2><p>Resultados por instituição</p></div></header>
         <div class="comparativo" id="atCompInst"></div>
@@ -540,9 +544,10 @@
   <div class="cab-pagina">
     <div>
       <h1>Base de dados · colaboradores ativos</h1>
-      <p class="sub">Registros salvos neste navegador. Exporte o backup regularmente.</p>
+      <p class="sub">Quadro da operação e registros de treinamento, salvos neste navegador. Exporte o backup regularmente.</p>
     </div>
     <div class="cab-acoes wrap">
+      <label class="btn btn-pri"><i data-ic="upload"></i>Importar BD da operação<input type="file" id="atImpBD" accept=".xlsx,.xlsm" hidden></label>
       <button class="btn btn-sec" id="atExpCsv" type="button"><i data-ic="download"></i>Exportar planilha (CSV)</button>
       <button class="btn btn-sec" id="atExpJson" type="button"><i data-ic="database"></i>Baixar backup</button>
       <label class="btn btn-sec"><i data-ic="upload"></i>Importar backup / CSV<input type="file" id="atImpArquivo" accept=".json,.csv" hidden></label>
@@ -550,6 +555,13 @@
       <button class="btn btn-perigo" id="atBtnApagarTudo" type="button">Apagar tudo</button>
     </div>
   </div>
+  <article class="cartao quadro" id="atQuadroCard">
+    <header class="cab-card cab-tabela"><span class="icb" data-ic="users"></span><div><h2>Quadro da operação</h2><p id="atQuadroInfo">Importe o BD GERAL (.xlsm) para trazer todos os colaboradores da operação</p></div>
+      <div class="cab-acoes"><select id="atQuadroStatus"><option value="">Todos os status</option></select><input type="search" id="atBuscaQuadro" placeholder="Buscar no quadro"></div></header>
+    <div class="quadro-resumo" id="atQuadroResumo"></div>
+    <div class="tabela-wrap"><table class="tabela" id="atTQuadro"></table></div>
+  </article>
+  <h2 class="titulo-secao"><i data-ic="clipboard"></i>Registros de treinamento</h2>
   <div class="barra-busca"><input type="search" id="atBuscaBase" placeholder="Buscar por colaborador, tema, supervisor ou instrutor"></div>
   <div class="cartao"><div class="tabela-wrap"><table class="tabela" id="atTBase"></table></div></div>
 </section>
@@ -572,6 +584,7 @@
 
 <script src="assets/graficos.js"></script>
 <script src="assets/app.js"></script>
+<script src="assets/xlsx-leitor.js"></script>
 <script src="assets/ativos.js"></script>
 </body>
 </html>

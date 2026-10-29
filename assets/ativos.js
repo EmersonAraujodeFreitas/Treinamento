@@ -17,6 +17,9 @@ const SUP_PADRAO = ['ALINE DA CONCEIÇÃO SANTOS', 'ANA JULIA CRUZ LEITE', 'DEBO
 let supervisores = ler(KEY_SUP, null) || SUP_PADRAO.slice();
 const salvarSup = () => { supervisores = [...new Map(supervisores.filter(Boolean).map(n => [norm(n), n.trim().replace(/\s+/g, ' ')])).values()].sort(cmpTxt); gravar(KEY_SUP, supervisores); };
 const supReal = v => supervisores.find(n => norm(n) === norm(v));
+const KEY_QUADRO = 'inovacao_treinamento_quadro_v1';
+let quadro = ler(KEY_QUADRO, { itens: [], arquivo: '', importadoEm: '' });
+const ativosQuadro = () => quadro.itens.filter(c => c.status !== 'Desligado');
 const salvar = () => { gravar(KEY, regs); F('atContBase').textContent = regs.length; rotuloExemplo(); };
 
 const TIPOS = ['Reciclagem', 'Alinhamento', 'Novo conteúdo', 'Novo produto'];
@@ -88,6 +91,11 @@ function colaboradores() {
   const m = new Map();
   A.formacao().filter(r => r.status === 'Aprovado').forEach(r => m.set(norm(r.email || r.nome), { nome: r.nome, email: r.email, cidade: r.cidade, bairro: r.bairro, operacao: r.indicacao === 'Permanência' || r.operacao === 'Permanência' ? 'Permanência' : r.operacao === 'Captação' || r.indicacao === 'Captação' ? 'Captação' : '', instituicao: r.instituicao, origem: 'Formação ' + (r.turma || '') }));
   regs.slice().sort((a, b) => (a.atualizadoEm || '').localeCompare(b.atualizadoEm || '')).forEach(r => m.set(chaveColab(r), { nome: r.nome, email: r.email, matricula: r.matricula, supervisor: r.supervisor, tempoCasa: r.tempoCasa, turno: r.turno, cidade: r.cidade, bairro: r.bairro, operacao: r.operacao, instituicao: r.instituicao, origem: (regs.filter(x => chaveColab(x) === chaveColab(r)).length) + ' treinamento(s) registrado(s)' }));
+  quadro.itens.filter(c => c.status !== 'Desligado').forEach(c => {
+    const k = norm(c.email || c.nome), ant = [...m.entries()].find(([kk, v]) => kk === k || norm(v.nome) === norm(c.nome) || (c.mat && v.matricula === c.mat));
+    if (ant) m.delete(ant[0]);
+    m.set(k, { nome: c.nome, email: c.email, matricula: c.mat, supervisor: c.supervisor, tempoCasa: c.tempoCasa, turno: c.turno, cidade: c.cidade, bairro: c.bairro, operacao: c.operacao, instituicao: c.ies, origem: 'BD da operação · ' + c.status + (c.grupo ? ' · ' + c.grupo : '') });
+  });
   return [...m.values()].sort((a, b) => cmpTxt(a.nome, b.nome));
 }
 (function () {
@@ -106,6 +114,7 @@ function colaboradores() {
     inp.value = c.nome;
     const set = (id, v) => { if (v && !F(id).value) F(id).value = v; };
     set('atEmail', c.email); set('atMatricula', c.matricula); set('atSupervisor', c.supervisor); set('atTempoCasa', c.tempoCasa); set('atTurno', c.turno); set('atOperacao', c.operacao); set('atInstituicao', c.instituicao);
+    if (c.supervisor && !supReal(c.supervisor)) { supervisores.push(c.supervisor); salvarSup(); }
     if (c.cidade && !F('atCidade').value) { F('atCidade').value = c.cidade; F('atCidade').dataset.ok = A.MUN_NORM.get(norm(c.cidade)) || ''; F('atBairro').disabled = !F('atCidade').dataset.ok; F('atBairro').value = c.bairro || ''; }
     F('atDicaNome').textContent = 'Dados preenchidos a partir de: ' + c.origem;
   }
@@ -404,6 +413,23 @@ function render() {
   rankGanho(F('atGTemas'), porTema.map(x => ({ nome: x.t, ...x })), 'Lance a qualidade antes e depois para ver o ganho');
   rankGanho(F('atGSupervisor'), [...agrupar(l, r => r.supervisor).entries()].map(([s, rs]) => ({ nome: s, ...resumo(rs) })), 'Informe o supervisor e a qualidade antes e depois');
 
+  // cobertura do quadro
+  const card = F('atGCobertura').closest('.cartao');
+  if (!quadro.itens.length) { card.hidden = true; }
+  else {
+    card.hidden = false;
+    const pres = l.filter(r => r.presenca === 'Presente');
+    const foiTreinado = c => pres.some(r => (c.email && norm(r.email) === norm(c.email)) || (c.mat && r.matricula === c.mat) || norm(r.nome) === norm(c.nome));
+    const base = ativosQuadro().filter(c => (!FILT.instituicao || c.ies === FILT.instituicao) && (!FILT.operacao || c.operacao === FILT.operacao) && (!FILT.supervisor || norm(c.supervisor) === norm(FILT.supervisor)));
+    const porSup = [...agrupar(base, c => c.supervisor || 'Sem supervisor').entries()].map(([sp, cs]) => { const t = cs.filter(foiTreinado).length; return { sp, t, n: cs.length, p: t / cs.length }; }).sort((a, b) => b.p - a.p || b.n - a.n);
+    const tot = base.length, tr = base.filter(foiTreinado).length;
+    F('atCobInfo').textContent = `${tr} de ${tot} colaboradores ativos do BD (${pct(tot ? tr / tot : null)}) participaram de ao menos um treinamento no período filtrado`;
+    G.ranking(F('atGCobertura'), porSup.map(x => ({ rotulo: x.sp, sub: `${x.t} de ${x.n} treinados · faltam ${x.n - x.t}`, valor: x.p * 100, rotuloValor: pct(x.p), cor: x.p >= .8 ? COR.s3 : x.p >= .5 ? COR.s1 : COR.s2,
+      tip: tipH(x.sp, [`${x.t} de ${x.n} colaboradores treinados`, `Faltam ${x.n - x.t}`]) })), { max: 100, meta: 80, posicao: true, legenda: [['80% ou mais', COR.s3], ['50% a 79%', COR.s1], ['Abaixo de 50%', COR.s2]] });
+    const faltam = tot - tr;
+    if (faltam) F('atInsights').insertAdjacentHTML('beforeend', `<div class="insight alerta"><span class="ins-ic">${G.ic('users')}</span><div><span>Ainda sem treinamento</span><b>${faltam} colaborador${faltam > 1 ? 'es' : ''} ativo${faltam > 1 ? 's' : ''}</b><p>do BD da operação não participaram de nenhum treinamento no período</p></div></div>`);
+  }
+
   // instituição
   const conv0 = x => ({ n: x.n, presenca: x.presenca, pos: x.pos, qd: x.qd === null ? null : x.qd / 10, concl: x.concl });
   G.duelo(F('atCompInst'), [conv0(resumo(l.filter(r => r.instituicao === 'UVA'))), conv0(resumo(l.filter(r => r.instituicao === 'Unijorge')))], ['UVA', 'Unijorge'],
@@ -518,6 +544,125 @@ F('atImpArquivo').addEventListener('change', async e => {
   } catch (err) { console.error(err); toast('Não foi possível ler o arquivo'); }
 });
 
+/* =========================================================
+   QUADRO DA OPERAÇÃO (importação do BD GERAL .xlsx/.xlsm)
+   ========================================================= */
+const limpaCab = h => norm(String(h ?? '').replace(/ /g, ' ')).replace(/\s+/g, ' ').trim();
+const titulo = s => String(s || '').trim().replace(/\s+/g, ' ');
+function tempoDeCasa(adm) {
+  if (!adm) return '';
+  const meses = (Date.now() - new Date(adm + 'T12:00').getTime()) / (30.44 * 86400000);
+  return meses < 3 ? 'Até 3 meses' : meses < 6 ? '3 a 6 meses' : meses < 12 ? '6 meses a 1 ano' : meses < 24 ? '1 a 2 anos' : 'Mais de 2 anos';
+}
+function telefone(v) {
+  const d = String(v ?? '').replace(/\D/g, ''); if (d.length < 10) return '';
+  const x = d.slice(-11); return x.length === 11 ? `(${x.slice(0, 2)}) ${x.slice(2, 7)}-${x.slice(7)}` : `(${x.slice(0, 2)}) ${x.slice(2, 6)}-${x.slice(6)}`;
+}
+const iesDe = v => { const t = norm(v); if (!t || t === '-') return ''; const uva = t.includes('uva'), uj = /\buja?\b|unijorge|jorge/.test(t); return uva && uj ? '' : uva ? 'UVA' : uj ? 'Unijorge' : ''; };
+async function importarBD(arquivo) {
+  const abas = await XLSXLeitor.lerPlanilha(await arquivo.arrayBuffer());
+  const pessoas = new Map(); let lidas = 0, desligados = 0; const usadas = [];
+  // lê só as abas de BD dos consultores (BD GERAL e BD GERAL ADMISSÃO); ignora pausas, férias, desligamentos, gestão e logs
+  const bdConsultores = abas.filter(x => /^bd geral/.test(norm(x.nome)));
+  for (const aba of (bdConsultores.length ? bdConsultores : abas.filter(x => !/pausa|ferias|deslig|log|adm$/.test(norm(x.nome))))) {
+    const iCab = aba.linhas.findIndex(l => l && l.some(v => limpaCab(v) === 'nome') && l.some(v => limpaCab(v) === 'supervisor') && l.some(v => limpaCab(v) === 'matricula'));
+    if (iCab < 0) continue;
+    const cab = aba.linhas[iCab].map(limpaCab);
+    if (cab.includes('cargo')) continue; // aba de gestão (gerentes, coordenadores)
+    if (/pausa/.test(norm(aba.nome))) continue; // abas de pausas repetem o quadro
+    const ehDeslig = cab.includes('data de desligamento');
+    if (!ehDeslig && !cab.includes('status')) continue;
+    const ix = n => cab.indexOf(n);
+    const pega = (l, ...nomes) => { for (const n of nomes) { const i = ix(n); if (i >= 0 && l[i] !== null && l[i] !== undefined && String(l[i]).trim() !== '' && String(l[i]).trim() !== '-') return l[i]; } return null; };
+    const nomeAba = norm(aba.nome);
+    let n = 0;
+    for (const l of aba.linhas.slice(iCab + 1)) {
+      if (!l) continue;
+      const nome = titulo(pega(l, 'nome')); if (!nome || nome.split(' ').length < 2) continue;
+      const mat = String(pega(l, 'matricula') ?? '').trim();
+      const chave = mat || norm(nome);
+      const grupo = titulo(pega(l, 'grupo'));
+      const ies = iesDe(pega(l, 'operacao'));
+      const operacao = /admiss|captac/.test(norm(grupo) + ' ' + nomeAba) ? 'Captação' : /servic|perman|rematric/.test(norm(grupo) + ' ' + nomeAba) ? 'Permanência' : '';
+      const corp = ies === 'Unijorge' ? pega(l, 'corporativo uja', 'corporativo uva') : pega(l, 'corporativo uva', 'corporativo uja');
+      const adm = XLSXLeitor.dataExcel(pega(l, 'admissao'));
+      const bairro = titulo(pega(l, 'bairro'));
+      const bSsa = bairro ? A.bairrosDaCidade('Salvador').find(b => norm(b) === norm(bairro)) : '';
+      const novo = {
+        mat, idOlos: String(pega(l, 'id olos') ?? ''), nome, supervisor: titulo(pega(l, 'supervisor')).toUpperCase(), gerente: titulo(pega(l, 'gerente')),
+        login: String(pega(l, 'login') ?? ''), grupo, ies, operacao, status: ehDeslig || /deslig/.test(norm(pega(l, 'status'))) ? 'Desligado' : titulo(pega(l, 'status')) || 'Ativo',
+        escala: String(pega(l, 'escala') ?? ''), turno: titulo(pega(l, 'turno')), telefone: telefone(pega(l, 'telefone')),
+        bairro: bSsa || (bairro ? bairro.charAt(0) + bairro.slice(1).toLowerCase() : ''), cidade: bSsa ? 'Salvador' : '',
+        email: String(corp || '').trim().toLowerCase(), admissao: adm, tempoCasa: tempoDeCasa(adm), onda: titulo(pega(l, 'onda')),
+        desligamento: ehDeslig ? XLSXLeitor.dataExcel(pega(l, 'data de desligamento')) : '', aba: aba.nome
+      };
+      const atual = pessoas.get(chave);
+      if (atual) {
+        Object.keys(novo).forEach(k => { if (!atual[k] && novo[k]) atual[k] = novo[k]; });
+        if (ehDeslig) { atual.status = 'Desligado'; atual.desligamento = novo.desligamento; }
+      } else pessoas.set(chave, novo);
+      if (ehDeslig) desligados++;
+      n++; lidas++;
+    }
+    if (n) usadas.push(`${aba.nome.trim()} (${n})`);
+  }
+  if (!pessoas.size) throw new Error('Não encontrei as colunas MATRÍCULA, NOME e SUPERVISOR em nenhuma aba.');
+  quadro = { itens: [...pessoas.values()].sort((a, b) => cmpTxt(a.nome, b.nome)), arquivo: arquivo.name, importadoEm: new Date().toISOString(), abas: usadas };
+  gravar(KEY_QUADRO, quadro);
+  const antes = supervisores.length;
+  quadro.itens.forEach(c => { if (c.supervisor && !supReal(c.supervisor)) supervisores.push(c.supervisor); });
+  salvarSup();
+  return { total: quadro.itens.length, ativos: ativosQuadro().length, desligados, novosSup: supervisores.length - antes, abas: usadas };
+}
+F('atImpBD').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  if (quadro.itens.length && !confirm(`Substituir o quadro atual (${quadro.itens.length} colaboradores, de ${quadro.arquivo}) pelo arquivo ${f.name}?\nOs registros de treinamento não são alterados.`)) return;
+  try {
+    toast('Lendo a planilha…');
+    const r = await importarBD(f);
+    renderQuadro(); renderBase();
+    toast(`${r.ativos} colaboradores ativos importados${r.novosSup ? ` · ${r.novosSup} supervisores novos` : ''}`);
+  } catch (err) { console.error(err); alert('Não foi possível importar: ' + err.message); }
+});
+function renderQuadro() {
+  const tem = quadro.itens.length > 0;
+  F('atQuadroResumo').hidden = !tem; F('atTQuadro').parentElement.hidden = !tem; F('atQuadroStatus').hidden = !tem; F('atBuscaQuadro').hidden = !tem;
+  if (!tem) { F('atQuadroInfo').textContent = 'Importe o BD GERAL (.xlsx ou .xlsm) para trazer todos os colaboradores da operação. CPF e RG não são importados.'; return; }
+  F('atQuadroInfo').textContent = `${quadro.arquivo} · importado em ${new Date(quadro.importadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · abas: ${(quadro.abas || []).join(', ')}`;
+  const sts = [...new Set(quadro.itens.map(c => c.status))].sort(cmpTxt);
+  const selSt = F('atQuadroStatus'), atualSt = selSt.value;
+  selSt.innerHTML = '<option value="">Todos os status</option>' + sts.map(x => `<option${x === atualSt ? ' selected' : ''}>${esc(x)}</option>`).join('');
+  const treinos = c => regs.filter(r => (c.email && norm(r.email) === norm(c.email)) || (c.mat && r.matricula === c.mat) || norm(r.nome) === norm(c.nome));
+  const at = ativosQuadro();
+  const cont = (f) => at.filter(f).length;
+  const treinados = at.filter(c => treinos(c).some(r => r.presenca === 'Presente')).length;
+  F('atQuadroResumo').innerHTML = [
+    ['users', 'Ativos no quadro', at.length, ''], ['building', 'UVA', cont(c => c.ies === 'UVA'), ''], ['building', 'Unijorge', cont(c => c.ies === 'Unijorge'), ''],
+    ['briefcase', 'Captação', cont(c => c.operacao === 'Captação'), ''], ['headset', 'Permanência', cont(c => c.operacao === 'Permanência'), ''],
+    ['clock', 'Férias / afastados', cont(c => c.status !== 'Ativo'), ''], ['check', 'Já treinados', treinados, at.length ? pct(treinados / at.length) : '']
+  ].map(([ic, t, v, sub]) => `<div class="qr"><span class="qr-ic">${G.ic(ic, '')}</span><div><small>${t}</small><b>${v.toLocaleString('pt-BR')}</b>${sub ? `<em>${sub}</em>` : ''}</div></div>`).join('');
+  const q = norm(F('atBuscaQuadro').value), st = selSt.value;
+  const rows = quadro.itens.filter(c => (!st || c.status === st) && (!q || norm([c.nome, c.login, c.mat, c.supervisor, c.grupo, c.bairro].join(' ')).includes(q)));
+  const tagSt = x => `<span class="tag ${x === 'Ativo' ? 'bom' : x === 'Desligado' ? 'ruim' : 'alerta'}">${esc(x)}</span>`;
+  F('atTQuadro').innerHTML = `<thead><tr><th>Colaborador</th><th>Matrícula</th><th>Login</th><th>Supervisor</th><th>IES</th><th>Operação</th><th>Grupo</th><th>Status</th><th>Turno</th><th>Tempo de casa</th><th class="dir">Treinamentos</th><th>Último</th><th></th></tr></thead>
+  <tbody>${rows.slice(0, 600).map(c => { const t = treinos(c).sort((a, b) => (b.data || '').localeCompare(a.data || '')); return `<tr>
+    <td><b>${esc(c.nome)}</b></td><td>${esc(c.mat)}</td><td>${esc(c.login)}</td><td>${esc(c.supervisor)}</td><td>${esc(c.ies || '—')}</td><td>${esc(c.operacao || '—')}</td><td>${esc(c.grupo)}</td><td>${tagSt(c.status)}</td><td>${esc(c.turno)}</td><td>${esc(c.tempoCasa)}</td>
+    <td class="dir">${t.length || '—'}</td><td>${t[0] ? `${dataBR(t[0].data)} · ${esc(t[0].tema)}` : '<span class="dica">nunca treinado</span>'}</td>
+    <td>${c.status !== 'Desligado' ? `<button class="btn btn-sec btn-mini" data-treinar="${esc(c.mat || c.nome)}">${G.ic('plus', '')}Registrar</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="13" class="dica">Ninguém encontrado.</td></tr>'}</tbody>`;
+}
+F('atBuscaQuadro').addEventListener('input', renderQuadro);
+F('atQuadroStatus').addEventListener('change', renderQuadro);
+F('atTQuadro').addEventListener('click', e => {
+  const b = e.target.closest('[data-treinar]'); if (!b) return;
+  const c = quadro.itens.find(x => (x.mat || x.nome) === b.dataset.treinar); if (!c) return;
+  limpar(false);
+  F('atNome').value = c.nome; F('atEmail').value = c.email; F('atMatricula').value = c.mat; F('atSupervisor').value = c.supervisor;
+  F('atTempoCasa').value = c.tempoCasa; F('atTurno').value = c.turno; F('atOperacao').value = c.operacao; F('atInstituicao').value = c.ies;
+  if (c.cidade) { F('atCidade').value = c.cidade; F('atCidade').dataset.ok = c.cidade; F('atBairro').disabled = false; F('atBairro').value = c.bairro; }
+  F('atDicaNome').textContent = 'Dados preenchidos a partir de: BD da operação · ' + c.status;
+  F('atData').value = hoje(); A.abrirAba('at-cadastro'); setTimeout(() => F('atTema').focus(), 100);
+});
+
 /* ---------------- dados de exemplo ---------------- */
 function rotuloExemplo() { F('atBtnExemplo').textContent = regs.some(r => r.exemplo) ? 'Remover exemplos' : 'Dados de exemplo'; }
 function exemplo() {
@@ -559,7 +704,7 @@ function exemplo() {
 F('atBtnExemplo').onclick = exemplo; F('atBtnExemploDash').onclick = exemplo;
 
 /* ---------------- início ---------------- */
-document.addEventListener('aba-aberta', e => { if (e.detail === 'at-dashboard') render(); if (e.detail === 'at-base') renderBase(); });
+document.addEventListener('aba-aberta', e => { if (e.detail === 'at-dashboard') render(); if (e.detail === 'at-base') { renderQuadro(); renderBase(); } });
 let rz; let larg = innerWidth;
 window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (Math.abs(innerWidth - larg) > 40 && F('aba-at-dashboard').classList.contains('ativo')) { larg = innerWidth; render(); } }, 250); });
 G.icones(document);
