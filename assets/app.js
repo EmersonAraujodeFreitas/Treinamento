@@ -73,6 +73,36 @@ function aprenderBairro(cidade, bairro) {
   gravar(KEY_B, bairrosAprendidos);
 }
 
+
+/* ---------------- reconhecer bairro digitado em outra base (BD da operação) ---------------- */
+const ROMANOS = { 1: 'i', 2: 'ii', 3: 'iii', 4: 'iv', 5: 'v', 6: 'vi', 7: 'vii', 8: 'viii', 9: 'ix', 10: 'x', 11: 'xi' };
+const ALIAS_BAIRRO = { 'tancredo neves': 'Beiru/Tancredo Neves', 'beiru': 'Beiru/Tancredo Neves', 'matatu de brotas': 'Matatu', 'sao goncalo do retiro': 'São Gonçalo',
+  'mussurunga i': 'Mussurunga', 'mussurunga ii': 'Mussurunga', 'engenho velho brotas': 'Engenho Velho de Brotas', 'stiep': 'Stiep', 'costa azul': 'Costa Azul' };
+function nomeProprio(t) {
+  return String(t || '').toLowerCase().replace(/\s+/g, ' ').trim().split(' ')
+    .map((p, i) => i && /^(de|da|do|dos|das|e)$/.test(p) ? p : /^(i|ii|iii|iv|v|vi|vii|viii|ix|x|xi)$/.test(p) ? p.toUpperCase() : p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+}
+function distancia(a, b) {
+  if (Math.abs(a.length - b.length) > 2) return 9;
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+function acharBairro(texto, cidadePreferida) {
+  let t = norm(texto).replace(/\./g, '. ').replace(/\s+/g, ' ').trim();
+  if (!t || /^[-–—0]+$/.test(t)) return { cidade: '', bairro: '' };
+  t = t.split(/\s*[\/|,]\s*/)[0];
+  t = t.replace(/^eng\.?\s/, 'engenho ').replace(/\bjd\.?\s/g, 'jardim ').replace(/\bsto\.?\s/g, 'santo ').replace(/\bsta\.?\s/g, 'santa ').replace(/\bvl\.?\s/g, 'vila ').replace(/\bcj\.?\s/g, 'conjunto ').replace(/\s+/g, ' ').trim();
+  t = t.replace(/\b(\d{1,2})\b/g, (m, n) => ROMANOS[+n] || m);
+  const cidades = [cidadePreferida, 'Salvador', ...Object.keys(window.BA_BAIRROS || {})].filter((c, i, a) => c && a.indexOf(c) === i);
+  if (ALIAS_BAIRRO[t]) return { cidade: 'Salvador', bairro: ALIAS_BAIRRO[t] };
+  for (const c of cidades) { const b = bairrosDaCidade(c).find(x => norm(x) === t); if (b) return { cidade: c, bairro: b }; }
+  for (const c of cidades) { const b = bairrosDaCidade(c).find(x => { const n = norm(x); return n.length >= 5 && (t.startsWith(n + ' ') || n.split('/').some(p => p === t)); }); if (b) return { cidade: c, bairro: b }; }
+  if (t.length >= 6) for (const c of cidades) { const b = bairrosDaCidade(c).find(x => distancia(norm(x), t) <= (t.length > 9 ? 2 : 1)); if (b) return { cidade: c, bairro: b }; }
+  return { cidade: cidadePreferida || 'Salvador', bairro: nomeProprio(texto.split(/\s*[\/|]\s*/)[0]) };
+}
+
 /* ---------------- signo e idade ---------------- */
 const SIGNOS = [
   ['Capricórnio', 1, 19], ['Aquário', 2, 18], ['Peixes', 3, 20], ['Áries', 4, 19], ['Touro', 5, 20], ['Gêmeos', 6, 20],
@@ -883,7 +913,7 @@ const obs = () => F('btnExemplo').textContent = registros.some(r => r.exemplo) ?
 document.addEventListener('click', () => setTimeout(obs, 0));
 /* utilitários compartilhados com a área de colaboradores ativos */
 window.APP = { $, $$, norm, num, media, fmt, pct, esc, uid, hoje, dataBR, cmpTxt, toast, baixar, ler, gravar, autocomplete, abrirAba,
-  MUN, MUN_NORM, regiaoDe, bairrosDaCidade, aprenderBairro, csvCel, parseCSV, dataISO, formacao: () => registros };
+  MUN, MUN_NORM, regiaoDe, bairrosDaCidade, aprenderBairro, acharBairro, nomeProprio, csvCel, parseCSV, dataISO, formacao: () => registros };
 const inicial = (location.hash || '').slice(1);
 window.addEventListener('load', () => { if (['cadastro', 'dashboard', 'base', 'at-cadastro', 'at-dashboard', 'at-base'].includes(inicial)) abrirAba(inicial); });
 })();

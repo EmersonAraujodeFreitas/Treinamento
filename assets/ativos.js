@@ -19,6 +19,7 @@ const salvarSup = () => { supervisores = [...new Map(supervisores.filter(Boolean
 const supReal = v => supervisores.find(n => norm(n) === norm(v));
 const KEY_QUADRO = 'inovacao_treinamento_quadro_v1';
 let quadro = ler(KEY_QUADRO, { itens: [], arquivo: '', importadoEm: '' });
+quadro.itens.forEach(c => { if (c.bairro && !c.cidade) { const lc = A.acharBairro(c.bairro); c.cidade = lc.cidade; c.bairro = lc.bairro; } });
 const ativosQuadro = () => quadro.itens.filter(c => c.status !== 'Desligado');
 const salvar = () => { gravar(KEY, regs); F('atContBase').textContent = regs.length; rotuloExemplo(); };
 
@@ -120,14 +121,16 @@ function colaboradores() {
   }
   const marcar = () => { $$('li[data-i]', ul).forEach((li, i) => li.classList.toggle('ativo', i === ativo)); const a = $$('li[data-i]', ul)[ativo]; if (a) a.scrollIntoView({ block: 'nearest' }); };
   function escolher(i) {
-    const c = itens[i]; if (!c) return; ul.hidden = true;
+    let c = itens[i]; if (!c) return; ul.hidden = true;
     inp.value = c.nome;
     const preenchidos = [];
     const set = (id, v) => { const el = F(id); const val = v || ''; if (el.tagName === 'SELECT' && val && ![...el.options].some(o => o.value === val || o.text === val)) return; el.value = val; if (val) preenchidos.push(el); };
     if (c.supervisor && !supReal(c.supervisor)) { supervisores.push(c.supervisor); salvarSup(); }
     set('atEmail', c.email); set('atMatricula', c.matricula); set('atSupervisor', supReal(c.supervisor) || c.supervisor); set('atTempoCasa', c.tempoCasa); set('atTurno', c.turno);
     if (c.operacao) set('atOperacao', c.operacao); if (c.instituicao) set('atInstituicao', c.instituicao);
+    if (c.bairro && (!c.cidade || !A.bairrosDaCidade(c.cidade).some(b => norm(b) === norm(c.bairro)))) { const lc = A.acharBairro(c.bairro, c.cidade); c = { ...c, cidade: lc.cidade, bairro: lc.bairro }; }
     const cid = A.MUN_NORM.get(norm(c.cidade)) || '';
+    if (cid && c.bairro) A.aprenderBairro(cid, c.bairro);
     F('atCidade').value = cid; F('atCidade').dataset.ok = cid; F('atBairro').disabled = !cid; F('atBairro').value = cid ? c.bairro || '' : ''; F('atBairro').placeholder = cid ? 'Digite para buscar o bairro…' : 'Escolha a cidade primeiro';
     if (cid) preenchidos.push(F('atCidade')); if (cid && c.bairro) preenchidos.push(F('atBairro'));
     preenchidos.forEach(el => { el.classList.remove('auto-preenchido'); void el.offsetWidth; el.classList.add('auto-preenchido'); });
@@ -602,13 +605,12 @@ async function importarBD(arquivo) {
       const operacao = /admiss|captac/.test(norm(grupo) + ' ' + nomeAba) ? 'Captação' : /servic|perman|rematric/.test(norm(grupo) + ' ' + nomeAba) ? 'Permanência' : '';
       const corp = ies === 'Unijorge' ? pega(l, 'corporativo uja', 'corporativo uva') : pega(l, 'corporativo uva', 'corporativo uja');
       const adm = XLSXLeitor.dataExcel(pega(l, 'admissao'));
-      const bairro = titulo(pega(l, 'bairro'));
-      const bSsa = bairro ? A.bairrosDaCidade('Salvador').find(b => norm(b) === norm(bairro)) : '';
+      const local = A.acharBairro(titulo(pega(l, 'bairro')));
       const novo = {
         mat, idOlos: String(pega(l, 'id olos') ?? ''), nome, supervisor: titulo(pega(l, 'supervisor')).toUpperCase(), gerente: titulo(pega(l, 'gerente')),
         login: String(pega(l, 'login') ?? ''), grupo, ies, operacao, status: ehDeslig || /deslig/.test(norm(pega(l, 'status'))) ? 'Desligado' : titulo(pega(l, 'status')) || 'Ativo',
         escala: String(pega(l, 'escala') ?? ''), turno: titulo(pega(l, 'turno')), telefone: telefone(pega(l, 'telefone')),
-        bairro: bSsa || (bairro ? bairro.charAt(0) + bairro.slice(1).toLowerCase() : ''), cidade: bSsa ? 'Salvador' : '',
+        bairro: local.bairro, cidade: local.cidade,
         email: String(corp || '').trim().toLowerCase(), admissao: adm, tempoCasa: tempoDeCasa(adm), onda: titulo(pega(l, 'onda')),
         desligamento: ehDeslig ? XLSXLeitor.dataExcel(pega(l, 'data de desligamento')) : '', aba: aba.nome
       };
