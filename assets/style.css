@@ -472,3 +472,42 @@ input:disabled{background:var(--sup-2);cursor:not-allowed}
 .g-val.dentro{fill:#fff;text-shadow:0 1px 2px rgba(0,0,0,.25)}
 .g-leg i.leg-meta{width:18px;height:0;border-radius:0;border-top:2px dashed var(--marca-escura)}
 .busca-edit>i{position:absolute;left:13px;top:50%;transform:translateY(-50%);display:flex;color:var(--tinta-3);pointer-events:none;z-index:1}.busca-edit>i .ic{width:16px;height:16px}
+
+/* ---------- logo animado ---------- */
+.marca{gap:14px}
+.logo-anim{position:relative;display:block;width:58px;height:64px;flex:none;cursor:pointer}
+.logo-svg{width:100%;height:100%;overflow:visible;display:block}
+.lg-halo{transform-origin:50px 55px;animation:lg-halo 3.2s ease-in-out infinite}
+@keyframes lg-halo{0%,100%{opacity:.55;transform:scale(.9)}50%{opacity:1;transform:scale(1.06)}}
+.lg-hex path{stroke-dasharray:100;stroke-dashoffset:100;animation:lg-desenha 1.4s cubic-bezier(.6,.1,.3,1) forwards}
+.lg-hex path:nth-child(2){animation-delay:.2s}.lg-hex path:nth-child(3){animation-delay:.4s}.lg-hex path:nth-child(4){animation-delay:.6s}
+@keyframes lg-desenha{to{stroke-dashoffset:0}}
+.lg-o{transform-origin:50px 55px;animation:lg-gira 14s linear infinite}
+.lg-o2{animation-duration:19s;animation-direction:reverse}
+.lg-o3{animation-duration:24s}
+.lg-o4{animation-duration:11s;animation-direction:reverse}
+@keyframes lg-gira{to{transform:rotate(360deg)}}
+.lg-orbitas{opacity:0;animation:lg-surge .8s ease .5s forwards}
+@keyframes lg-surge{to{opacity:1}}
+.lg-no{transform-box:fill-box;transform-origin:center;animation:lg-pop .5s cubic-bezier(.3,1.7,.5,1) both,lg-pulsa 2.6s ease-in-out infinite}
+.lg-no.n1{animation-delay:.9s,1.4s}.lg-no.n2{animation-delay:1s,2.05s}.lg-no.n3{animation-delay:1.1s,2.7s}.lg-no.n4{animation-delay:1.2s,3.35s}
+@keyframes lg-pop{from{transform:scale(0)}}
+@keyframes lg-pulsa{0%,100%{transform:scale(1)}20%{transform:scale(1.35)}40%{transform:scale(1)}}
+.lg-estrela{transform-origin:50px 55px;animation:lg-estrela-in .9s cubic-bezier(.3,1.5,.5,1) .3s both,lg-cintila 3.6s ease-in-out 1.2s infinite}
+@keyframes lg-estrela-in{from{transform:scale(0) rotate(-90deg);opacity:0}}
+@keyframes lg-cintila{0%,100%{transform:scale(1) rotate(0)}25%{transform:scale(1.1) rotate(6deg)}50%{transform:scale(.96) rotate(0)}75%{transform:scale(1.06) rotate(-4deg)}}
+.lg-nucleo{transform-box:fill-box;transform-origin:center;animation:lg-nucleo 1.8s ease-in-out infinite}
+@keyframes lg-nucleo{50%{transform:scale(1.5);opacity:.75}}
+.bl{transform-box:fill-box;transform-origin:center;opacity:0;animation:lg-brilho 3s ease-in-out infinite}
+.bl.b2{animation-delay:1s}.bl.b3{animation-delay:2s}
+@keyframes lg-brilho{0%,100%{opacity:0;transform:scale(.2) rotate(0)}50%{opacity:1;transform:scale(1.2) rotate(45deg)}}
+.logo-anim:hover .lg-o{animation-duration:3s}
+.logo-anim:hover .lg-estrela{animation-duration:.9s,1.2s}
+.logo-anim:hover .lg-halo{animation-duration:1.2s}
+/* texto com brilho passando */
+.brilho-txt{background:linear-gradient(100deg,#fff 0%,#fff 40%,#ffe58a 48%,#fff8d6 50%,#ffe58a 52%,#fff 60%,#fff 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:lg-shine 4.5s ease-in-out 1.5s infinite}
+.brilho-txt b{color:transparent}
+@keyframes lg-shine{0%{background-position:100% 0}60%,100%{background-position:-50% 0}}
+.marca-sub{animation:lg-sub .8s ease .6s both}
+@keyframes lg-sub{from{opacity:0;transform:translateX(-8px)}}
+@media (prefers-reduced-motion:reduce){.logo-anim *,.brilho-txt{animation:none!important;stroke-dashoffset:0!important;opacity:1!important}}
