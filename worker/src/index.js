@@ -57,7 +57,22 @@ async function gravarValor(env, chave, dados, por) { await exec(env, 'INSERT INT
 async function versao(env) { return (await lerValor(env, 'versao', 0)) || 0; }
 async function subirVersao(env) { const v = (await versao(env)) + 1; await gravarValor(env, 'versao', v, ''); return v; }
 
+const ESQUEMA = [
+  'CREATE TABLE IF NOT EXISTS usuarios (usuario TEXT PRIMARY KEY, nome TEXT NOT NULL, perfil TEXT NOT NULL, ativo INTEGER NOT NULL DEFAULT 1, sal TEXT NOT NULL, hash TEXT NOT NULL, trocar_senha INTEGER NOT NULL DEFAULT 0, sessao INTEGER NOT NULL DEFAULT 0, criado_em TEXT, atualizado_em TEXT)',
+  'CREATE TABLE IF NOT EXISTS registros (dataset TEXT NOT NULL, id TEXT NOT NULL, tipo TEXT, dados TEXT NOT NULL, atualizado_em TEXT NOT NULL, apagado INTEGER NOT NULL DEFAULT 0, por TEXT, PRIMARY KEY (dataset, id))',
+  'CREATE TABLE IF NOT EXISTS valores (chave TEXT PRIMARY KEY, dados TEXT NOT NULL, atualizado_em TEXT NOT NULL, por TEXT)',
+  'CREATE TABLE IF NOT EXISTS tentativas (usuario TEXT PRIMARY KEY, falhas INTEGER NOT NULL DEFAULT 0, bloqueado_ate TEXT)',
+  'CREATE TABLE IF NOT EXISTS log (quando TEXT NOT NULL, usuario TEXT, acao TEXT, detalhe TEXT)',
+  'CREATE INDEX IF NOT EXISTS idx_log_quando ON log (quando)'
+];
+let tabelasProntas = false;
+async function garantirTabelas(env) {
+  if (tabelasProntas || !env.DB) return;
+  await env.DB.batch(ESQUEMA.map(sql => env.DB.prepare(sql)));
+  tabelasProntas = true;
+}
 async function garantirAdmin(env) {
+  await garantirTabelas(env);
   const n = await um(env, 'SELECT COUNT(*) AS n FROM usuarios');
   if (n && n.n > 0) return;
   const sal = hex(crypto.getRandomValues(new Uint8Array(16)));
@@ -279,6 +294,7 @@ async function rotaAdmin(env, u, req, partes) {
 async function diagnostico(env) {
   const d = { servico: 'treinamento-inovacao-casa', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
   if (d.banco_ligado) {
+    try { await garantirTabelas(env); } catch (e) { d.erro_criar_tabelas = String(e.message || e).slice(0, 200); }
     try { d.tabelas = (await todos(env, "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")).map(r => r.name).filter(n => !n.startsWith('_') && !n.startsWith('sqlite')); }
     catch (e) { d.erro_banco = String(e.message || e).slice(0, 200); }
   }
