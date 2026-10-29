@@ -567,7 +567,7 @@
         <div class="comparativo" id="atCompOperacao"></div>
       </article>
       <article class="cartao c-largo">
-        <header class="cab-card cab-tabela"><span class="icb" data-ic="user"></span><div><h2>Panorama por colaborador</h2><p>Clique no cabeçalho para ordenar · clique no nome para filtrar pelo supervisor</p></div>
+        <header class="cab-card cab-tabela"><span class="icb" data-ic="user"></span><div><h2>Panorama por colaborador</h2><p>Clique no nome ou no lápis para editar · clique no supervisor para filtrar · clique no cabeçalho para ordenar</p></div>
           <div class="cab-acoes"><input type="search" id="atBuscaColab" placeholder="Buscar colaborador"><button class="btn btn-sec" id="atExpColab" type="button"><i data-ic="download"></i>Exportar CSV</button></div></header>
         <div class="tabela-wrap"><table class="tabela" id="atTColab"></table></div>
       </article>
@@ -617,6 +617,14 @@
     <div class="dlg-add"><input id="supNovo" placeholder="Nome do novo supervisor" autocomplete="off"><button type="button" class="btn btn-pri" id="supAdd"><i data-ic="plus"></i>Adicionar</button></div>
     <ul class="sup-lista" id="supLista"></ul>
     <div class="dlg-rod"><small class="dica" id="supInfo"></small><button class="btn btn-sec" value="fechar">Fechar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgRegs" class="dlg">
+  <form method="dialog" class="dlg-in">
+    <header class="cab-card"><span class="icb" data-ic="edit"></span><div><h2 id="dlgRegsTit">Registros</h2><p id="dlgRegsSub"></p></div></header>
+    <ul class="regs-lista" id="dlgRegsLista"></ul>
+    <div class="dlg-rod"><span></span><button class="btn btn-sec" value="fechar">Fechar</button></div>
   </form>
 </dialog>
 

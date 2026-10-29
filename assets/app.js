@@ -911,6 +911,9 @@ F('btnExemplo').textContent = registros.some(r => r.exemplo) ? 'Remover exemplos
 window.addEventListener('storage', () => { registros = ler(KEY, []); bairrosAprendidos = ler(KEY_B, {}); });
 const obs = () => F('btnExemplo').textContent = registros.some(r => r.exemplo) ? 'Remover exemplos' : 'Dados de exemplo';
 document.addEventListener('click', () => setTimeout(obs, 0));
+/* Enter não salva os formulários: só o botão Salvar salva */
+['form', 'atForm'].forEach(id => { const f = document.getElementById(id); if (f) f.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); }); });
+
 /* utilitários compartilhados com a área de colaboradores ativos */
 window.APP = { $, $$, norm, num, media, fmt, pct, esc, uid, hoje, dataBR, cmpTxt, toast, baixar, ler, gravar, autocomplete, abrirAba,
   MUN, MUN_NORM, regiaoDe, bairrosDaCidade, aprenderBairro, acharBairro, nomeProprio, csvCel, parseCSV, dataISO, formacao: () => registros };

@@ -601,7 +601,7 @@ function render() {
   ESTADO.colab = [...agrupar(l, chaveColab).values()].map(rs => {
     const ult = rs.slice().sort((a, b) => (b.data || '').localeCompare(a.data || ''))[0];
     const x = resumo(rs);
-    return { nome: ult.nome, operacao: ult.operacao, supervisor: ult.supervisor || '', n: rs.length, horas: x.horas, ultima: ult.data, ultTema: ult.tema, pos: x.pos, qa: x.qa, qd: x.qd, evo: x.evoQual, faltas: rs.filter(r => r.presenca !== 'Presente').length };
+    return { ids: rs.slice().sort((a, b) => (b.data || '').localeCompare(a.data || '')).map(r => r.id), nome: ult.nome, operacao: ult.operacao, supervisor: ult.supervisor || '', n: rs.length, horas: x.horas, ultima: ult.data, ultTema: ult.tema, pos: x.pos, qa: x.qa, qd: x.qd, evo: x.evoQual, faltas: rs.filter(r => r.presenca !== 'Presente').length };
   });
   renderColab();
 
@@ -620,16 +620,33 @@ function renderColab() {
   const q = norm(F('atBuscaColab').value), o = ESTADO.ord;
   const rows = (ESTADO.colab || []).filter(c => !q || norm(c.nome + ' ' + c.supervisor).includes(q))
     .sort((a, b) => { const x = a[o.k], y = b[o.k]; const r = typeof x === 'string' || typeof y === 'string' ? cmpTxt(x || '', y || '') : (x ?? -999) - (y ?? -999); return o.asc ? r : -r; });
-  F('atTColab').innerHTML = `<thead><tr>${COLS.map(([k, t, n]) => `<th data-k="${k}" class="${n ? 'dir' : ''} ${o.k === k ? 'ord' + (o.asc ? ' asc' : '') : ''}">${t}</th>`).join('')}</tr></thead>
-  <tbody>${rows.map(c => `<tr><td class="lk" data-sup="${esc(c.supervisor)}">${esc(c.nome)}</td><td>${esc(c.operacao)}</td><td>${esc(c.supervisor || '—')}</td><td class="dir">${c.n}</td><td class="dir">${fmt(c.horas, c.horas % 1 ? 1 : 0)}h</td>
+  F('atTColab').innerHTML = `<thead><tr><th class="cel-acao"></th>${COLS.map(([k, t, n]) => `<th data-k="${k}" class="${n ? 'dir' : ''} ${o.k === k ? 'ord' + (o.asc ? ' asc' : '') : ''}">${t}</th>`).join('')}</tr></thead>
+  <tbody>${rows.map(c => `<tr><td class="cel-acao"><button type="button" class="btn-icone" data-ids="${c.ids.join(',')}" title="Editar" aria-label="Editar ${esc(c.nome)}">${G.ic('edit', '')}</button></td><td class="lk" data-ids="${c.ids.join(',')}" title="Editar">${esc(c.nome)}</td><td>${esc(c.operacao)}</td><td class="lk-sup" data-sup="${esc(c.supervisor)}" title="Filtrar pelo supervisor">${esc(c.supervisor || '—')}</td><td class="dir">${c.n}</td><td class="dir">${fmt(c.horas, c.horas % 1 ? 1 : 0)}h</td>
     <td>${dataBR(c.ultima)}</td><td>${esc(c.ultTema)}</td><td class="dir">${c.faltas || '—'}</td><td class="dir">${fmt(c.pos)}</td><td class="dir">${pctQ(c.qa)}</td><td class="dir">${pctQ(c.qd)}</td>
     <td class="dir">${c.evo === null ? '—' : `<span class="tag ${c.evo > 0 ? 'bom' : c.evo < 0 ? 'ruim' : 'neutro'}">${G.ic(c.evo >= 0 ? 'up' : 'down', '')}${sinal(c.evo, 2)} p.p.</span>`}</td></tr>`).join('')
-    || `<tr><td colspan="${COLS.length}" class="dica">Nenhum colaborador encontrado.</td></tr>`}</tbody>`;
+    || `<tr><td colspan="${COLS.length + 1}" class="dica">Nenhum colaborador encontrado.</td></tr>`}</tbody>`;
 }
+function abrirRegistros(ids) {
+  const rs = ids.map(id => regs.find(r => r.id === id)).filter(Boolean);
+  if (!rs.length) return;
+  if (rs.length === 1) { editar(rs[0].id); return; }
+  F('dlgRegsTit').textContent = rs[0].nome;
+  F('dlgRegsSub').textContent = `${rs.length} treinamentos registrados · escolha qual editar`;
+  const st = s => ({ 'Concluído': 'bom', 'Pendente': 'alerta', 'Reagendado': 'alerta', 'Cancelado': 'ruim' }[s] || 'neutro');
+  F('dlgRegsLista').innerHTML = rs.map(r => `<li><div><b>${esc(r.tema)}</b><small>${esc(r.tipo)} · ${dataBR(r.data)} · ${esc(r.presenca)}${r.pos !== null && r.pos !== undefined ? ' · pós ' + fmt(r.pos) : ''}${r.qualDepois !== null && r.qualDepois !== undefined ? ' · qualidade ' + pctQ(r.qualDepois) : ''}</small></div>
+    <span class="tag ${st(r.status)}">${esc(r.status)}</span><button type="button" class="btn btn-sec btn-mini" data-edit="${r.id}">${G.ic('edit', '')}Editar</button><button type="button" class="btn-icone" data-del="${r.id}" title="Excluir" aria-label="Excluir">${G.ic('trash', '')}</button></li>`).join('');
+  F('dlgRegs').showModal();
+}
+F('dlgRegsLista').addEventListener('click', e => {
+  const ed = e.target.closest('[data-edit]'); if (ed) { F('dlgRegs').close(); editar(ed.dataset.edit); return; }
+  const del = e.target.closest('[data-del]');
+  if (del) { const r = regs.find(x => x.id === del.dataset.del); if (r && confirm(`Excluir o registro de ${r.nome} (${r.tema} · ${dataBR(r.data)})?`)) { regs = regs.filter(x => x !== r); salvar(); toast('Registro excluído'); const resto = [...F('dlgRegsLista').querySelectorAll('[data-edit]')].map(b => b.dataset.edit).filter(id => id !== r.id); F('dlgRegs').close(); render(); if (resto.length) abrirRegistros(resto); } }
+});
 F('atTColab').addEventListener('click', e => {
   const th = e.target.closest('th');
   if (th) { const k = th.dataset.k; ESTADO.ord = { k, asc: ESTADO.ord.k === k ? !ESTADO.ord.asc : ['nome', 'operacao', 'supervisor', 'ultTema'].includes(k) }; renderColab(); return; }
-  const td = e.target.closest('td.lk'); if (td && td.dataset.sup) { FILT.supervisor = td.dataset.sup; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  const ed = e.target.closest('[data-ids]'); if (ed) { abrirRegistros(ed.dataset.ids.split(',')); return; }
+  const sp = e.target.closest('td.lk-sup'); if (sp && sp.dataset.sup) { FILT.supervisor = sp.dataset.sup; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 });
 F('atBuscaColab').addEventListener('input', renderColab);
 F('atTPend').addEventListener('click', e => { const td = e.target.closest('[data-edit]'); if (td) editar(td.dataset.edit); });

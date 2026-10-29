@@ -618,3 +618,11 @@ input:disabled{background:var(--sup-2);cursor:not-allowed}
 .compart:empty{display:none}
 .dlg .campo input{min-height:38px}
 @media (max-width:820px){.lote-grid{grid-template-columns:1fr}.seg.modo{min-width:0;width:100%}}
+
+.cel-acao{width:40px;text-align:center}
+td.lk-sup{cursor:pointer}
+td.lk-sup:hover{color:var(--marca);text-decoration:underline}
+.regs-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow:auto}
+.regs-lista li{display:grid;grid-template-columns:minmax(0,1fr) auto auto 30px;gap:10px;align-items:center;border:1px solid var(--borda);border-radius:10px;padding:8px 10px}
+.regs-lista li b{display:block;font-size:13.5px}
+.regs-lista li small{display:block;font-size:12px;color:var(--tinta-3)}
