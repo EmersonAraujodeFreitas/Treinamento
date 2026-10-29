@@ -559,3 +559,15 @@ input:disabled{background:var(--sup-2);cursor:not-allowed}
 .btn-mini .ic{width:13px;height:13px}
 #atQuadroCard .cab-acoes select{width:auto;min-height:34px}
 .cab-card.cab-tabela>div:nth-child(2){flex:1 1 280px;min-width:0}
+
+#atAutoNome .auto-lista{max-height:360px}
+.auto-lista li.cab-lista{font-size:11.5px;font-weight:700;color:var(--tinta-3);cursor:default;background:none;padding:4px 10px 6px;border-bottom:1px solid var(--borda);border-radius:0;margin-bottom:4px}
+.auto-lista li.item-colab{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center}
+.item-colab .av{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--marca-clara);color:var(--marca);font-weight:800;font-size:11px}
+.item-colab .ic-txt{display:flex;flex-direction:column;min-width:0}
+.item-colab .ic-txt b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item-colab .ic-txt small{font-size:11.5px;color:var(--tinta-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item-colab .orig{font-size:11px;color:var(--tinta-3);background:var(--sup-2);border:1px solid var(--borda);border-radius:10px;padding:1px 8px;white-space:nowrap}
+.item-colab mark{background:#fff3c4;color:inherit;border-radius:2px}
+.auto-preenchido{animation:preenche 1.6s ease}
+@keyframes preenche{0%,40%{background:#fff3c4;border-color:#f5c542;box-shadow:0 0 0 3px rgba(245,197,66,.25)}100%{background:#fff}}

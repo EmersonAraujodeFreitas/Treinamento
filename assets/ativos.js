@@ -103,20 +103,36 @@ function colaboradores() {
   let itens = [], ativo = -1;
   function abrir() {
     const q = norm(inp.value);
-    itens = colaboradores().filter(c => !q || norm(c.nome + ' ' + (c.email || '') + ' ' + (c.matricula || '')).includes(q)).slice(0, 12);
-    ul.innerHTML = itens.length ? itens.map((c, i) => `<li data-i="${i}"><span><b>${esc(c.nome)}</b><br><small>${esc([c.operacao, c.supervisor, c.origem].filter(Boolean).join(' · '))}</small></span></li>`).join('')
-      : `<li class="sem">${q ? 'Colaborador novo — continue digitando o nome completo' : 'Nenhum colaborador na base ainda'}</li>`;
+    const termos = q.split(/\s+/).filter(Boolean);
+    const todos = colaboradores();
+    const achados = todos.map(c => {
+      const alvo = norm([c.nome, c.email, c.matricula, c.supervisor].filter(Boolean).join(' '));
+      if (termos.some(t => !alvo.includes(t))) return null;
+      const n = norm(c.nome); return { c, peso: n.startsWith(q) ? 0 : n.split(' ').some(p => p.startsWith(termos[0] || '')) ? 1 : 2 };
+    }).filter(Boolean).sort((a, b) => a.peso - b.peso || cmpTxt(a.c.nome, b.c.nome));
+    itens = achados.slice(0, 40).map(x => x.c);
+    const marca = txt => { let h = esc(txt); termos.forEach(t => { const i = norm(txt).indexOf(t); if (i >= 0) { const orig = txt.slice(i, i + t.length); h = h.replace(esc(orig), '<mark>' + esc(orig) + '</mark>'); } }); return h; };
+    const sigla = n => n.split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('');
+    ul.innerHTML = (itens.length ? `<li class="cab-lista">${achados.length} ${achados.length === 1 ? 'colaborador encontrado' : 'colaboradores encontrados'}${achados.length > 40 ? ' · continue digitando para filtrar' : ''}</li>` : '') +
+      (itens.length ? itens.map((c, i) => `<li data-i="${i}" class="item-colab"><span class="av">${esc(sigla(c.nome))}</span><span class="ic-txt"><b>${marca(c.nome)}</b><small>${esc([c.instituicao, c.operacao, c.supervisor].filter(Boolean).join(' · '))}</small></span><small class="orig">${esc(c.origem.startsWith('BD') ? c.origem.split(' · ')[1] || 'BD' : c.origem)}</small></li>`).join('')
+      : `<li class="sem">${q ? (todos.length ? 'Nenhum consultor com esse nome no BD — se for novo, digite o nome completo' : 'Importe o BD da operação na Base de dados para ver a lista de consultores') : 'Nenhum colaborador na base ainda — importe o BD da operação'}</li>`);
     ativo = itens.length && q ? 0 : -1; marcar(); ul.hidden = false;
   }
-  const marcar = () => $$('li', ul).forEach((li, i) => li.classList.toggle('ativo', i === ativo));
+  const marcar = () => { $$('li[data-i]', ul).forEach((li, i) => li.classList.toggle('ativo', i === ativo)); const a = $$('li[data-i]', ul)[ativo]; if (a) a.scrollIntoView({ block: 'nearest' }); };
   function escolher(i) {
     const c = itens[i]; if (!c) return; ul.hidden = true;
     inp.value = c.nome;
-    const set = (id, v) => { if (v && !F(id).value) F(id).value = v; };
-    set('atEmail', c.email); set('atMatricula', c.matricula); set('atSupervisor', c.supervisor); set('atTempoCasa', c.tempoCasa); set('atTurno', c.turno); set('atOperacao', c.operacao); set('atInstituicao', c.instituicao);
+    const preenchidos = [];
+    const set = (id, v) => { const el = F(id); const val = v || ''; if (el.tagName === 'SELECT' && val && ![...el.options].some(o => o.value === val || o.text === val)) return; el.value = val; if (val) preenchidos.push(el); };
     if (c.supervisor && !supReal(c.supervisor)) { supervisores.push(c.supervisor); salvarSup(); }
-    if (c.cidade && !F('atCidade').value) { F('atCidade').value = c.cidade; F('atCidade').dataset.ok = A.MUN_NORM.get(norm(c.cidade)) || ''; F('atBairro').disabled = !F('atCidade').dataset.ok; F('atBairro').value = c.bairro || ''; }
-    F('atDicaNome').textContent = 'Dados preenchidos a partir de: ' + c.origem;
+    set('atEmail', c.email); set('atMatricula', c.matricula); set('atSupervisor', supReal(c.supervisor) || c.supervisor); set('atTempoCasa', c.tempoCasa); set('atTurno', c.turno);
+    if (c.operacao) set('atOperacao', c.operacao); if (c.instituicao) set('atInstituicao', c.instituicao);
+    const cid = A.MUN_NORM.get(norm(c.cidade)) || '';
+    F('atCidade').value = cid; F('atCidade').dataset.ok = cid; F('atBairro').disabled = !cid; F('atBairro').value = cid ? c.bairro || '' : ''; F('atBairro').placeholder = cid ? 'Digite para buscar o bairro…' : 'Escolha a cidade primeiro';
+    if (cid) preenchidos.push(F('atCidade')); if (cid && c.bairro) preenchidos.push(F('atBairro'));
+    preenchidos.forEach(el => { el.classList.remove('auto-preenchido'); void el.offsetWidth; el.classList.add('auto-preenchido'); });
+    $$('#atForm .invalido').forEach(el => { if (preenchidos.includes(el) || el.id === 'atNome') el.classList.remove('invalido'); });
+    F('atDicaNome').textContent = `${preenchidos.length} campos preenchidos automaticamente · origem: ${c.origem}`;
   }
   inp.addEventListener('input', abrir); inp.addEventListener('focus', abrir);
   inp.addEventListener('keydown', e => {
