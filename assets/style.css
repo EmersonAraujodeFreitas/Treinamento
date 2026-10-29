@@ -486,3 +486,8 @@ input:disabled{background:var(--sup-2);cursor:not-allowed}
 .marca-area span{font-size:12px;color:#a9bad0}
 @media (max-width:620px){.marca-area{display:none}}
 @media (prefers-reduced-motion:reduce){.lg-estrela{animation:none}}
+
+/* logo oficial animado (vídeo recortado do GIF oficial) */
+.topo{background:#0d2947}
+.logo-video{width:84px;height:80px;object-fit:cover;display:block;margin:-6px 0 0;-webkit-mask-image:radial-gradient(closest-side,#000 82%,transparent 100%);mask-image:radial-gradient(closest-side,#000 82%,transparent 100%);pointer-events:none}
+.logo-bloco{gap:3px}
