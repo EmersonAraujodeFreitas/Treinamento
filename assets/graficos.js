@@ -226,16 +226,16 @@ function rosca(el, itens, o = {}) {
       <circle cx="60" cy="60" r="46" class="rosca-fundo"/>
       <g transform="rotate(-90 60 60)">${segs}<circle class="rosca-revela" cx="60" cy="60" r="46" pathLength="100"/></g>
       <text x="60" y="58" text-anchor="middle" class="rosca-total">${total.toLocaleString('pt-BR')}</text>
-      <text x="60" y="74" text-anchor="middle" class="rosca-rot">${esc(o.rotuloTotal || 'total')}</text>
+      <text x="60" y="74" text-anchor="middle" class="rosca-rot"${(o.rotuloTotal || '').length > 10 ? ' style="font-size:7.5px;letter-spacing:.2px"' : ''}>${esc(o.rotuloTotal || 'total')}</text>
     </svg>
     <ul class="rosca-leg">${itens.map((it, i) => `<li style="--d:${300 + i * 80}ms" data-tip="${esc(`<b>${esc(it.rotulo)}</b><br>${it.valor} treinandos`)}"><span class="rl-ic" style="color:${it.cor};background:${it.cor}1a">${ic(it.icone || 'user', '')}</span><span class="rl-t">${esc(it.rotulo)}</span><b>${it.valor}</b><small>${fmt(it.valor / total * 100, 0)}%</small><i class="rl-bar"><i style="width:${it.valor / total * 100}%;background:${it.cor}"></i></i></li>`).join('')}</ul>
   </div>`;
 }
 
 /* ---------- comparativo A × B ---------- */
-function duelo(el, grupos, nomes, metricas, cores, icones = ['pin', 'map']) {
+function duelo(el, grupos, nomes, metricas, cores, icones = ['pin', 'map'], unidade = 'treinandos') {
   const [A, B] = grupos;
-  el.innerHTML = `<div class="duelo-cab">${nomes.map((n, i) => `<div class="dc dc${i}" style="--c:${cores[i]}"><span class="dc-ic">${ic(icones[i])}</span><div><b>${esc(n)}</b><small>${grupos[i].n} treinandos</small></div></div>`).join('<span class="dc-vs">×</span>')}</div>
+  el.innerHTML = `<div class="duelo-cab">${nomes.map((n, i) => `<div class="dc dc${i}" style="--c:${cores[i]}"><span class="dc-ic">${ic(icones[i])}</span><div><b>${esc(n)}</b><small>${grupos[i].n} ${unidade}</small></div></div>`).join('<span class="dc-vs">×</span>')}</div>
   <div class="duelo-grid">${metricas.map(([titulo, k, max, icone, ehPct], mi) => {
     const a = A[k], b = B[k];
     const f = v => v === null || v === undefined ? '—' : ehPct === 'q' ? fmt(v * 10, 2) + '%' : ehPct ? fmt(v * 100, 0) + '%' : fmt(v);

@@ -26,13 +26,24 @@
       </div>
       <div class="marca-area">
         <b>Treinamento</b>
-        <span>Formação inicial · call center</span>
+        <span id="marcaSub">Formação inicial · call center</span>
       </div>
     </div>
-    <nav class="abas" role="tablist">
+    <nav class="areas" role="tablist" aria-label="Áreas">
+      <button class="area ativa" data-area="formacao" role="tab"><i data-ic="users"></i><span><b>Formação inicial</b><small>novas turmas</small></span></button>
+      <button class="area" data-area="ativos" role="tab"><i data-ic="rocket"></i><span><b>Colaboradores ativos</b><small>reciclagem · alinhamento · novos conteúdos</small></span></button>
+    </nav>
+  </div>
+  <div class="subbarra">
+    <nav class="abas" data-area="formacao" role="tablist">
       <button class="aba ativa" data-aba="cadastro" role="tab"><i data-ic="clipboard"></i>Cadastro de formação</button>
       <button class="aba" data-aba="dashboard" role="tab"><i data-ic="chart"></i>Dashboard</button>
       <button class="aba" data-aba="base" role="tab"><i data-ic="database"></i>Base de dados <span class="contador" id="contBase">0</span></button>
+    </nav>
+    <nav class="abas" data-area="ativos" role="tablist" hidden>
+      <button class="aba" data-aba="at-cadastro" role="tab"><i data-ic="clipboard"></i>Registrar treinamento</button>
+      <button class="aba" data-aba="at-dashboard" role="tab"><i data-ic="chart"></i>Dashboard</button>
+      <button class="aba" data-aba="at-base" role="tab"><i data-ic="database"></i>Base de dados <span class="contador" id="atContBase">0</span></button>
     </nav>
   </div>
 </header>
@@ -322,6 +333,205 @@
   <div class="cartao"><div class="tabela-wrap"><table class="tabela" id="tBase"></table></div></div>
 </section>
 
+<!-- =========================================================
+     COLABORADORES ATIVOS
+     ========================================================= -->
+<section id="aba-at-cadastro" class="painel">
+  <div class="cab-pagina">
+    <div>
+      <h1>Treinamento de colaboradores ativos</h1>
+      <p class="sub">Reciclagem, alinhamento ou treinamento de novos conteúdos e produtos. Campos com <span class="obr">*</span> são obrigatórios.</p>
+    </div>
+    <div class="cab-acoes">
+      <span id="atModoEdicao" class="selo selo-aviso" hidden><i data-ic="edit"></i><span id="atModoTxt">Editando</span></span>
+      <div class="busca-edit" id="atBuscaEdit"><i data-ic="search" data-a=""></i><input id="atBuscaEditar" placeholder="Buscar registro para editar (nome, tema ou supervisor)" autocomplete="off"><ul class="auto-lista" hidden></ul></div>
+      <button type="button" class="btn btn-sec" id="atBtnNovo"><i data-ic="plus"></i>Novo registro</button>
+    </div>
+  </div>
+
+  <form id="atForm" novalidate autocomplete="off">
+    <input type="hidden" id="atId">
+
+    <fieldset class="bloco">
+      <legend><span class="icb" data-ic="rocket"></span>Ação de treinamento<span class="passo">1</span></legend>
+      <div class="grade g4">
+        <div class="campo c2"><span>Tipo de treinamento <i class="obr">*</i></span>
+          <div class="seg seg4" id="atTipo" data-valor="">
+            <button type="button" data-v="Reciclagem">Reciclagem</button>
+            <button type="button" data-v="Alinhamento">Alinhamento</button>
+            <button type="button" data-v="Novo conteúdo">Novo conteúdo</button>
+            <button type="button" data-v="Novo produto">Novo produto</button>
+          </div></div>
+        <label class="campo c2"><span>Tema / conteúdo <i class="obr">*</i></span>
+          <input id="atTema" list="atListaTemas" placeholder="Ex.: Nova política de bolsas, Script de retenção…" required><datalist id="atListaTemas"></datalist></label>
+        <label class="campo"><span>Data <i class="obr">*</i></span><input type="date" id="atData" required></label>
+        <label class="campo"><span>Carga horária (horas)</span><input id="atCarga" inputmode="decimal" placeholder="Ex.: 2"></label>
+        <label class="campo"><span>Operação <i class="obr">*</i></span>
+          <select id="atOperacao" required><option value="">Selecione</option><option>Captação</option><option>Permanência</option></select></label>
+        <label class="campo"><span>Instrutor(a)</span><input id="atInstrutor" list="atListaInstrutores" placeholder="Quem aplicou"><datalist id="atListaInstrutores"></datalist></label>
+        <label class="campo"><span>Modalidade</span>
+          <select id="atModalidade"><option value="">Selecione</option><option>Presencial</option><option>Remoto</option><option>Híbrido</option><option>Na posição (side by side)</option></select></label>
+        <label class="campo"><span>Motivo</span>
+          <select id="atMotivo"><option value="">Selecione</option><option>Cronograma / rotina</option><option>Indicação da qualidade</option><option>Baixa performance</option><option>Mudança de processo</option><option>Lançamento de produto</option><option>Solicitação da supervisão</option><option>Retorno de afastamento</option></select></label>
+        <label class="campo c2"><span>Objetivo da ação</span><input id="atObjetivo" placeholder="O que o colaborador precisa sair sabendo fazer"></label>
+      </div>
+    </fieldset>
+
+    <fieldset class="bloco">
+      <legend><span class="icb" data-ic="user"></span>Colaborador<span class="passo">2</span></legend>
+      <div class="grade g4">
+        <div class="campo c2"><span>Nome do colaborador <i class="obr">*</i></span>
+          <div class="auto" id="atAutoNome"><input id="atNome" placeholder="Digite para buscar quem já está na base…" required><ul class="auto-lista" hidden></ul></div>
+          <small class="dica" id="atDicaNome">Busca entre colaboradores já registrados e aprovados na formação inicial</small></div>
+        <label class="campo"><span>Matrícula / login</span><input id="atMatricula" placeholder="Opcional"></label>
+        <label class="campo"><span>E-mail</span><input type="email" id="atEmail" placeholder="nome@email.com"></label>
+        <label class="campo"><span>Supervisor(a)</span><input id="atSupervisor" list="atListaSupervisores" placeholder="Nome do supervisor"><datalist id="atListaSupervisores"></datalist></label>
+        <label class="campo"><span>Tempo de casa</span>
+          <select id="atTempoCasa"><option value="">Selecione</option><option>Até 3 meses</option><option>3 a 6 meses</option><option>6 meses a 1 ano</option><option>1 a 2 anos</option><option>Mais de 2 anos</option></select></label>
+        <label class="campo"><span>Turno</span>
+          <select id="atTurno"><option value="">Selecione</option><option>Manhã</option><option>Tarde</option><option>Noite</option><option>Integral</option></select></label>
+        <div class="campo"><span>Cidade</span>
+          <div class="auto" id="atAutoCidade"><input id="atCidade" placeholder="Digite para buscar…"><ul class="auto-lista" hidden></ul></div></div>
+        <div class="campo"><span>Bairro</span>
+          <div class="auto" id="atAutoBairro"><input id="atBairro" placeholder="Escolha a cidade primeiro" disabled><ul class="auto-lista" hidden></ul></div></div>
+      </div>
+    </fieldset>
+
+    <fieldset class="bloco">
+      <legend><span class="icb" data-ic="award"></span>Resultado<span class="passo">3</span></legend>
+      <div class="grade g4">
+        <div class="campo c2"><span>Presença <i class="obr">*</i></span>
+          <div class="seg" id="atPresenca" data-valor="">
+            <button type="button" data-v="Presente">Presente</button>
+            <button type="button" data-v="Ausente">Ausente</button>
+            <button type="button" data-v="Justificado">Falta justificada</button>
+          </div></div>
+        <label class="campo"><span>Situação <i class="obr">*</i></span>
+          <select id="atStatus" required><option value="">Selecione</option><option>Concluído</option><option>Pendente</option><option>Reagendado</option><option>Cancelado</option></select></label>
+        <label class="campo"><span>Próxima ação / acompanhamento</span><input type="date" id="atProxima"></label>
+      </div>
+      <div class="antes-depois">
+        <div class="ad-card">
+          <div class="ad-cab"><i data-ic="exam"></i><b>Avaliação de conhecimento</b><small>nota de 0 a 10</small></div>
+          <div class="ad-linha">
+            <label><span>Antes (pré-teste)</span><input id="atPre" inputmode="decimal" placeholder="—"></label>
+            <span class="ad-seta" aria-hidden="true">→</span>
+            <label><span>Depois (pós-teste)</span><input id="atPos" inputmode="decimal" placeholder="—"></label>
+            <div class="ad-res" id="atEvoNota">—</div>
+          </div>
+        </div>
+        <div class="ad-card">
+          <div class="ad-cab"><i data-ic="headset"></i><b>Nota da qualidade</b><small>em %, ex.: 87,50%</small></div>
+          <div class="ad-linha">
+            <label><span>Antes do treinamento</span><span class="campo-pct"><input id="atQualAntes" inputmode="decimal" placeholder="0,00"><b>%</b></span></label>
+            <span class="ad-seta" aria-hidden="true">→</span>
+            <label><span>Depois do treinamento</span><span class="campo-pct"><input id="atQualDepois" inputmode="decimal" placeholder="0,00"><b>%</b></span></label>
+            <div class="ad-res" id="atEvoQual">—</div>
+          </div>
+        </div>
+      </div>
+      <div class="grade g4" style="margin-top:14px">
+        <div class="campo c2"><span>Assimilação do conteúdo (avaliação do instrutor)</span>
+          <div class="escala" id="atAssimilacao" data-v="">
+            <button type="button" data-n="1">1</button><button type="button" data-n="2">2</button><button type="button" data-n="3">3</button><button type="button" data-n="4">4</button><button type="button" data-n="5">5</button>
+          </div><small class="dica">1 = não assimilou · 5 = domina o conteúdo</small></div>
+        <label class="campo c2"><span>Observações</span><textarea id="atObs" rows="2" placeholder="Dúvidas, combinados, pontos de atenção…"></textarea></label>
+      </div>
+    </fieldset>
+
+    <div class="barra-acoes">
+      <div id="atMsg" class="msg" role="status"></div>
+      <button type="button" class="btn btn-sec" id="atBtnLimpar">Limpar</button>
+      <button type="submit" class="btn btn-pri" id="atBtnSalvar"><i data-ic="check"></i><span id="atSalvarTxt">Salvar registro</span></button>
+    </div>
+  </form>
+</section>
+
+<section id="aba-at-dashboard" class="painel">
+  <div class="cab-pagina">
+    <div>
+      <h1>Desenvolvimento de colaboradores ativos</h1>
+      <p class="sub">Reciclagens, alinhamentos e novos conteúdos · <span id="atResumoFiltro">todos os registros</span></p>
+    </div>
+    <div class="cab-acoes"><button class="btn btn-sec" id="atBtnImprimir" type="button"><i data-ic="print"></i>Imprimir / PDF</button></div>
+  </div>
+  <div class="filtros" id="atFiltros">
+    <label>Tipo<select data-f="tipo"></select></label>
+    <label>Operação<select data-f="operacao"><option value="">Todas</option><option>Captação</option><option>Permanência</option></select></label>
+    <label>Tema<select data-f="tema"></select></label>
+    <label>Supervisor<select data-f="supervisor"></select></label>
+    <label>Instrutor<select data-f="instrutor"></select></label>
+    <label>De<input type="date" data-f="de"></label>
+    <label>até<input type="date" data-f="ate"></label>
+    <label>Situação<select data-f="status"></select></label>
+    <label>Presença<select data-f="presenca"></select></label>
+    <label>Abrangência<select data-f="abrangencia"><option value="">Toda a Bahia</option><option value="ssa">Salvador</option><option value="fora">Fora de Salvador</option></select></label>
+    <button class="btn btn-link" id="atLimparFiltros" type="button">Limpar filtros</button>
+  </div>
+  <div id="atDashVazio" class="vazio" hidden>
+    <b>Nenhum treinamento registrado.</b>
+    <p>Registre reciclagens, alinhamentos e novos conteúdos na primeira aba ou carregue dados de exemplo para conhecer o painel.</p>
+    <button class="btn btn-pri" type="button" id="atBtnExemploDash">Carregar dados de exemplo</button>
+  </div>
+  <div id="atDashConteudo">
+    <div class="kpis" id="atKpis"></div>
+    <div class="insights" id="atInsights"></div>
+    <div class="grade-dash">
+      <article class="cartao c-largo">
+        <header class="cab-card"><span class="icb" data-ic="up"></span><div><h2>Antes × depois do treinamento</h2><p>Média de quem tem as duas medições (pré e pós)</p></div></header>
+        <div class="comparativo" id="atAntesDepois"></div>
+      </article>
+      <article class="cartao">
+        <header class="cab-card"><span class="icb" data-ic="pie"></span><div><h2>Treinamentos por tipo</h2><p>Participações registradas</p></div></header>
+        <div class="graf" id="atGTipo"></div>
+      </article>
+      <article class="cartao">
+        <header class="cab-card"><span class="icb" data-ic="calendar"></span><div><h2>Participações por mês</h2><p>Quantidade de colaboradores treinados</p></div></header>
+        <div class="graf" id="atGMes"></div>
+      </article>
+      <article class="cartao">
+        <header class="cab-card"><span class="icb" data-ic="trophy"></span><div><h2>Ganho na qualidade por tema</h2><p>Pontos percentuais entre antes e depois</p></div></header>
+        <div class="graf" id="atGTemas"></div>
+      </article>
+      <article class="cartao">
+        <header class="cab-card"><span class="icb" data-ic="users"></span><div><h2>Ganho na qualidade por supervisor</h2><p>Equipes que mais evoluíram</p></div></header>
+        <div class="graf" id="atGSupervisor"></div>
+      </article>
+      <article class="cartao c-largo">
+        <header class="cab-card"><span class="icb" data-ic="scale"></span><div><h2>Captação × Permanência</h2><p>Resultados por operação</p></div></header>
+        <div class="comparativo" id="atCompOperacao"></div>
+      </article>
+      <article class="cartao c-largo">
+        <header class="cab-card cab-tabela"><span class="icb" data-ic="user"></span><div><h2>Panorama por colaborador</h2><p>Clique no cabeçalho para ordenar · clique no nome para filtrar pelo supervisor</p></div>
+          <div class="cab-acoes"><input type="search" id="atBuscaColab" placeholder="Buscar colaborador"><button class="btn btn-sec" id="atExpColab" type="button"><i data-ic="download"></i>Exportar CSV</button></div></header>
+        <div class="tabela-wrap"><table class="tabela" id="atTColab"></table></div>
+      </article>
+      <article class="cartao c-largo">
+        <header class="cab-card"><span class="icb" data-ic="clock"></span><div><h2>Pendências e acompanhamentos</h2><p>Treinamentos pendentes, reagendados, faltas e próximas ações</p></div></header>
+        <div class="tabela-wrap"><table class="tabela" id="atTPend"></table></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="aba-at-base" class="painel">
+  <div class="cab-pagina">
+    <div>
+      <h1>Base de dados · colaboradores ativos</h1>
+      <p class="sub">Registros salvos neste navegador. Exporte o backup regularmente.</p>
+    </div>
+    <div class="cab-acoes wrap">
+      <button class="btn btn-sec" id="atExpCsv" type="button"><i data-ic="download"></i>Exportar planilha (CSV)</button>
+      <button class="btn btn-sec" id="atExpJson" type="button"><i data-ic="database"></i>Baixar backup</button>
+      <label class="btn btn-sec"><i data-ic="upload"></i>Importar backup / CSV<input type="file" id="atImpArquivo" accept=".json,.csv" hidden></label>
+      <button class="btn btn-sec" id="atBtnExemplo" type="button">Dados de exemplo</button>
+      <button class="btn btn-perigo" id="atBtnApagarTudo" type="button">Apagar tudo</button>
+    </div>
+  </div>
+  <div class="barra-busca"><input type="search" id="atBuscaBase" placeholder="Buscar por colaborador, tema, supervisor ou instrutor"></div>
+  <div class="cartao"><div class="tabela-wrap"><table class="tabela" id="atTBase"></table></div></div>
+</section>
+
 </main>
 
 <footer class="rodape">Inovação Casa · Área de Treinamento</footer>
@@ -331,5 +541,6 @@
 
 <script src="assets/graficos.js"></script>
 <script src="assets/app.js"></script>
+<script src="assets/ativos.js"></script>
 </body>
 </html>

@@ -233,9 +233,9 @@ input:disabled{background:var(--sup-2);cursor:not-allowed}
   .barra-acoes{margin:0 -12px}
 }
 @media print{
-  .topo,.filtros,.cab-acoes,.rodape,.barra-acoes,#aba-cadastro,#aba-base{display:none!important}
+  .topo,.filtros,.cab-acoes,.rodape,.barra-acoes{display:none!important}
   body{background:#fff}
-  .painel{display:block!important}
+  .painel{display:none!important}.painel.ativo{display:block!important}
   .cartao,.kpi{box-shadow:none;break-inside:avoid}
   .tabela-wrap{max-height:none}
 }
@@ -494,3 +494,42 @@ input:disabled{background:var(--sup-2);cursor:not-allowed}
 .nota-calc{font-size:22px!important;font-weight:800;max-width:140px;background:#fff!important;border-style:solid!important;color:var(--marca-escura)!important;cursor:default}
 .auto-tag{font-size:10.5px;font-weight:700;color:var(--marca);background:#fff;border:1px solid var(--marca);border-radius:10px;padding:0 6px;margin-left:4px}
 .campo-pct{position:relative;display:flex;align-items:center}.campo-pct input{padding-right:30px;text-align:right;font-variant-numeric:tabular-nums}.campo-pct b{position:absolute;right:10px;color:var(--tinta-3);font-size:13px;pointer-events:none}
+
+/* ---------- áreas (Formação inicial × Colaboradores ativos) ---------- */
+.areas{display:flex;gap:6px;background:rgba(255,255,255,.06);padding:5px;border-radius:14px}
+.area{display:flex;align-items:center;gap:10px;border:0;background:transparent;color:#c8d5e6;padding:8px 14px;border-radius:10px;cursor:pointer;text-align:left;transition:background .2s,color .2s}
+.area>i{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.08);flex:none}
+.area>i .ic{width:19px;height:19px}
+.area b{display:block;font-size:14px;line-height:1.2}
+.area small{display:block;font-size:11px;opacity:.75;white-space:nowrap}
+.area:hover{background:rgba(255,255,255,.07);color:#fff}
+.area.ativa{background:#fff;color:var(--marca-escura);box-shadow:0 4px 14px rgba(0,0,0,.18)}
+.area.ativa>i{background:linear-gradient(135deg,#ffe28a,#f5c542);color:#4a3500}
+.subbarra{background:rgba(0,0,0,.18);border-top:1px solid rgba(255,255,255,.07)}
+.subbarra .abas{max-width:1320px;margin:0 auto;padding:7px 20px;background:none;border-radius:0;gap:6px}
+.subbarra .aba{padding:7px 14px}
+.subbarra .aba.ativa{background:var(--marca-acento);color:#3a2a00}
+.subbarra .aba.ativa .contador{background:#fff;color:#3a2a00}
+.seg4 button{font-size:12.5px;padding:6px 4px}
+
+/* antes × depois */
+.antes-depois{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}
+.ad-card{border:1px solid var(--borda);border-radius:12px;padding:12px 14px;background:linear-gradient(180deg,#fbfcfe,#f4f7fb)}
+.ad-cab{display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--marca-escura)}
+.ad-cab .ic{color:var(--marca);width:18px;height:18px}
+.ad-cab small{margin-left:auto;color:var(--tinta-3);font-size:11.5px}
+.ad-linha{display:grid;grid-template-columns:minmax(0,1fr) 22px minmax(0,1fr) 92px;gap:8px;align-items:end}
+.ad-linha label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--tinta-2)}
+.ad-linha input{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.ad-seta{display:grid;place-items:center;height:38px;color:var(--tinta-3)}
+.ad-seta .ic{width:18px;height:18px}
+.ad-res{height:38px;display:grid;place-items:center;border-radius:9px;background:#eef1f5;color:var(--tinta-2);font-weight:800;font-size:13.5px;font-variant-numeric:tabular-nums}
+.ad-res.sobe{background:var(--bom-bg);color:var(--bom-txt)}
+.ad-res.desce{background:var(--ruim-bg);color:var(--ruim)}
+.atrasado{color:var(--ruim)}
+#atAssimilacao{display:flex;gap:4px}
+
+@media (max-width:980px){.areas{width:100%}.area{flex:1}.antes-depois{grid-template-columns:1fr}}
+@media (max-width:620px){.area small{display:none}.area{padding:6px 8px}.area>i{width:28px;height:28px}.subbarra .abas{padding:6px 12px;overflow-x:auto}.ad-linha{grid-template-columns:1fr 1fr;}.ad-seta{display:none}.ad-res{grid-column:1/-1}}
+@media print{.subbarra{display:none!important}#aba-at-cadastro,#aba-at-base{display:none!important}}
+.ad-seta{font-size:18px;font-weight:700}

@@ -101,15 +101,23 @@ function diasUteis(a, b) {
 }
 
 /* ---------------- abas ---------------- */
+const ULTIMA = { formacao: 'cadastro', ativos: 'at-cadastro' };
 function abrirAba(nome) {
+  const area = nome.startsWith('at-') ? 'ativos' : 'formacao';
+  ULTIMA[area] = nome;
+  $$('.area').forEach(b => b.classList.toggle('ativa', b.dataset.area === area));
+  $$('.subbarra .abas').forEach(n => n.hidden = n.dataset.area !== area);
   $$('.aba').forEach(b => b.classList.toggle('ativa', b.dataset.aba === nome));
   $$('.painel').forEach(p => p.classList.toggle('ativo', p.id === 'aba-' + nome));
+  F('marcaSub').textContent = area === 'ativos' ? 'Colaboradores ativos · reciclagem e alinhamento' : 'Formação inicial · call center';
   if (nome === 'dashboard') renderDashboard();
   if (nome === 'base') renderBase();
+  document.dispatchEvent(new CustomEvent('aba-aberta', { detail: nome }));
   history.replaceState(null, '', '#' + nome);
   window.scrollTo({ top: 0 });
 }
 $$('.aba').forEach(b => b.addEventListener('click', () => abrirAba(b.dataset.aba)));
+$$('.area').forEach(b => b.addEventListener('click', () => abrirAba(ULTIMA[b.dataset.area])));
 
 /* =========================================================
    AUTOCOMPLETE
@@ -866,6 +874,9 @@ F('btnExemplo').textContent = registros.some(r => r.exemplo) ? 'Remover exemplos
 window.addEventListener('storage', () => { registros = ler(KEY, []); bairrosAprendidos = ler(KEY_B, {}); });
 const obs = () => F('btnExemplo').textContent = registros.some(r => r.exemplo) ? 'Remover exemplos' : 'Dados de exemplo';
 document.addEventListener('click', () => setTimeout(obs, 0));
+/* utilitários compartilhados com a área de colaboradores ativos */
+window.APP = { $, $$, norm, num, media, fmt, pct, esc, uid, hoje, dataBR, cmpTxt, toast, baixar, ler, gravar, autocomplete, abrirAba,
+  MUN, MUN_NORM, regiaoDe, bairrosDaCidade, aprenderBairro, csvCel, parseCSV, dataISO, formacao: () => registros };
 const inicial = (location.hash || '').slice(1);
-if (['cadastro', 'dashboard', 'base'].includes(inicial)) abrirAba(inicial);
+window.addEventListener('load', () => { if (['cadastro', 'dashboard', 'base', 'at-cadastro', 'at-dashboard', 'at-base'].includes(inicial)) abrirAba(inicial); });
 })();
