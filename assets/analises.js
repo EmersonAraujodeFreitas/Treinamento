@@ -26,6 +26,72 @@ const EXPERIENCIA_DIAS = 90;
 const sinal = (v, d = 1) => v === null || v === undefined || !isFinite(v) ? '—' : (v > 0 ? '+' : v < 0 ? '−' : '') + fmt(Math.abs(v), d);
 const somaDias = (iso, d) => { const x = new Date(iso + 'T12:00'); x.setDate(x.getDate() + d); return x.toISOString().slice(0, 10); };
 const diasEntre = (a, b) => Math.round((new Date(b + 'T12:00') - new Date(a + 'T12:00')) / 864e5);
+/* ---------------- CID-10 (carregado só quando alguém lança um atestado) ---------------- */
+let CID = null, CID_MAPA = null, cidProm = null;
+const codCID = t => String(t || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const fmtCID = t => { const c = codCID(t); return c.length > 3 ? c.slice(0, 3) + '.' + c.slice(3, 4) : c; };
+function carregarCID() {
+  if (CID) return Promise.resolve(CID);
+  if (!cidProm) cidProm = new Promise(res => {
+    const v = ((document.querySelector('script[src*="nuvem.js"]') || {}).src || '').split('?v=')[1] || '';
+    const s = document.createElement('script'); s.src = 'assets/cid10.js' + (v ? '?v=' + v : '');
+    s.onload = () => {
+      CID = String(window.CID10_TXT || '').split('\n').filter(Boolean).map(l => { const i = l.indexOf('\t'); const c = l.slice(0, i), d = l.slice(i + 1); return { c, d, ck: codCID(c), k: norm(d) }; });
+      CID_MAPA = new Map(CID.map(x => [x.ck, x])); delete window.CID10_TXT; res(CID);
+    };
+    s.onerror = () => { cidProm = null; res(null); };
+    document.head.appendChild(s);
+  });
+  return cidProm;
+}
+function buscarCID(q) {
+  q = String(q || '').trim(); if (!CID || !q) return [];
+  const c = codCID(q);
+  if (/^[A-Z]\d{0,3}$/.test(c)) return CID.filter(x => x.ck.startsWith(c)).slice(0, 40);
+  const ws = norm(q).split(/\s+/).filter(Boolean);
+  const r = CID.filter(x => ws.every(w => x.k.includes(w)));
+  r.sort((a, b) => (a.k.startsWith(ws[0]) ? 0 : 1) - (b.k.startsWith(ws[0]) ? 0 : 1) || a.c.length - b.c.length || cmpTxt(a.c, b.c));
+  return r.slice(0, 40);
+}
+/* CID: busca enquanto digita e mostra o significado ao lado (usado nos atestados) */
+function ligarCID(lista) {
+  let ativo = -1;
+  const desc = (linha, x, txt) => {
+    const d = $('.cid-desc', linha), sp = $('span', d);
+    d.classList.toggle('cid-erro', !x && !!txt);
+    sp.innerHTML = x ? esc(x.d) : txt ? 'CID não encontrado' : '<i>Digite o código ou parte do nome da doença</i>';
+    linha.dataset.desc = x ? x.d : '';
+  };
+  const mostrar = inp => {
+    const ul = inp.nextElementSibling, q = inp.value;
+    if (!CID) { ul.innerHTML = '<li class="sem">Carregando a lista de CIDs…</li>'; ul.hidden = false; carregarCID().then(() => document.activeElement === inp && mostrar(inp)); return; }
+    const r = buscarCID(q);
+    ul.innerHTML = r.length ? r.map((x, i) => `<li data-c="${x.c}" class="${i === 0 ? 'ativo' : ''}"><b>${x.c}</b> ${esc(x.d)}</li>`).join('') : `<li class="sem">${q.trim() ? 'Nenhum CID encontrado' : 'Digite o código (ex.: J11) ou parte do nome (ex.: gripe)'}</li>`;
+    ativo = r.length ? 0 : -1; ul.hidden = false;
+  };
+  const escolher = (inp, c) => { const x = CID_MAPA.get(codCID(c)); inp.value = x ? x.c : c; inp.nextElementSibling.hidden = true; desc(inp.closest('.cid-linha'), x, inp.value); };
+  lista.addEventListener('focusin', e => { if (e.target.classList.contains('a-cid')) { carregarCID(); mostrar(e.target); } });
+  lista.addEventListener('input', e => { if (e.target.classList.contains('a-cid')) mostrar(e.target); });
+  lista.addEventListener('keydown', e => {
+    const inp = e.target; if (!inp.classList.contains('a-cid')) return;
+    const ul = inp.nextElementSibling, lis = $$('li[data-c]', ul);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (!lis.length) return; ativo = Math.max(0, Math.min(lis.length - 1, ativo + (e.key === 'ArrowDown' ? 1 : -1))); lis.forEach((li, i) => li.classList.toggle('ativo', i === ativo)); lis[ativo].scrollIntoView({ block: 'nearest' }); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (!ul.hidden && lis[ativo]) escolher(inp, lis[ativo].dataset.c); }
+    else if (e.key === 'Escape') ul.hidden = true;
+  });
+  lista.addEventListener('mousedown', e => { const li = e.target.closest('.cid-auto li[data-c]'); if (li) { e.preventDefault(); escolher($('.a-cid', li.closest('.cid-auto')), li.dataset.c); } });
+  lista.addEventListener('focusout', e => {
+    const inp = e.target; if (!inp.classList.contains('a-cid')) return;
+    setTimeout(() => {
+      inp.nextElementSibling.hidden = true;
+      const v = inp.value.trim(); if (!v) { desc(inp.closest('.cid-linha'), null, ''); return; }
+      if (!CID) return;
+      let x = CID_MAPA.get(codCID(v));
+      if (!x) { const r = buscarCID(v); if (r.length === 1) x = r[0]; }
+      if (x) inp.value = x.c; desc(inp.closest('.cid-linha'), x, v);
+    }, 150);
+  });
+}
 const usuarioAtual = () => { const u = window.NUVEM && NUVEM.usuario && NUVEM.usuario(); return u ? (u.nome || u.usuario) : ''; };
 const anDe = (tipo, id) => analises.find(a => a.tipo === tipo && a.treinandoId === id);
 const mapaSup = () => { const m = new Map(); analises.forEach(a => { if (a.tipo === 'supervisao') m.set(a.treinandoId, a); }); return m; };
@@ -263,7 +329,13 @@ function montar(raiz) {
   }
   function addAt(a = {}) {
     const l = F('Ats'); const i = $$('.linha', l).length + 1;
-    l.insertAdjacentHTML('beforeend', `<div class="linha linha-at"><span class="idx">${i}</span><input class="a-data" type="date" value="${esc(a.data || '')}" title="Qual dia foi"><input class="a-dias" type="number" min="1" step="1" placeholder="Dias" value="${a.dias ?? ''}"><input class="a-obs" placeholder="Observação (opcional)" value="${esc(a.obs || '')}">${BTN_X}</div>`);
+    l.insertAdjacentHTML('beforeend', `<div class="linha linha-cid cid-linha" data-desc="${esc(a.cidDesc || '')}"><span class="idx">${i}</span>
+      <label class="mini-campo"><small>Data</small><input class="a-data" type="date" value="${esc(a.data || '')}" title="Qual dia foi"></label>
+      <label class="mini-campo"><small>Dias</small><input class="a-dias" type="number" min="1" step="1" placeholder="Dias" value="${a.dias ?? ''}"></label>
+      <div class="mini-campo"><small>CID</small><div class="cid-auto"><input class="a-cid" placeholder="Ex.: J11 ou gripe" value="${esc(a.cid || '')}" autocomplete="off" spellcheck="false"><ul class="auto-lista" hidden></ul></div></div>
+      <div class="cid-desc${a.cid && !a.cidDesc ? ' cid-erro' : ''}"><small>Significado</small><span>${a.cid ? esc(a.cidDesc || 'CID não encontrado') : '<i>Digite o código ou parte do nome da doença</i>'}</span></div>
+      ${BTN_X}
+      <input class="a-obs" placeholder="Observação (opcional)" value="${esc(a.obs || '')}"></div>`);
   }
   function frequencia() {
     if (!TR || !treinando) return;
@@ -274,7 +346,9 @@ function montar(raiz) {
   const lerNotas = () => $$('.linha', F('Notas')).map(l => ({ nome: $('.n-nome', l) ? $('.n-nome', l).value.trim() : '', data: $('.n-data', l).value, nota: num($('.n-nota', l).value) })).filter(x => x.nome || x.data || x.nota !== null);
   const lerCrit = () => { const o = {}; $$('.escala', F('Criterios')).forEach(e => { if (e.dataset.v) o[e.dataset.k] = +e.dataset.v; }); return o; };
   const lerAps = () => $$('.linha', F('Aps')).map(l => ({ data: $('.ap-data', l).value, texto: $('.ap-txt', l).value.trim() })).filter(a => a.texto);
-  const lerAts = () => TR ? $$('.linha', F('Ats')).map(l => ({ data: $('.a-data', l).value, dias: num($('.a-dias', l).value), obs: $('.a-obs', l).value.trim() })).filter(a => a.data || a.dias || a.obs) : [];
+  const lerAts = () => TR ? $$('.linha', F('Ats')).map(l => { const cid = fmtCID($('.a-cid', l).value); const x = CID_MAPA && CID_MAPA.get(codCID(cid)); return { data: $('.a-data', l).value, dias: num($('.a-dias', l).value), cid, cidDesc: x ? x.d : (l.dataset.desc || ''), obs: $('.a-obs', l).value.trim() }; }).filter(a => a.data || a.dias || a.obs || a.cid) : [];
+
+  if (TR) ligarCID(F('Ats'));
 
   function calcular() {
     const notas = lerNotas(), crit = lerCrit();
@@ -379,6 +453,7 @@ function montar(raiz) {
       if (TR) {
         if (!F('Atestado').dataset.valor) marca(F('Atestado'), 'se apresentou atestado');
         if (F('Atestado').dataset.valor === 'Sim' && !lerAts().some(a => a.data)) erros.push('dia do atestado');
+        if (F('Atestado').dataset.valor === 'Sim' && $$('.cid-erro', F('Ats')).length) erros.push('CID do atestado (código não encontrado)');
         if (F('Situacao').value !== 'Desistente' && !lerNotas().some(x => x.nota !== null)) erros.push('ao menos uma nota de prova');
       } else {
         if (!F('ExpIni').value) marca(F('ExpIni'), 'início na operação');
@@ -493,6 +568,7 @@ function montar(raiz) {
   return { listas, atualizar() { if (treinando) { const r = A.formacao().find(x => x.id === treinando.id); if (r) { treinando = r; resumo(); estadoBotoes(); calcular(); } } } };
 }
 
+A.cid = { carregar: carregarCID, buscar: buscarCID, ligar: ligarCID, fmt: fmtCID, cod: codCID, mapa: () => CID_MAPA };
 const modulos = {};
 $$('.analise').forEach(r => modulos[r.dataset.tipo] = montar(r));
 G.icones(document);

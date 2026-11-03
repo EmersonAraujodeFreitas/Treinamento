@@ -11,15 +11,16 @@
    Banco D1 ligado com o nome DB
    ========================================================= */
 
-const DATASETS_LISTA = ['formacao', 'ativos', 'analises'];
+const DATASETS_LISTA = ['formacao', 'ativos', 'analises', 'ocorrencias'];
 const VALORES = ['quadro', 'supervisores', 'bairros', 'meta'];
 const PERFIS = ['Treinamento', 'Supervisão', 'Gerência', 'Administrador'];
-const TODAS_ABAS = ['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base'];
-const TODOS_BOTOES = ['editar', 'excluir', 'exportar', 'imprimir', 'backup', 'importarBD', 'supervisores', 'exemplo', 'apagar'];
+const TODAS_ABAS = ['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar'];
+const TODOS_BOTOES = ['editar', 'excluir', 'exportar', 'imprimir', 'backup', 'importarBD', 'supervisores', 'exemplo', 'apagar', 'ocorrencias'];
+const ITENS_NOVOS = ['buscar', 'ocorrencias']; // perfis salvos antes destes itens recebem o padrão
 const PERM_PADRAO = {
-  'Treinamento': { abas: ['cadastro', 'analise-trein', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base'], botoes: ['editar', 'excluir', 'exportar', 'imprimir', 'supervisores'] },
-  'Supervisão': { abas: ['analise-sup', 'dashboard', 'at-registros', 'at-dashboard'], botoes: ['editar', 'exportar', 'imprimir'] },
-  'Gerência': { abas: ['analise-trein', 'analise-sup', 'dashboard', 'base', 'at-registros', 'at-dashboard', 'at-base'], botoes: ['exportar', 'imprimir'] }
+  'Treinamento': { abas: ['cadastro', 'analise-trein', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar'], botoes: ['editar', 'excluir', 'exportar', 'imprimir', 'supervisores', 'ocorrencias'] },
+  'Supervisão': { abas: ['analise-sup', 'dashboard', 'at-registros', 'at-dashboard', 'buscar'], botoes: ['editar', 'exportar', 'imprimir', 'ocorrencias'] },
+  'Gerência': { abas: ['analise-trein', 'analise-sup', 'dashboard', 'base', 'at-registros', 'at-dashboard', 'at-base', 'buscar'], botoes: ['exportar', 'imprimir'] }
 };
 const ADMIN_INICIAL = { usuario: 'EMERSON', nome: 'Emerson', senha: '12345678' };
 const ITERACOES = 10000; // a PIMENTA (segredo do servidor) protege as senhas mesmo se o banco vazar
@@ -84,14 +85,18 @@ async function garantirAdmin(env) {
 async function permissoesDe(env, perfil) {
   if (perfil === 'Administrador') return { abas: TODAS_ABAS, botoes: TODOS_BOTOES };
   const perfis = await lerValor(env, 'perfis', {});
-  const p = perfis[perfil] || PERM_PADRAO[perfil] || { abas: [], botoes: [] };
+  let p = perfis[perfil] || PERM_PADRAO[perfil] || { abas: [], botoes: [] };
+  if (perfis[perfil] && !(p.itens || []).includes('buscar')) {
+    const d = PERM_PADRAO[perfil] || { abas: [], botoes: [] };
+    p = { abas: [...p.abas, ...d.abas.filter(a => ITENS_NOVOS.includes(a))], botoes: [...p.botoes, ...d.botoes.filter(b => ITENS_NOVOS.includes(b))] };
+  }
   return { abas: p.abas.filter(a => TODAS_ABAS.includes(a)), botoes: p.botoes.filter(b => TODOS_BOTOES.includes(b)) };
 }
 function acessoDe(perfil, perm) {
   const tem = a => perm.abas.includes(a), bt = b => perm.botoes.includes(b);
   if (perfil === 'Administrador') {
-    return { ler: { formacao: true, ativos: true, quadro: true, supervisores: true, bairros: true, meta: true, analises: ['treinamento', 'supervisao'] },
-      escrever: { formacao: true, ativos: true, quadro: true, supervisores: true, bairros: true, meta: true, analises: ['treinamento', 'supervisao'] }, editar: true, excluir: true };
+    return { ler: { formacao: true, ativos: true, quadro: true, supervisores: true, bairros: true, meta: true, analises: ['treinamento', 'supervisao'], ocorrencias: true },
+      escrever: { formacao: true, ativos: true, quadro: true, supervisores: true, bairros: true, meta: true, analises: ['treinamento', 'supervisao'], ocorrencias: true }, editar: true, excluir: true };
   }
   const anLer = [], anEsc = [];
   if (tem('dashboard')) anLer.push('treinamento', 'supervisao');
@@ -101,13 +106,15 @@ function acessoDe(perfil, perm) {
   return {
     ler: {
       formacao: ['cadastro', 'dashboard', 'base', 'analise-trein', 'analise-sup'].some(tem),
-      ativos, quadro: tem('at-cadastro') || tem('at-base'), supervisores: ativos, bairros: true, meta: true, analises: [...new Set(anLer)]
+      ativos, quadro: tem('at-cadastro') || tem('at-base') || tem('buscar'), supervisores: ativos, bairros: true, meta: true, analises: [...new Set(anLer)],
+      ocorrencias: tem('buscar')
     },
     escrever: {
       formacao: tem('cadastro') || (tem('base') && (bt('editar') || bt('excluir') || bt('apagar') || bt('exemplo') || bt('backup'))),
       ativos: tem('at-cadastro') || (tem('at-registros') && (bt('editar') || bt('excluir') || bt('apagar') || bt('exemplo') || bt('backup'))),
       quadro: bt('importarBD'), supervisores: bt('supervisores') || tem('at-cadastro'), bairros: tem('cadastro') || tem('at-cadastro'), meta: tem('dashboard'),
-      analises: [...new Set(anEsc)]
+      analises: [...new Set(anEsc)],
+      ocorrencias: tem('buscar') && bt('ocorrencias')
     },
     editar: bt('editar'), excluir: bt('excluir') || bt('apagar')
   };
@@ -280,7 +287,7 @@ async function rotaAdmin(env, u, req, partes) {
     if (m === 'GET') return { perfis: await lerValor(env, 'perfis', {}), padrao: PERM_PADRAO };
     if (m === 'PUT') {
       const { perfis } = await req.json(); const limpo = {};
-      for (const p of ['Treinamento', 'Supervisão', 'Gerência']) if (perfis && perfis[p]) limpo[p] = { abas: (perfis[p].abas || []).filter(a => TODAS_ABAS.includes(a)), botoes: (perfis[p].botoes || []).filter(b => TODOS_BOTOES.includes(b)) };
+      for (const p of ['Treinamento', 'Supervisão', 'Gerência']) if (perfis && perfis[p]) limpo[p] = { abas: (perfis[p].abas || []).filter(a => TODAS_ABAS.includes(a)), botoes: (perfis[p].botoes || []).filter(b => TODOS_BOTOES.includes(b)), itens: [...TODAS_ABAS, ...TODOS_BOTOES] };
       await gravarValor(env, 'perfis', limpo, u.usuario); await subirVersao(env);
       await registrar(env, u.usuario, 'alterou-permissoes', '');
       return { ok: true };
@@ -292,7 +299,7 @@ async function rotaAdmin(env, u, req, partes) {
 
 /* ---------------- diagnóstico (não mostra nenhum valor secreto) ---------------- */
 async function diagnostico(env) {
-  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-10-29-v3', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
+  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-03-v4', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
   if (d.banco_ligado) {
     try { await garantirTabelas(env); } catch (e) { d.erro_criar_tabelas = String(e.message || e).slice(0, 200); }
     for (const t of ['usuarios', 'registros', 'valores', 'tentativas', 'log']) {

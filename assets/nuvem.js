@@ -12,18 +12,18 @@
 const API = String(window.TREINAMENTO_API || localStorage.getItem('inovacao_api_url') || '').replace(/\/+$/, '');
 const VERSAO_APP = document.currentScript ? (document.currentScript.src.split('?v=')[1] || '') : '';
 const DS = {
-  formacao: 'inovacao_treinamento_registros_v1', ativos: 'inovacao_treinamento_ativos_v1', analises: 'inovacao_treinamento_analises_v1',
+  formacao: 'inovacao_treinamento_registros_v1', ativos: 'inovacao_treinamento_ativos_v1', analises: 'inovacao_treinamento_analises_v1', ocorrencias: 'inovacao_treinamento_ocorrencias_v1',
   quadro: 'inovacao_treinamento_quadro_v1', supervisores: 'inovacao_treinamento_supervisores_v1', bairros: 'inovacao_treinamento_bairros_v1', meta: 'inovacao_treinamento_meta_v1'
 };
-const LISTAS = ['formacao', 'ativos', 'analises'], VALORES = ['quadro', 'supervisores', 'bairros', 'meta'];
+const LISTAS = ['formacao', 'ativos', 'analises', 'ocorrencias'], VALORES = ['quadro', 'supervisores', 'bairros', 'meta'];
 const CHAVE_DS = Object.fromEntries(Object.entries(DS).map(([k, v]) => [v, k]));
 const K_SESSAO = 'inovacao_sessao_v2', K_PEND = 'inovacao_pendentes_v2', K_MIGRADO = 'inovacao_migrado_v2';
 const PERFIS = ['Treinamento', 'Supervisão', 'Gerência', 'Administrador'];
 const ITENS = {
   abas: [['cadastro', 'Formação · Cadastro de formação'], ['analise-trein', 'Formação · Análise treinamento'], ['analise-sup', 'Formação · Análise supervisão'], ['dashboard', 'Formação · Dashboard'], ['base', 'Formação · Base de dados'],
-    ['at-cadastro', 'Ativos · Registrar treinamento'], ['at-registros', 'Ativos · Registros'], ['at-dashboard', 'Ativos · Dashboard'], ['at-base', 'Ativos · Base de dados (BD da operação)']],
+    ['at-cadastro', 'Ativos · Registrar treinamento'], ['at-registros', 'Ativos · Registros'], ['at-dashboard', 'Ativos · Dashboard'], ['at-base', 'Ativos · Base de dados (BD da operação)'], ['buscar', 'Buscar · Ficha do consultor (atestados, faltas, medidas)']],
   botoes: [['editar', 'Editar registros e análises'], ['excluir', 'Excluir registros'], ['exportar', 'Exportar planilhas (CSV)'], ['imprimir', 'Imprimir / PDF'], ['backup', 'Baixar e importar backup'],
-    ['importarBD', 'Importar BD da operação'], ['supervisores', 'Gerenciar supervisores'], ['exemplo', 'Dados de exemplo'], ['apagar', 'Apagar tudo']]
+    ['importarBD', 'Importar BD da operação'], ['supervisores', 'Gerenciar supervisores'], ['exemplo', 'Dados de exemplo'], ['apagar', 'Apagar tudo'], ['ocorrencias', 'Lançar ocorrências (atestado, falta, atraso, feedback, medida disciplinar)']]
 };
 const TODAS_ABAS = ITENS.abas.map(a => a[0]), TODOS_BOTOES = ITENS.botoes.map(b => b[0]);
 const MAX_LOTE = 30;
@@ -40,6 +40,7 @@ function toastN(t) { const el = document.getElementById('toast'); if (!el) retur
 
 /* ---------------- estado ---------------- */
 let sessao = null;             // { token, usuario:{usuario,nome,perfil}, permissoes, manter }
+let servidorDesatualizado = false;
 let versaoLocal = -1, aplicando = false, enviando = false, statusSinc = { estado: 'local', msg: '' };
 const modoLocal = () => !API;
 
@@ -135,6 +136,7 @@ function aplicarEstado(est) {
   aplicando = true;
   try {
     for (const ds of LISTAS) {
+      if (!Object.prototype.hasOwnProperty.call(est.datasets, ds)) { servidorDesatualizado = true; continue; } // servidor ainda sem este conjunto: mantém o que está no navegador
       const servidor = est.datasets[ds];
       if (servidor === null || servidor === undefined) { setOrig.call(localStorage, DS[ds], '[]'); delete p.listas[ds]; continue; }
       const mapa = new Map(servidor.map(r => [r.id, r]));
@@ -193,6 +195,7 @@ function aplicarPermissoes() {
   TODAS_ABAS.filter(a => !p.abas.includes(a)).forEach(a => { css += `.aba[data-aba="${a}"],#aba-${a}{display:none!important}`; });
   TODOS_BOTOES.filter(b => !p.botoes.includes(b)).forEach(b => { css += `[data-perm~="${b}"]{display:none!important}`; });
   if (!p.botoes.includes('excluir')) css += '[data-del]{display:none!important}';
+  if (!p.abas.includes('buscar')) css += '#btnBuscar{display:none!important}';
   if (!p.botoes.includes('editar')) css += '.btn-icone[data-edit],.btn-icone[data-ids],#buscaEdit,#atBuscaEdit,.regs-lista [data-edit],[data-treinar]{display:none!important}td.lk{pointer-events:none;color:inherit!important;font-weight:600}';
   if (!['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base'].some(a => p.abas.includes(a))) css += '.area[data-area="formacao"]{display:none!important}';
   if (!['at-cadastro', 'at-registros', 'at-dashboard', 'at-base'].some(a => p.abas.includes(a))) css += '.area[data-area="ativos"]{display:none!important}';
@@ -230,7 +233,7 @@ function encerrar(msg) {
 }
 
 /* ---------------- carregar o site ---------------- */
-const SCRIPTS = ['assets/graficos.js', 'assets/app.js', 'assets/xlsx-leitor.js', 'assets/ativos.js', 'assets/analises.js'];
+const SCRIPTS = ['assets/graficos.js', 'assets/app.js', 'assets/xlsx-leitor.js', 'assets/ativos.js', 'assets/analises.js', 'assets/buscar.js'];
 function carregarApp() {
   return new Promise(res => {
     let i = 0;
@@ -505,7 +508,7 @@ async function importarAntigo(usuario, senha) {
 /* ---------------- API para os outros módulos ---------------- */
 window.NUVEM = {
   usuario: () => sessao && { ...sessao.usuario }, ehAdmin, pode, permissoes,
-  publicarAgora: () => enviar(), status: () => statusSinc, ativo: () => !modoLocal(), abrirAdmin
+  publicarAgora: () => enviar(), status: () => statusSinc, ativo: () => !modoLocal(), abrirAdmin, servidorDesatualizado: () => servidorDesatualizado
 };
 
 document.addEventListener('DOMContentLoaded', () => {

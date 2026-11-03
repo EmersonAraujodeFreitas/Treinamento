@@ -8,8 +8,8 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/favicon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap">
-<link rel="stylesheet" href="assets/style.css?v=20261103-1500">
-<script src="assets/dados-bahia.js?v=20261103-1500"></script>
+<link rel="stylesheet" href="assets/style.css?v=20261103-1700">
+<script src="assets/dados-bahia.js?v=20261103-1700"></script>
 </head>
 <body class="bloqueado">
 
@@ -49,6 +49,7 @@
       <button class="area ativa" data-area="formacao" role="tab"><i data-ic="users"></i><span><b>Formação inicial</b><small>novas turmas</small></span></button>
       <button class="area" data-area="ativos" role="tab"><i data-ic="rocket"></i><span><b>Colaboradores ativos</b><small>reciclagem · alinhamento · novos conteúdos</small></span></button>
     </nav>
+    <button type="button" class="btn-buscar" id="btnBuscar" title="Buscar consultor: perfil, atestados, faltas, atrasos, feedbacks e medidas disciplinares"><i data-ic="search"></i><span><b>Buscar</b><small>ficha do consultor</small></span></button>
   </div>
   <div class="subbarra">
     <nav class="abas" data-area="formacao" role="tablist">
@@ -162,6 +163,9 @@
     </div>
   </form>
 </section>
+
+<!-- ===================== BUSCAR (ficha do consultor) ===================== -->
+<section id="aba-buscar" class="painel"><div id="buscarRaiz"></div></section>
 
 <!-- ===================== ANÁLISES ===================== -->
 <section id="aba-analise-trein" class="painel"><div class="analise" data-tipo="treinamento"></div></section>
@@ -640,7 +644,7 @@
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="tip" class="tip" hidden></div>
 
-<script src="assets/config.js?v=20261103-1500"></script>
-<script src="assets/nuvem.js?v=20261103-1500"></script>
+<script src="assets/config.js?v=20261103-1700"></script>
+<script src="assets/nuvem.js?v=20261103-1700"></script>
 </body>
 </html>
