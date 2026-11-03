@@ -8,8 +8,8 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/favicon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap">
-<link rel="stylesheet" href="assets/style.css?v=20261103-1400">
-<script src="assets/dados-bahia.js?v=20261103-1400"></script>
+<link rel="stylesheet" href="assets/style.css?v=20261103-1500">
+<script src="assets/dados-bahia.js?v=20261103-1500"></script>
 </head>
 <body class="bloqueado">
 
@@ -74,7 +74,7 @@
   <div class="cab-pagina">
     <div>
       <h1>Cadastro de formação inicial</h1>
-      <p class="sub">Registro do treinando na turma de habilitação ao call center. Campos com <span class="obr">*</span> são obrigatórios.</p>
+      <p class="sub">Dados básicos do colaborador na turma de habilitação ao call center. Campos com <span class="obr">*</span> são obrigatórios.</p>
     </div>
     <div class="cab-acoes">
       <span id="modoEdicao" class="selo selo-aviso" hidden><i data-ic="edit"></i><span id="modoTxt">Editando cadastro</span></span>
@@ -140,13 +140,8 @@
     </fieldset>
 
     <fieldset class="bloco">
-      <legend><span class="icb" data-ic="briefcase"></span><span class="passo">4</span> Perfil profissional</legend>
+      <legend><span class="icb" data-ic="briefcase"></span><span class="passo">4</span> Experiência e perfil profissional</legend>
       <div class="grade g4">
-        <div class="campo c2"><span>Perfil do consultor <i class="obr">*</i></span>
-          <div class="seg" id="perfil" data-valor="">
-            <button type="button" data-v="Vendas">Perfil de vendas</button>
-            <button type="button" data-v="Não vendas">Perfil de não vendas</button>
-          </div></div>
         <label class="campo"><span>Experiência em call center</span>
           <select id="experiencia"><option value="">Selecione</option><option>Nenhuma (1º emprego no setor)</option><option>Até 6 meses</option><option>6 meses a 1 ano</option><option>1 a 2 anos</option><option>Mais de 2 anos</option></select></label>
         <label class="campo"><span>Experiência anterior com vendas</span>
@@ -158,66 +153,7 @@
       </div>
     </fieldset>
 
-    <fieldset class="bloco">
-      <legend><span class="icb" data-ic="medical"></span><span class="passo">5</span> Frequência e atestados</legend>
-      <div class="grade g4">
-        <div class="campo"><span>Apresentou atestado? <i class="obr">*</i></span>
-          <div class="seg" id="atestado" data-valor="">
-            <button type="button" data-v="Sim">Sim</button>
-            <button type="button" data-v="Não">Não</button>
-          </div></div>
-        <label class="campo"><span>Faltas (dias)</span><input type="number" id="faltas" min="0" step="1" value="0"></label>
-        <label class="campo"><span>Atrasos</span><input type="number" id="atrasos" min="0" step="1" value="0"></label>
-        <label class="campo"><span>Frequência</span><input id="frequencia" readonly tabindex="-1" class="calc" placeholder="—"></label>
-      </div>
-      <div id="blocoAtestados" class="sub-bloco" hidden>
-        <div class="sub-cab"><b class="com-ic"><i data-ic="calendar"></i>Atestados apresentados</b><button type="button" class="btn btn-link" id="addAtestado"><i data-ic="plus"></i>adicionar atestado</button></div>
-        <div id="listaAtestados" class="linhas"></div>
-      </div>
-    </fieldset>
-
-    <fieldset class="bloco">
-      <legend><span class="icb" data-ic="award"></span><span class="passo">6</span> Notas e desempenho <small>escala de 0 a 10</small></legend>
-
-      <div class="sub-bloco">
-        <div class="sub-cab"><b class="com-ic"><i data-ic="exam"></i>Provas aplicadas nos dias de treinamento</b><button type="button" class="btn btn-link" id="addProva"><i data-ic="plus"></i>adicionar prova</button></div>
-        <div id="listaProvas" class="linhas"></div>
-      </div>
-
-      <div class="sub-bloco">
-        <div class="sub-cab"><b class="com-ic"><i data-ic="headset"></i>Últimas notas da qualidade (monitorias) <small class="dica">em %, ex.: 87,50%</small></b><button type="button" class="btn btn-link" id="addQualidade"><i data-ic="plus"></i>adicionar monitoria</button></div>
-        <div id="listaQualidade" class="linhas"></div>
-      </div>
-
-      <div class="sub-bloco">
-        <div class="sub-cab"><b class="com-ic"><i data-ic="star"></i>Avaliação comportamental do instrutor</b><small class="dica">1 = precisa melhorar · 5 = excelente</small></div>
-        <div class="grade g5" id="comportamental"></div>
-      </div>
-
-      <div class="resumo-notas">
-        <div class="rn"><span><i data-ic="exam"></i>Média das provas</span><b id="rMediaProvas">—</b></div>
-        <div class="rn"><span><i data-ic="headset"></i>Média da qualidade</span><b id="rMediaQual">—</b></div>
-        <div class="rn"><span><i data-ic="star"></i>Comportamental</span><b id="rComport">—</b></div>
-        <label class="rn rn-final"><span><i data-ic="award"></i>Nota final do treinamento <small class="auto-tag">automática</small></span>
-          <input id="notaFinal" readonly tabindex="-1" class="nota-calc" placeholder="—" aria-live="polite">
-          <small class="dica" id="formulaNota">Calculada automaticamente: 60% provas + 30% qualidade + 10% comportamental</small>
-        </label>
-      </div>
-    </fieldset>
-
-    <fieldset class="bloco">
-      <legend><span class="icb" data-ic="flag"></span><span class="passo">7</span> Resultado</legend>
-      <div class="grade g4">
-        <label class="campo"><span>Situação final <i class="obr">*</i></span>
-          <select id="status" required><option value="">Selecione</option><option>Em treinamento</option><option>Aprovado</option><option>Reprovado</option><option>Desistente</option><option>Desligado</option></select></label>
-        <label class="campo"><span>Data de habilitação</span><input type="date" id="dataHabilitacao"></label>
-        <label class="campo"><span>Indicado para</span>
-          <select id="indicacao"><option value="">Selecione</option><option>Captação</option><option>Permanência</option><option>Reciclagem</option><option>Não indicado</option></select></label>
-        <label class="campo"><span>Potencial de liderança</span>
-          <select id="potencial"><option value="">Selecione</option><option>Alto</option><option>Médio</option><option>Baixo</option></select></label>
-        <label class="campo c4"><span>Observações do instrutor</span><textarea id="observacoes" rows="3" placeholder="Pontos fortes, pontos de atenção, combinados…"></textarea></label>
-      </div>
-    </fieldset>
+    <div class="aviso-fluxo"><i data-ic="rocket"></i><div><b>Depois de salvar, o colaborador segue para a Análise treinamento.</b><span>Lá a analista de treinamento lança frequência, provas, avaliação comportamental e apontamentos do período e, ao fim do treinamento, confirma o envio para a Análise supervisão, que acompanha até o fim do período de experiência.</span></div></div>
 
     <div class="barra-acoes">
       <div id="msgForm" class="msg" role="status"></div>
@@ -704,7 +640,7 @@
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="tip" class="tip" hidden></div>
 
-<script src="assets/config.js?v=20261103-1400"></script>
-<script src="assets/nuvem.js?v=20261103-1400"></script>
+<script src="assets/config.js?v=20261103-1500"></script>
+<script src="assets/nuvem.js?v=20261103-1500"></script>
 </body>
 </html>
