@@ -706,3 +706,21 @@ button.quem:hover{background:rgba(255,255,255,.08)}
 .login-aviso{text-align:left;font-size:12.5px;background:var(--alerta-bg);border:1px solid #f1d28a;color:#6b4a00;border-radius:10px;padding:10px 12px}
 .login-aviso details{margin-top:6px}.login-aviso summary{cursor:pointer;font-weight:700}
 .login-aviso input{margin:8px 0}
+
+/* Topo numa linha só: as áreas encolhem em vez de empurrar o usuário para baixo */
+@media (min-width:981px){
+  .topo-in{flex-wrap:nowrap;gap:18px}
+  .marca{flex:0 0 auto}
+  .areas{flex:0 1 auto;min-width:0}
+  .area{min-width:0;flex:0 1 auto}
+  .area>span{min-width:0;overflow:hidden}
+  .area small{overflow:hidden;text-overflow:ellipsis;max-width:240px}
+  .usuario-topo{flex:0 0 auto;margin-left:0}
+}
+@media (min-width:981px) and (max-width:1280px){
+  .marca-area span{display:none}
+  .area small{max-width:150px}
+  .usuario-topo .quem{display:none}
+}
+@media (min-width:981px){.area b{white-space:nowrap}.area small{max-width:200px}}
+@media (min-width:981px) and (max-width:1180px){.area small{display:none}.nuvem-status span{display:none}}
