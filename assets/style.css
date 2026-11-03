@@ -823,3 +823,18 @@ button.quem:hover{background:rgba(255,255,255,.08)}
 @media (min-width:981px){.areas{flex:0 0 auto}.btn-buscar{flex:0 0 auto}}
 @media (min-width:981px) and (max-width:1440px){.area small,.btn-buscar small,.marca-area span,.nuvem-status span{display:none}}
 @media (min-width:981px) and (max-width:1180px){.marca-area{display:none}}
+/* filtros da lista de consultores */
+.bs-filtros{flex-wrap:nowrap;gap:10px}
+.cab-card .bs-filtros{margin-left:auto}
+.bs-sel{position:relative;display:flex;align-items:center}
+.bs-sel>.ic{position:absolute;left:10px;width:16px;height:16px;color:var(--tinta-3);pointer-events:none}
+.bs-sel select{width:250px;min-height:38px;padding:6px 30px 6px 34px;border-radius:10px;font-size:13px}
+.bs-toggle{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;white-space:nowrap;font-size:13px;font-weight:600;color:var(--tinta-2);border:1px solid var(--borda-forte);border-radius:10px;padding:0 12px;min-height:38px;background:#fff}
+.bs-toggle input{position:absolute;opacity:0;width:0;height:0;min-height:0;margin:0}
+.bs-toggle i{width:32px;height:18px;border-radius:20px;background:#cfd8e3;position:relative;transition:background .2s;flex:0 0 auto}
+.bs-toggle i::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
+.bs-toggle input:checked+i{background:var(--marca)}
+.bs-toggle input:checked+i::after{transform:translateX(14px)}
+.bs-toggle input:focus-visible+i{outline:2px solid var(--marca);outline-offset:2px}
+.bs-filtros .btn{min-height:38px;white-space:nowrap}
+@media (max-width:900px){.cab-card:has(.bs-filtros){flex-wrap:wrap}.cab-card .bs-filtros{margin-left:0;width:100%;flex-wrap:wrap}.bs-sel,.bs-sel select{flex:1;width:100%}}

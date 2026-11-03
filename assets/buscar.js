@@ -192,8 +192,8 @@ function panorama(lista, porPessoa) {
     <article class="cartao">
       <header class="cab-card"><span class="icb">${G.ic('users')}</span><div><h2>Consultores e ocorrências</h2><p>Clique no nome para abrir a ficha completa</p></div>
         <div class="bs-filtros">
-          <select id="bsSup"><option value="">Todos os supervisores</option>${sups.map(s => `<option${s === estado.sup ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select>
-          <label class="ck"><input type="checkbox" id="bsSoCom"${estado.soCom ? ' checked' : ''}> só quem tem ocorrência</label>
+          <label class="bs-sel">${G.ic('users', '')}<select id="bsSup"><option value="">Todos os supervisores</option>${sups.map(s => `<option${s === estado.sup ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
+          <label class="bs-toggle" title="Mostrar só consultores com ocorrência no período"><input type="checkbox" id="bsSoCom"${estado.soCom ? ' checked' : ''}><i></i><span>Só com ocorrência</span></label>
           <button type="button" class="btn btn-sec" id="bsExp" data-perm="exportar">${G.ic('download')}Exportar</button>
         </div></header>
       <div class="tabela-wrap"><table class="tabela bs-tab"><thead><tr>${COLS.map(([k, t, n]) => `<th data-k="${k}" class="${n ? 'dir' : ''} ${o.k === k ? 'ord' + (o.asc ? ' asc' : '') : ''}">${t}</th>`).join('')}</tr></thead><tbody>
