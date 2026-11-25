@@ -116,15 +116,16 @@ function funil(D) {
 }
 
 function porSupervisor(D, I) {
-  const m = new Map();
-  const g = nome => { const k = (nome || 'Sem supervisor').toUpperCase(); if (!m.has(k)) m.set(k, { sup: k, hc: 0, ferias: 0, desl90: 0, faltas: 0, atrasos: 0, atest: 0, diasAt: 0, medidas: 0, feedbacks: 0, trein90: 0 }); return m.get(k); };
+  const m = new Map(), FORA = 'Ex-supervisores (fora do BD atual)';
+  const atuais = new Set(D.ativosBD.map(c => norm(c.supervisor)).filter(Boolean));
+  const g = nome => { let k = (nome || 'Sem supervisor').toUpperCase(); if (nome && atuais.size && !atuais.has(norm(nome))) k = FORA; if (!m.has(k)) m.set(k, { sup: k, hc: 0, ferias: 0, desl90: 0, faltas: 0, atrasos: 0, atest: 0, diasAt: 0, medidas: 0, feedbacks: 0, trein90: 0 }); return m.get(k); };
   const supDe = new Map(); D.ativosBD.forEach(c => { supDe.set(chaveP(c.mat, c.nome), c.supervisor); supDe.set('n:' + norm(c.nome), c.supervisor); });
   D.ativosBD.forEach(c => { const x = g(c.supervisor); x.hc++; if (c.status !== 'Ativo') x.ferias++; });
   I.saidas.filter(s => (s.desligamento || s.detectadoEm || '') >= desde(90)).forEach(s => g(s.supervisor).desl90++);
   D.oc.filter(o => o.data >= desde(30)).forEach(o => { const x = g(o.supervisor || supDe.get(chaveP(o.matricula, o.nome)) || supDe.get('n:' + norm(o.nome)));
     if (o.tipo === 'Falta') x.faltas++; else if (o.tipo === 'Atraso') x.atrasos++; else if (o.tipo === 'Atestado') { x.atest++; x.diasAt += o.dias || 0; } else if (o.tipo === 'Feedback') x.feedbacks++; else x.medidas++; });
   D.regs.filter(r => r.presenca === 'Presente' && (r.data || '') >= desde(90)).forEach(r => { const s = r.supervisor || supDe.get(chaveP(r.matricula, r.nome)); if (s) g(s).trein90++; });
-  return [...m.values()].filter(x => x.hc || x.desl90 || x.faltas || x.medidas).sort((a, b) => b.hc - a.hc || cmpTxt(a.sup, b.sup));
+  return [...m.values()].filter(x => x.hc || x.desl90 || x.faltas || x.medidas).sort((a, b) => (a.sup === FORA) - (b.sup === FORA) || b.hc - a.hc || cmpTxt(a.sup, b.sup)).map(x => ({ ...x, fora: x.sup === FORA }));
 }
 
 /* ---------------- tela ---------------- */
@@ -176,7 +177,7 @@ function render() {
   <article class="cartao">
     <header class="cab-card"><span class="icb">${G.ic('users')}</span><div><h2>Visão por supervisor</h2><p>Equipe ativa no BD, desligamentos (90 dias), ocorrências (30 dias) e treinamentos (90 dias)</p></div></header>
     ${S.length ? `<div class="tabela-wrap"><table class="tabela"><thead><tr><th>Supervisor</th><th class="dir">Equipe</th><th class="dir">Férias/afast.</th><th class="dir">Desligados 90d</th><th class="dir">Faltas</th><th class="dir">Atrasos</th><th class="dir">Atestados (dias)</th><th class="dir">Advert./susp.</th><th class="dir">Feedbacks</th><th class="dir">Treinados 90d</th></tr></thead><tbody>
-      ${S.map(x => `<tr><td><b>${esc(x.sup)}</b></td><td class="dir">${x.hc}</td><td class="dir">${z(x.ferias)}</td><td class="dir">${x.desl90 ? `<span class="tag ruim">${x.desl90}</span>` : z(0)}</td><td class="dir">${z(x.faltas)}</td><td class="dir">${z(x.atrasos)}</td><td class="dir">${x.atest ? `${x.atest} (${x.diasAt})` : z(0)}</td><td class="dir">${x.medidas ? `<span class="tag alerta">${x.medidas}</span>` : z(0)}</td><td class="dir">${z(x.feedbacks)}</td><td class="dir">${x.hc ? `${x.trein90} <small class="dica">${pct(Math.min(1, x.trein90 / x.hc))}</small>` : z(x.trein90)}</td></tr>`).join('')}
+      ${S.map(x => `<tr${x.fora ? ' class="pn-fora"' : ''}><td>${x.fora ? `<span class="dica">${esc(x.sup)}</span>` : `<b>${esc(x.sup)}</b>`}</td><td class="dir">${x.hc}</td><td class="dir">${z(x.ferias)}</td><td class="dir">${x.desl90 ? `<span class="tag ruim">${x.desl90}</span>` : z(0)}</td><td class="dir">${z(x.faltas)}</td><td class="dir">${z(x.atrasos)}</td><td class="dir">${x.atest ? `${x.atest} (${x.diasAt})` : z(0)}</td><td class="dir">${x.medidas ? `<span class="tag alerta">${x.medidas}</span>` : z(0)}</td><td class="dir">${z(x.feedbacks)}</td><td class="dir">${x.hc ? `${x.trein90} <small class="dica">${pct(Math.min(1, x.trein90 / x.hc))}</small>` : z(x.trein90)}</td></tr>`).join('')}
     </tbody></table></div>` : '<p class="dica">Importe o BD da operação para ver as equipes.</p>'}
   </article>
 

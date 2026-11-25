@@ -886,3 +886,17 @@ button.quem:hover{background:rgba(255,255,255,.08)}
 .pn-perdas{margin-top:4px}
 #aba-painel .cartao+.cartao{margin-top:16px}
 @media (max-width:900px){.pn-grade{grid-template-columns:1fr}.pn-item ul{padding-left:14px}.pn-item .btn-mini{margin-left:14px}.pn-nivel{display:none}}
+.pn-fora td{background:var(--sup-2);color:var(--tinta-3)}
+/* topo com três áreas: nunca passa da largura da tela */
+@media (min-width:981px){
+  .topo-in{min-width:0;max-width:100%}
+  .areas{flex:0 1 auto;min-width:0;overflow:hidden}
+  .area{min-width:0;flex:0 1 auto}
+  .area>span{min-width:0;overflow:hidden}
+  .area b{overflow:hidden;text-overflow:ellipsis}
+  .usuario-topo{flex:0 0 auto}
+}
+@media (min-width:981px) and (max-width:1760px){.area small,.marca-area span{display:none}}
+@media (min-width:981px) and (max-width:1560px){.nuvem-status span{display:none}}
+@media (min-width:981px) and (max-width:1320px){.usuario-topo .quem{display:none}}
+@media (min-width:981px) and (max-width:1180px){.area>.ic{display:none}}

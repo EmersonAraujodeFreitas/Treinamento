@@ -170,7 +170,9 @@ function render() {
 /* ---------------- panorama de todos ---------------- */
 const COLS = [['nome', 'Consultor'], ['supervisor', 'Supervisor'], ['status', 'Status'], ['atestados', 'Atestados', 1], ['diasAtestado', 'Dias de atestado', 1], ['faltas', 'Faltas', 1], ['atrasos', 'Atrasos', 1], ['feedbacks', 'Feedbacks', 1], ['advert', 'Advertências', 1], ['susp', 'Suspensões', 1], ['diasSusp', 'Dias de suspensão', 1], ['ultimo', 'Último registro']];
 function panorama(lista, porPessoa) {
-  const sups = [...new Set(lista.map(p => p.supervisor).filter(Boolean))].sort(cmpTxt);
+  const atuais = A.supAtuais ? A.supAtuais() : null;
+  const sups = [...new Set(lista.map(p => p.supervisor).filter(s => s && (!atuais || atuais.has(norm(s)))))].sort(cmpTxt);
+  if (estado.sup && !sups.includes(estado.sup)) estado.sup = '';
   let linhas = lista.map(p => ({ p, ...resumoDe(porPessoa.get(p.k) || []), nome: p.nome, supervisor: p.supervisor || '', status: p.status || p.statusFormacao || '' }));
   const geral = resumoDe([].concat(...[...porPessoa.values()]));
   if (estado.sup) linhas = linhas.filter(l => l.supervisor === estado.sup);

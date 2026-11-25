@@ -853,10 +853,13 @@ async function importarBD(arquivo) {
   const importacoes = [{ arquivo: arquivo.name, em: comp.em, total: itens.length, ativos: itens.filter(c => c.status !== 'Desligado').length, entraram: comp.entraram.length, sairam: comp.sairam.length, desligados: comp.desligados.length }, ...(quadro.importacoes || [])].slice(0, 36);
   quadro = { itens, arquivo: arquivo.name, importadoEm: comp.em, abas: usadas.concat(usadasDesl), saidas, comparacao: comp, importacoes };
   gravar(KEY_QUADRO, quadro);
-  const antes = supervisores.length;
-  quadro.itens.forEach(c => { if (c.supervisor && !supReal(c.supervisor)) supervisores.push(c.supervisor); });
+  // a lista de supervisores passa a ser a do BD atual: quem não supervisiona mais ninguém sai da lista
+  const antes = new Set(supervisores.map(norm));
+  const atuais = [...new Map(quadro.itens.filter(c => c.status !== 'Desligado' && c.supervisor).map(c => [norm(c.supervisor), c.supervisor])).values()].sort(cmpTxt);
+  const supRemovidos = atuais.length ? supervisores.filter(s => !atuais.some(a => norm(a) === norm(s))) : [];
+  if (atuais.length) supervisores = atuais;
   salvarSup();
-  return { total: quadro.itens.length, ativos: ativosQuadro().length, desligados, novosSup: supervisores.length - antes, abas: usadas, comp };
+  return { total: quadro.itens.length, ativos: ativosQuadro().length, desligados, novosSup: atuais.filter(a => !antes.has(norm(a))).length, supRemovidos, abas: usadas, comp };
 }
 F('atImpBD').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
@@ -866,7 +869,7 @@ F('atImpBD').addEventListener('change', async e => {
     const r = await importarBD(f);
     quadro.compartilhado = false; gravar(KEY_QUADRO, quadro);
     renderQuadro(); renderBase(); renderComparacao(); renderSaidas();
-    toast(`${r.ativos} ativos no BD novo · ${r.comp.entraram.length} entraram · ${r.comp.sairam.length} saíram · ${r.comp.desligados.length} desligados`);
+    toast(`${r.ativos} ativos no BD novo · ${r.comp.entraram.length} entraram · ${r.comp.sairam.length} saíram · ${r.comp.desligados.length} desligados${r.supRemovidos.length ? ` · ${r.supRemovidos.length} supervisor(es) fora do BD saíram da lista` : ''}`);
     const ca = F('atComparacao'); if (ca) ca.scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (window.NUVEM && NUVEM.ativo()) NUVEM.publicarAgora().then(ok => { renderCompart(); toast(ok ? 'BD publicado para todos' : 'O BD não foi publicado: verifique o Administrativo → Publicação'); });
   } catch (err) { console.error(err); alert('Não foi possível importar: ' + err.message); }
@@ -938,7 +941,7 @@ function renderSaidas() {
   const foco = document.activeElement && document.activeElement.id === 'atSaiBusca';
   el.innerHTML = `<header class="cab-card cab-tabela"><span class="icb">${G.ic('down')}</span><div><h2>Desligados e saídas</h2><p>Histórico guardado a cada importação: desligados no BD, aba de desligamento e quem deixou de aparecer no arquivo</p></div>
       <div class="cab-acoes"><select id="atSaiMes"><option value="">Todos os meses</option>${meses.map(m => `<option value="${m}"${m === fm ? ' selected' : ''}>${nomeMes(m)}</option>`).join('')}</select>
-        <select id="atSaiSup"><option value="">Todos os supervisores</option>${sups.map(x => `<option${x === fs ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select>
+        <select id="atSaiSup"><option value="">Todos os supervisores</option>${sups.map(x => `<option value="${esc(x)}"${x === fs ? ' selected' : ''}>${esc(x)}${A.supAtuais() && !A.supAtuais().has(norm(x)) ? ' (fora do BD atual)' : ''}</option>`).join('')}</select>
         <input type="search" id="atSaiBusca" placeholder="Buscar" value="${esc(F('atSaiBusca') ? F('atSaiBusca').value : '')}">
         <button type="button" class="btn btn-sec" id="atSaiExp" data-perm="exportar">${G.ic('download')}Exportar</button></div></header>
     ${porMes.length ? `<div class="sai-meses">${porMes.map(([m, n]) => `<div class="sai-mes"><span style="height:${Math.round(n / max * 100)}%"><b>${n}</b></span><small>${m}</small></div>`).join('')}</div>` : ''}
@@ -954,6 +957,8 @@ function renderSaidas() {
     A.baixar(`desligados-e-saidas-${hoje()}.csv`, '﻿' + [cab, ...lin].map(x => x.map(A.csvCel).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
   };
 }
+// supervisores com equipe ativa no BD atual (null quando ainda não há BD importado)
+A.supAtuais = () => { const s = new Set(quadro.itens.filter(c => c.status !== 'Desligado' && c.supervisor).map(c => norm(c.supervisor))); return s.size ? s : null; };
 const QSEL = new Set();
 F('atTQuadro').addEventListener('change', e => {
   if (e.target.id === 'atQuadroTodos') { const q = norm(F('atBuscaQuadro').value), st = F('atQuadroStatus').value;
