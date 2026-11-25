@@ -732,6 +732,72 @@ function telefone(v) {
   const x = d.slice(-11); return x.length === 11 ? `(${x.slice(0, 2)}) ${x.slice(2, 7)}-${x.slice(7)}` : `(${x.slice(0, 2)}) ${x.slice(2, 6)}-${x.slice(6)}`;
 }
 const iesDe = v => { const t = norm(v); if (!t || t === '-') return ''; const uva = t.includes('uva'), uj = /\buja?\b|unijorge|jorge/.test(t); return uva && uj ? '' : uva ? 'UVA' : uj ? 'Unijorge' : ''; };
+// abas de desligamento: só nome, matrícula, supervisor, grupo e data (guardados no histórico de saídas)
+function lerDesligamentos(abas) {
+  const desl = new Map(), usadas = [];
+  for (const aba of abas.filter(x => /deslig/.test(norm(x.nome)))) {
+    const iCab = aba.linhas.findIndex(l => l && l.some(v => limpaCab(v) === 'nome') && l.some(v => limpaCab(v) === 'data de desligamento'));
+    if (iCab < 0) continue;
+    const cab = aba.linhas[iCab].map(limpaCab), ix = n => cab.indexOf(n);
+    const pega = (l, n) => { const i = ix(n); const v = i >= 0 ? l[i] : null; return v === null || v === undefined || String(v).trim() === '' || String(v).trim() === '-' ? null : v; };
+    const nomeAba = norm(aba.nome); let n = 0;
+    for (const l of aba.linhas.slice(iCab + 1)) {
+      if (!l) continue;
+      const nome = titulo(pega(l, 'nome')); if (!nome || nome.split(' ').length < 2) continue;
+      const mat = String(pega(l, 'matricula') ?? '').trim(), grupo = titulo(pega(l, 'grupo'));
+      desl.set(mat || norm(nome), {
+        mat, nome, idOlos: String(pega(l, 'id olos') ?? ''), supervisor: titulo(pega(l, 'supervisor')).toUpperCase(), gerente: titulo(pega(l, 'gerente')), login: String(pega(l, 'login') ?? ''),
+        grupo, ies: iesDe(pega(l, 'operacao')), operacao: /admiss|captac/.test(norm(grupo) + ' ' + nomeAba) ? 'Captação' : /servic|perman|rematric/.test(norm(grupo) + ' ' + nomeAba) ? 'Permanência' : '',
+        escala: String(pega(l, 'escala') ?? ''), desligamento: XLSXLeitor.dataExcel(pega(l, 'data de desligamento')) || '', abaDeslig: aba.nome.trim()
+      }); n++;
+    }
+    if (n) usadas.push(`${aba.nome.trim()} (${n})`);
+  }
+  return { desl, usadas };
+}
+const chaveQ = c => c.mat || norm(c.nome);
+const mesesEntre = (a, b) => { if (!a || !b) return null; const m = (new Date(b + 'T12:00') - new Date(a + 'T12:00')) / (30.44 * 864e5); return m >= 0 ? m : null; };
+const tempoTxt = m => m === null ? '' : m < 1 ? `${Math.max(1, Math.round(m * 30.44))} dia(s)` : m < 12 ? `${Math.floor(m)} mês(es)` : `${Math.floor(m / 12)} ano(s)${Math.floor(m % 12) ? ` e ${Math.floor(m % 12)} mês(es)` : ''}`;
+// compara o BD novo com o anterior e atualiza o histórico de quem saiu
+function compararBD(antigo, novos, desl, arquivo, arquivoAnterior) {
+  const hojeISO = hoje();
+  const mapAnt = new Map((antigo || []).map(c => [chaveQ(c), c])), mapNovo = new Map(novos.map(c => [chaveQ(c), c]));
+  const resumo = c => ({ nome: c.nome, mat: c.mat || '', supervisor: c.supervisor || '', grupo: c.grupo || '', ies: c.ies || '' });
+  const temAnterior = mapAnt.size > 0;
+  const entraram = temAnterior ? novos.filter(c => !mapAnt.has(chaveQ(c)) && c.status !== 'Desligado') : [];
+  const sumiram = (antigo || []).filter(c => !mapNovo.has(chaveQ(c)) && c.status !== 'Desligado');
+  const desligadosNovos = novos.filter(c => c.status === 'Desligado' && (!mapAnt.get(chaveQ(c)) || mapAnt.get(chaveQ(c)).status !== 'Desligado'));
+  const mudouSup = [], mudouStatus = [];
+  novos.forEach(c => { const a = mapAnt.get(chaveQ(c)); if (!a) return;
+    if (a.supervisor && c.supervisor && a.supervisor !== c.supervisor) mudouSup.push({ ...resumo(c), de: a.supervisor, para: c.supervisor });
+    if (a.status && c.status && a.status !== c.status && c.status !== 'Desligado') mudouStatus.push({ ...resumo(c), de: a.status, para: c.status }); });
+  // histórico de saídas (acumula entre importações)
+  const saidas = new Map((quadro.saidas || []).map(s => [s.chave, s]));
+  const registrar = (c, origem) => {
+    const k = chaveQ(c), d = desl.get(k) || {}, ant = saidas.get(k) || {};
+    const base = { ...(mapAnt.get(k) || {}), ...ant, ...Object.fromEntries(Object.entries(c).filter(([, v]) => v)), ...Object.fromEntries(Object.entries(d).filter(([, v]) => v)) };
+    const desligamento = d.desligamento || c.desligamento || ant.desligamento || '';
+    const origens = [...new Set([...(ant.origens || []), origem])];
+    saidas.set(k, {
+      chave: k, mat: base.mat || '', nome: base.nome, idOlos: base.idOlos || '', login: base.login || '', supervisor: base.supervisor || '', gerente: base.gerente || '', grupo: base.grupo || '',
+      ies: base.ies || '', operacao: base.operacao || '', escala: base.escala || '', turno: base.turno || '', admissao: base.admissao || '', nascimento: base.nascimento || '', bairro: base.bairro || '', cidade: base.cidade || '',
+      desligamento, tempoNaCasa: tempoTxt(mesesEntre(base.admissao, desligamento || hojeISO)), origens,
+      detectadoEm: ant.detectadoEm || hojeISO, arquivo: ant.arquivo || arquivo, ultimoArquivo: arquivo
+    });
+  };
+  novos.filter(c => c.status === 'Desligado').forEach(c => registrar(c, 'Status desligado no BD'));
+  desl.forEach(c => registrar(c, 'Aba de desligamento do BD'));
+  sumiram.forEach(c => registrar(c, 'Não está mais no BD'));
+  // quem voltou ativo no BD novo sai do histórico (readmissão ou correção)
+  novos.forEach(c => { const k = chaveQ(c); if (c.status !== 'Desligado' && !desl.has(k) && saidas.has(k)) saidas.delete(k); });
+  const comp = {
+    em: new Date().toISOString(), arquivo, arquivoAnterior: arquivoAnterior || '', temAnterior,
+    entraram: entraram.map(resumo), sairam: sumiram.map(c => ({ ...resumo(c), desligamento: (desl.get(chaveQ(c)) || {}).desligamento || '' })),
+    desligados: [...new Map([...desligadosNovos, ...[...desl.values()].filter(d => !(mapAnt.get(chaveQ(d)) || {}).status || mapAnt.get(chaveQ(d)).status !== 'Desligado')].map(c => [chaveQ(c), { ...resumo(c), desligamento: (desl.get(chaveQ(c)) || {}).desligamento || c.desligamento || '' }])).values()],
+    mudouSup, mudouStatus
+  };
+  return { saidas: [...saidas.values()].sort((a, b) => (b.desligamento || b.detectadoEm).localeCompare(a.desligamento || a.detectadoEm) || cmpTxt(a.nome, b.nome)), comp };
+}
 async function importarBD(arquivo) {
   const abas = await XLSXLeitor.lerPlanilha(await arquivo.arrayBuffer());
   const pessoas = new Map(); let lidas = 0, desligados = 0; const usadas = [];
@@ -779,22 +845,29 @@ async function importarBD(arquivo) {
     if (n) usadas.push(`${aba.nome.trim()} (${n})`);
   }
   if (!pessoas.size) throw new Error('Não encontrei as colunas MATRÍCULA, NOME e SUPERVISOR em nenhuma aba.');
-  quadro = { itens: [...pessoas.values()].sort((a, b) => cmpTxt(a.nome, b.nome)), arquivo: arquivo.name, importadoEm: new Date().toISOString(), abas: usadas };
+  const { desl, usadas: usadasDesl } = lerDesligamentos(abas);
+  // quem está na aba de desligamento e ainda aparece no BD GERAL fica como desligado
+  pessoas.forEach((c, k) => { const d = desl.get(k); if (d) { c.status = 'Desligado'; c.desligamento = d.desligamento || c.desligamento; } });
+  const itens = [...pessoas.values()].sort((a, b) => cmpTxt(a.nome, b.nome));
+  const { saidas, comp } = compararBD(quadro.itens, itens, desl, arquivo.name, quadro.arquivo);
+  const importacoes = [{ arquivo: arquivo.name, em: comp.em, total: itens.length, ativos: itens.filter(c => c.status !== 'Desligado').length, entraram: comp.entraram.length, sairam: comp.sairam.length, desligados: comp.desligados.length }, ...(quadro.importacoes || [])].slice(0, 36);
+  quadro = { itens, arquivo: arquivo.name, importadoEm: comp.em, abas: usadas.concat(usadasDesl), saidas, comparacao: comp, importacoes };
   gravar(KEY_QUADRO, quadro);
   const antes = supervisores.length;
   quadro.itens.forEach(c => { if (c.supervisor && !supReal(c.supervisor)) supervisores.push(c.supervisor); });
   salvarSup();
-  return { total: quadro.itens.length, ativos: ativosQuadro().length, desligados, novosSup: supervisores.length - antes, abas: usadas };
+  return { total: quadro.itens.length, ativos: ativosQuadro().length, desligados, novosSup: supervisores.length - antes, abas: usadas, comp };
 }
 F('atImpBD').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-  if (quadro.itens.length && !confirm(`Substituir o quadro atual (${quadro.itens.length} colaboradores, de ${quadro.arquivo}) pelo arquivo ${f.name}?\nOs registros de treinamento não são alterados.`)) return;
+  if (quadro.itens.length && !confirm(`Atualizar o quadro com o arquivo ${f.name}?\n\nO quadro passa a mostrar os dados do BD novo. O site compara com o BD atual (${quadro.itens.length} colaboradores, de ${quadro.arquivo}) e guarda no histórico quem saiu e quem foi desligado.\nOs registros de treinamento não são alterados.`)) return;
   try {
     toast('Lendo a planilha…');
     const r = await importarBD(f);
     quadro.compartilhado = false; gravar(KEY_QUADRO, quadro);
-    renderQuadro(); renderBase();
-    toast(`${r.ativos} colaboradores ativos importados${r.novosSup ? ` · ${r.novosSup} supervisores novos` : ''}`);
+    renderQuadro(); renderBase(); renderComparacao(); renderSaidas();
+    toast(`${r.ativos} ativos no BD novo · ${r.comp.entraram.length} entraram · ${r.comp.sairam.length} saíram · ${r.comp.desligados.length} desligados`);
+    const ca = F('atComparacao'); if (ca) ca.scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (window.NUVEM && NUVEM.ativo()) NUVEM.publicarAgora().then(ok => { renderCompart(); toast(ok ? 'BD publicado para todos' : 'O BD não foi publicado: verifique o Administrativo → Publicação'); });
   } catch (err) { console.error(err); alert('Não foi possível importar: ' + err.message); }
 });
@@ -826,6 +899,60 @@ function renderQuadro() {
     <td>${c.status !== 'Desligado' ? `<button class="btn btn-sec btn-mini" data-treinar="${esc(c.mat || c.nome)}">${G.ic('plus', '')}Registrar</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="14" class="dica">Ninguém encontrado.</td></tr>'}</tbody>`;
   F('atQuadroSel').hidden = !QSEL.size; F('atQuadroSelTxt').textContent = `${QSEL.size} consultor${QSEL.size > 1 ? 'es' : ''} selecionado${QSEL.size > 1 ? 's' : ''}`;
   renderCompart();
+}
+/* ---------------- comparação com o BD anterior e histórico de saídas ---------------- */
+function renderComparacao() {
+  const el = F('atComparacao'); if (!el) return;
+  const c = quadro.comparacao;
+  el.hidden = !quadro.itens.length;
+  if (!c) { el.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('scale')}</span><div><h2>Comparação com o BD anterior</h2><p>Aparece a partir da próxima importação do BD.</p></div></header>`; return; }
+  const lista = (arr, f) => arr.length ? `<ul class="cmp-lista">${arr.slice(0, 200).map(f).join('')}</ul>` : '<p class="dica">Ninguém.</p>';
+  const pes = x => `<b>${esc(x.nome)}</b><small>${esc([x.mat && 'Mat. ' + x.mat, x.supervisor, x.grupo].filter(Boolean).join(' · '))}</small>`;
+  const blocos = [
+    ['entraram', 'Entraram', 'plus', 'bom', c.entraram, x => `<li>${pes(x)}</li>`],
+    ['sairam', 'Saíram do BD', 'down', 'ruim', c.sairam, x => `<li>${pes(x)}${x.desligamento ? `<em>desligado em ${dataBR(x.desligamento)}</em>` : ''}</li>`],
+    ['desligados', 'Desligados no BD', 'trash', 'ruim', c.desligados, x => `<li>${pes(x)}${x.desligamento ? `<em>${dataBR(x.desligamento)}</em>` : ''}</li>`],
+    ['sup', 'Trocaram de supervisor', 'users', 'alerta', c.mudouSup, x => `<li>${pes(x)}<em>${esc(x.de)} → ${esc(x.para)}</em></li>`],
+    ['status', 'Mudaram de status', 'clock', 'alerta', c.mudouStatus, x => `<li>${pes(x)}<em>${esc(x.de)} → ${esc(x.para)}</em></li>`]
+  ];
+  const imps = quadro.importacoes || [];
+  el.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('scale')}</span><div><h2>Comparação com o BD anterior</h2>
+      <p>${esc(c.arquivo)} ${c.temAnterior ? `comparado com ${esc(c.arquivoAnterior)}` : '(primeira importação: só os desligados foram registrados)'} · ${new Date(c.em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p></div></header>
+    <div class="cmp-grade">${blocos.map(([k, t, ic, cor, arr, f]) => `<details class="cmp cmp-${cor}"${arr.length && k !== 'status' ? ' open' : ''}><summary><span class="cmp-ic">${G.ic(ic, '')}</span><span>${t}</span><b>${arr.length}</b></summary>${lista(arr, f)}</details>`).join('')}</div>
+    ${imps.length > 1 ? `<details class="cmp-hist"><summary>Histórico de importações (${imps.length})</summary><div class="tabela-wrap"><table class="tabela"><thead><tr><th>Quando</th><th>Arquivo</th><th class="dir">Colaboradores</th><th class="dir">Ativos</th><th class="dir">Entraram</th><th class="dir">Saíram</th><th class="dir">Desligados</th></tr></thead><tbody>
+      ${imps.map(i => `<tr><td>${new Date(i.em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td><td>${esc(i.arquivo)}</td><td class="dir">${i.total}</td><td class="dir">${i.ativos}</td><td class="dir">${i.entraram}</td><td class="dir">${i.sairam}</td><td class="dir">${i.desligados}</td></tr>`).join('')}</tbody></table></div></details>` : ''}`;
+}
+function renderSaidas() {
+  const el = F('atSaidas'); if (!el) return;
+  const todas = quadro.saidas || [];
+  el.hidden = !quadro.itens.length && !todas.length;
+  if (el.hidden) return;
+  const mesDe = s => (s.desligamento || s.detectadoEm || '').slice(0, 7);
+  const nomeMes = m => { if (!m) return 'Sem data'; const [a, mm] = m.split('-'); return ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][+mm - 1] + '/' + a; };
+  const meses = [...new Set(todas.map(mesDe))].sort().reverse();
+  const sups = [...new Set(todas.map(s => s.supervisor).filter(Boolean))].sort(cmpTxt);
+  const fm = F('atSaiMes') ? F('atSaiMes').value : '', fs = F('atSaiSup') ? F('atSaiSup').value : '', fq = F('atSaiBusca') ? norm(F('atSaiBusca').value) : '';
+  const rows = todas.filter(s => (!fm || mesDe(s) === fm) && (!fs || s.supervisor === fs) && (!fq || norm([s.nome, s.mat, s.login, s.grupo].join(' ')).includes(fq)));
+  const porMes = meses.slice(0, 12).reverse().map(m => [nomeMes(m), todas.filter(s => mesDe(s) === m).length]);
+  const max = Math.max(1, ...porMes.map(x => x[1]));
+  const foco = document.activeElement && document.activeElement.id === 'atSaiBusca';
+  el.innerHTML = `<header class="cab-card cab-tabela"><span class="icb">${G.ic('down')}</span><div><h2>Desligados e saídas</h2><p>Histórico guardado a cada importação: desligados no BD, aba de desligamento e quem deixou de aparecer no arquivo</p></div>
+      <div class="cab-acoes"><select id="atSaiMes"><option value="">Todos os meses</option>${meses.map(m => `<option value="${m}"${m === fm ? ' selected' : ''}>${nomeMes(m)}</option>`).join('')}</select>
+        <select id="atSaiSup"><option value="">Todos os supervisores</option>${sups.map(x => `<option${x === fs ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select>
+        <input type="search" id="atSaiBusca" placeholder="Buscar" value="${esc(F('atSaiBusca') ? F('atSaiBusca').value : '')}">
+        <button type="button" class="btn btn-sec" id="atSaiExp" data-perm="exportar">${G.ic('download')}Exportar</button></div></header>
+    ${porMes.length ? `<div class="sai-meses">${porMes.map(([m, n]) => `<div class="sai-mes"><span style="height:${Math.round(n / max * 100)}%"><b>${n}</b></span><small>${m}</small></div>`).join('')}</div>` : ''}
+    <div class="tabela-wrap"><table class="tabela"><thead><tr><th>Colaborador</th><th>Matrícula</th><th>Supervisor</th><th>Grupo</th><th>IES</th><th>Admissão</th><th>Desligamento</th><th>Tempo na casa</th><th>Como foi identificado</th><th>Identificado em</th></tr></thead><tbody>
+    ${rows.map(s => `<tr><td><b>${esc(s.nome)}</b></td><td>${esc(s.mat)}</td><td>${esc(s.supervisor)}</td><td>${esc(s.grupo)}</td><td>${esc(s.ies || '—')}</td><td>${dataBR(s.admissao) || '—'}</td><td>${s.desligamento ? dataBR(s.desligamento) : '<span class="dica">sem data no BD</span>'}</td><td>${esc(s.tempoNaCasa || '—')}</td>
+      <td>${(s.origens || []).map(o => `<span class="tag ${/aba|status/i.test(o) ? 'ruim' : 'alerta'}">${esc(o)}</span>`).join(' ')}</td><td>${dataBR(s.detectadoEm)}</td></tr>`).join('') || `<tr><td colspan="10" class="dica">${todas.length ? 'Ninguém com esses filtros.' : 'Nenhuma saída registrada ainda. Ela aparece a partir da próxima importação do BD.'}</td></tr>`}
+    </tbody></table></div>`;
+  if (foco) { const b = F('atSaiBusca'); b.focus(); b.setSelectionRange(b.value.length, b.value.length); }
+  F('atSaiMes').onchange = renderSaidas; F('atSaiSup').onchange = renderSaidas; F('atSaiBusca').oninput = renderSaidas;
+  F('atSaiExp').onclick = () => {
+    const cab = ['Colaborador', 'Matrícula', 'ID Olos', 'Login', 'Supervisor', 'Gerente', 'Grupo', 'IES', 'Operação', 'Escala', 'Admissão', 'Desligamento', 'Tempo na casa', 'Como foi identificado', 'Identificado em', 'Arquivo'];
+    const lin = rows.map(s => [s.nome, s.mat, s.idOlos, s.login, s.supervisor, s.gerente, s.grupo, s.ies, s.operacao, s.escala, dataBR(s.admissao), dataBR(s.desligamento), s.tempoNaCasa, (s.origens || []).join(' / '), dataBR(s.detectadoEm), s.arquivo]);
+    A.baixar(`desligados-e-saidas-${hoje()}.csv`, '﻿' + [cab, ...lin].map(x => x.map(A.csvCel).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
+  };
 }
 const QSEL = new Set();
 F('atTQuadro').addEventListener('change', e => {
@@ -996,10 +1123,10 @@ window.addEventListener('dados-atualizados', () => {
   F('atContBase').textContent = regs.length; rotuloExemplo(); datalists();
   if (F('aba-at-dashboard').classList.contains('ativo')) render();
   if (F('aba-at-registros').classList.contains('ativo')) renderBase();
-  if (F('aba-at-base').classList.contains('ativo')) renderQuadro();
+  if (F('aba-at-base').classList.contains('ativo')) { renderQuadro(); renderComparacao(); renderSaidas(); }
 });
 document.addEventListener('nuvem-status', () => { if (F('aba-at-base').classList.contains('ativo')) renderCompart(); });
-document.addEventListener('aba-aberta', e => { if (e.detail === 'at-dashboard') render(); if (e.detail === 'at-base') renderQuadro(); if (e.detail === 'at-registros') renderBase(); });
+document.addEventListener('aba-aberta', e => { if (e.detail === 'at-dashboard') render(); if (e.detail === 'at-base') { renderQuadro(); renderComparacao(); renderSaidas(); } if (e.detail === 'at-registros') renderBase(); });
 let rz; let larg = innerWidth;
 window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (Math.abs(innerWidth - larg) > 40 && F('aba-at-dashboard').classList.contains('ativo')) { larg = innerWidth; render(); } }, 250); });
 G.icones(document);

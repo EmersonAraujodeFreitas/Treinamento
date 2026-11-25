@@ -838,3 +838,25 @@ button.quem:hover{background:rgba(255,255,255,.08)}
 .bs-toggle input:focus-visible+i{outline:2px solid var(--marca);outline-offset:2px}
 .bs-filtros .btn{min-height:38px;white-space:nowrap}
 @media (max-width:900px){.cab-card:has(.bs-filtros){flex-wrap:wrap}.cab-card .bs-filtros{margin-left:0;width:100%;flex-wrap:wrap}.bs-sel,.bs-sel select{flex:1;width:100%}}
+
+/* ---------- comparação do BD e histórico de saídas ---------- */
+.cmp-card,#atSaidas{margin-top:16px}
+.cmp-grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;align-items:start}
+.cmp{border:1px solid var(--borda);border-radius:12px;background:#fff;overflow:hidden}
+.cmp summary{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;font-weight:700;font-size:13.5px;list-style:none}
+.cmp summary::-webkit-details-marker{display:none}
+.cmp summary b{margin-left:auto;font-size:20px}
+.cmp-ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center}.cmp-ic .ic{width:16px;height:16px}
+.cmp-bom .cmp-ic{background:var(--bom-bg);color:var(--bom-txt)}.cmp-bom summary b{color:var(--bom-txt)}
+.cmp-ruim .cmp-ic{background:var(--ruim-bg);color:var(--ruim)}.cmp-ruim summary b{color:var(--ruim)}
+.cmp-alerta .cmp-ic{background:#fff4d6;color:#9a6a00}.cmp-alerta summary b{color:#9a6a00}
+.cmp-lista{list-style:none;margin:0;padding:0 10px 10px;max-height:260px;overflow:auto;display:flex;flex-direction:column;gap:4px}
+.cmp-lista li{border-top:1px solid var(--borda);padding:6px 2px;font-size:13px;display:flex;flex-direction:column}
+.cmp-lista small{color:var(--tinta-3);font-size:11.5px}.cmp-lista em{font-style:normal;font-size:12px;color:var(--tinta-2);font-weight:600}
+.cmp .dica{padding:0 12px 10px;margin:0}
+.cmp-hist{margin-top:12px}.cmp-hist summary{cursor:pointer;font-weight:700;font-size:13px;color:var(--tinta-2);padding:6px 0}
+.sai-meses{display:flex;gap:8px;align-items:flex-end;height:120px;padding:6px 4px 0;margin-bottom:12px;overflow-x:auto}
+.sai-mes{flex:1;min-width:46px;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+.sai-mes span{width:70%;min-height:18px;background:linear-gradient(180deg,#ec835a,#d03b3b);border-radius:6px 6px 2px 2px;display:flex;justify-content:center;align-items:flex-start;color:#fff;font-size:11px;padding-top:2px}
+.sai-mes small{font-size:11px;color:var(--tinta-3);font-weight:600}
+.sai-meses{justify-content:flex-start}.sai-mes{flex:0 0 64px}.sai-mes span{width:34px}
