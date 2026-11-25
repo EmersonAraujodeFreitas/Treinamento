@@ -1004,6 +1004,13 @@ function renderQuadro() {
   renderCompart();
 }
 /* ---------------- comparação com o BD anterior e histórico de saídas ---------------- */
+// mesmo critério do quadro: headcount = não desligados com hierarquia válida (férias e afastados contam)
+function headcountDe(imp, n) {
+  const bd = Object.values(quadro.bds || {}).find(b => b.arquivo === imp.arquivo && b.periodo === imp.periodo);
+  const itens = (n === 0 ? quadro.itens : bd ? bd.itens : []).filter(vigente);
+  const ativ = itens.filter(c => /^ativ/.test(norm(c.status))).length;
+  return { hc: itens.length, ativ, afast: itens.length - ativ };
+}
 function renderComparacao() {
   const el = F('atComparacao'); if (!el) return;
   const c = quadro.comparacao;
@@ -1022,8 +1029,8 @@ function renderComparacao() {
   el.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('scale')}</span><div><h2>Comparação com o BD anterior</h2>
       <p>BD de <b>${rotuloPeriodo(c.periodo) || ''}</b> (${esc(c.arquivo)}) ${c.temAnterior ? `comparado com o BD de <b>${rotuloPeriodo(c.periodoAnterior)}</b> (${esc(c.arquivoAnterior)})` : '· primeiro BD: só os desligados foram registrados'}</p></div></header>
     <div class="cmp-grade">${blocos.map(([k, t, ic, cor, arr, f]) => `<details class="cmp cmp-${cor}"${arr.length && k !== 'status' ? ' open' : ''}><summary><span class="cmp-ic">${G.ic(ic, '')}</span><span>${t}</span><b>${arr.length}</b></summary>${lista(arr, f)}</details>`).join('')}</div>
-    ${imps.length ? `<details class="cmp-hist"${imps.length > 1 ? ' open' : ''}><summary>BDs importados (${imps.length}) · o quadro usa o mais recente</summary><div class="tabela-wrap"><table class="tabela"><thead><tr><th>Mês do BD</th><th>Arquivo</th><th>Importado em</th><th class="dir">Colaboradores</th><th class="dir">Ativos</th><th class="dir">Entraram</th><th class="dir">Saíram</th><th class="dir">Desligados</th></tr></thead><tbody>
-      ${imps.map((i, n) => `<tr${n === 0 ? ' class="cmp-atual"' : ''}><td><b>${rotuloPeriodo(i.periodo) || '—'}</b>${n === 0 ? ' <span class="tag bom">atual</span>' : ''}${i.periodo && i.doNome === false ? ' <span class="tag alerta" title="O nome do arquivo não tem o mês; foi usado o mês da importação">sem mês no nome</span>' : ''}</td><td>${esc(i.arquivo)}</td><td>${new Date(i.em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td><td class="dir">${i.total}</td><td class="dir">${i.ativos}</td><td class="dir">${i.entraram}</td><td class="dir">${i.sairam}</td><td class="dir">${i.desligados}</td></tr>`).join('')}</tbody></table></div></details>` : ''}`;
+    ${imps.length ? `<details class="cmp-hist"${imps.length > 1 ? ' open' : ''}><summary>BDs importados (${imps.length}) · o quadro usa o mais recente</summary><div class="tabela-wrap"><table class="tabela"><thead><tr><th>Mês do BD</th><th>Arquivo</th><th>Importado em</th><th class="dir">Headcount</th><th class="dir">Em atividade</th><th class="dir">Férias/afast.</th><th class="dir">Entraram</th><th class="dir">Saíram</th><th class="dir">Desligados</th></tr></thead><tbody>
+      ${imps.map((i, n) => `<tr${n === 0 ? ' class="cmp-atual"' : ''}><td><b>${rotuloPeriodo(i.periodo) || '—'}</b>${n === 0 ? ' <span class="tag bom">atual</span>' : ''}${i.periodo && i.doNome === false ? ' <span class="tag alerta" title="O nome do arquivo não tem o mês; foi usado o mês da importação">sem mês no nome</span>' : ''}</td><td>${esc(i.arquivo)}</td><td>${new Date(i.em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>${(() => { const h = headcountDe(i, n); return `<td class="dir"><b>${h.hc}</b></td><td class="dir">${h.ativ}</td><td class="dir">${h.afast}</td>`; })()}<td class="dir">${i.entraram}</td><td class="dir">${i.sairam}</td><td class="dir">${i.desligados}</td></tr>`).join('')}</tbody></table></div></details>` : ''}`;
 }
 function renderSaidas() {
   const el = F('atSaidas'); if (!el) return;
