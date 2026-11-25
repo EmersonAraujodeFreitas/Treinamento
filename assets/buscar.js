@@ -121,7 +121,6 @@ raiz.innerHTML = `
 const F = id => document.getElementById(id);
 if (A.cid) A.cid.ligar(F('ocCidLinha'));
 
-document.getElementById('btnBuscar').addEventListener('click', () => A.abrirAba('buscar'));
 F('bsPeriodo').addEventListener('change', () => { estado.periodo = F('bsPeriodo').value; render(); });
 F('bsVoltar').onclick = () => { estado.pessoa = null; F('bsNome').value = ''; render(); };
 

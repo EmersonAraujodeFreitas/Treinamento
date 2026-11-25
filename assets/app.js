@@ -132,17 +132,16 @@ function diasUteis(a, b) {
 }
 
 /* ---------------- abas ---------------- */
-const ULTIMA = { formacao: 'cadastro', ativos: 'at-cadastro' };
+const ULTIMA = { formacao: 'cadastro', ativos: 'at-cadastro', gestao: 'painel' };
+const AREA_DE = n => n === 'painel' || n === 'buscar' ? 'gestao' : n.startsWith('at-') ? 'ativos' : 'formacao';
 function abrirAba(nome) {
-  const buscar = nome === 'buscar';
-  const area = buscar ? (document.querySelector('.subbarra .abas:not([hidden])') || {}).dataset?.area || 'formacao' : nome.startsWith('at-') ? 'ativos' : 'formacao';
-  if (!buscar) ULTIMA[area] = nome;
-  $$('.area').forEach(b => b.classList.toggle('ativa', !buscar && b.dataset.area === area));
-  const bb = document.getElementById('btnBuscar'); if (bb) bb.classList.toggle('ativo', buscar);
+  const area = AREA_DE(nome), buscar = nome === 'buscar';
+  ULTIMA[area] = nome;
+  $$('.area').forEach(b => b.classList.toggle('ativa', b.dataset.area === area));
   $$('.subbarra .abas').forEach(n => n.hidden = n.dataset.area !== area);
   $$('.aba').forEach(b => b.classList.toggle('ativa', b.dataset.aba === nome));
   $$('.painel').forEach(p => p.classList.toggle('ativo', p.id === 'aba-' + nome));
-  F('marcaSub').textContent = buscar ? 'Ficha do consultor · ocorrências e perfil' : area === 'ativos' ? 'Colaboradores ativos · reciclagem e alinhamento' : 'Formação inicial · call center';
+  F('marcaSub').textContent = buscar ? 'Ficha do consultor · ocorrências e perfil' : area === 'gestao' ? 'Gestão da operação · pendências e indicadores' : area === 'ativos' ? 'Colaboradores ativos · reciclagem e alinhamento' : 'Formação inicial · call center';
   if (nome === 'dashboard') renderDashboard();
   if (nome === 'base') renderBase();
   document.dispatchEvent(new CustomEvent('aba-aberta', { detail: nome }));
@@ -838,7 +837,7 @@ document.addEventListener('click', () => setTimeout(obs, 0));
 window.APP = { $, $$, norm, num, media, fmt, pct, esc, uid, hoje, dataBR, cmpTxt, toast, baixar, ler, gravar, autocomplete, abrirAba, signoDe,
   MUN, MUN_NORM, regiaoDe, bairrosDaCidade, aprenderBairro, acharBairro, nomeProprio, csvCel, parseCSV, dataISO, formacao: () => registros, formacaoFiltrada: () => aplicaFiltros(vista().map(enriquecer)), salvarFormacao: r => { const i = registros.findIndex(x => x.id === r.id); if (i >= 0) registros[i] = r; salvarRegistros(); }, notaCalculada, efetivo, mapaSup, vista, COMPORT, idadeDe, diasUteis, meta: () => meta(), regiaoDe };
 const inicial = (location.hash || '').slice(1);
-window.addEventListener('load-app', () => { if (['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar'].includes(inicial)) abrirAba(inicial); });
+window.addEventListener('load-app', () => { if (['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar', 'painel'].includes(inicial)) abrirAba(inicial); });
 /* atualização vinda de outro usuário (sincronização) */
 window.addEventListener('dados-atualizados', () => {
   registros = ler(KEY, []); bairrosAprendidos = ler(KEY_B, {}); F('meta').value = ler(KEY_META, 7);

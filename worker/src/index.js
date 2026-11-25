@@ -14,13 +14,13 @@
 const DATASETS_LISTA = ['formacao', 'ativos', 'analises', 'ocorrencias'];
 const VALORES = ['quadro', 'supervisores', 'bairros', 'meta'];
 const PERFIS = ['Treinamento', 'Supervisão', 'Gerência', 'Administrador'];
-const TODAS_ABAS = ['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar'];
+const TODAS_ABAS = ['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar', 'painel'];
 const TODOS_BOTOES = ['editar', 'excluir', 'exportar', 'imprimir', 'backup', 'importarBD', 'supervisores', 'exemplo', 'apagar', 'ocorrencias'];
-const ITENS_NOVOS = ['buscar', 'ocorrencias']; // perfis salvos antes destes itens recebem o padrão
+const ITENS_NOVOS = ['buscar', 'ocorrencias', 'painel']; // perfis salvos antes destes itens recebem o padrão
 const PERM_PADRAO = {
-  'Treinamento': { abas: ['cadastro', 'analise-trein', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar'], botoes: ['editar', 'excluir', 'exportar', 'imprimir', 'supervisores', 'ocorrencias'] },
-  'Supervisão': { abas: ['analise-sup', 'dashboard', 'at-registros', 'at-dashboard', 'buscar'], botoes: ['editar', 'exportar', 'imprimir', 'ocorrencias'] },
-  'Gerência': { abas: ['analise-trein', 'analise-sup', 'dashboard', 'base', 'at-registros', 'at-dashboard', 'at-base', 'buscar'], botoes: ['exportar', 'imprimir'] }
+  'Treinamento': { abas: ['cadastro', 'analise-trein', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar', 'painel'], botoes: ['editar', 'excluir', 'exportar', 'imprimir', 'supervisores', 'ocorrencias'] },
+  'Supervisão': { abas: ['analise-sup', 'dashboard', 'at-registros', 'at-dashboard', 'buscar', 'painel'], botoes: ['editar', 'exportar', 'imprimir', 'ocorrencias'] },
+  'Gerência': { abas: ['analise-trein', 'analise-sup', 'dashboard', 'base', 'at-registros', 'at-dashboard', 'at-base', 'buscar', 'painel'], botoes: ['exportar', 'imprimir'] }
 };
 const ADMIN_INICIAL = { usuario: 'EMERSON', nome: 'Emerson', senha: '12345678' };
 const ITERACOES = 10000; // a PIMENTA (segredo do servidor) protege as senhas mesmo se o banco vazar
@@ -86,9 +86,10 @@ async function permissoesDe(env, perfil) {
   if (perfil === 'Administrador') return { abas: TODAS_ABAS, botoes: TODOS_BOTOES };
   const perfis = await lerValor(env, 'perfis', {});
   let p = perfis[perfil] || PERM_PADRAO[perfil] || { abas: [], botoes: [] };
-  if (perfis[perfil] && !(p.itens || []).includes('buscar')) {
-    const d = PERM_PADRAO[perfil] || { abas: [], botoes: [] };
-    p = { abas: [...p.abas, ...d.abas.filter(a => ITENS_NOVOS.includes(a))], botoes: [...p.botoes, ...d.botoes.filter(b => ITENS_NOVOS.includes(b))] };
+  if (perfis[perfil]) {
+    // itens criados depois que o perfil foi salvo recebem o padrão do perfil
+    const conhecidos = p.itens || [], novos = ITENS_NOVOS.filter(x => !conhecidos.includes(x));
+    if (novos.length) { const d = PERM_PADRAO[perfil] || { abas: [], botoes: [] }; p = { abas: [...new Set([...p.abas, ...d.abas.filter(a => novos.includes(a))])], botoes: [...new Set([...p.botoes, ...d.botoes.filter(b => novos.includes(b))])] }; }
   }
   return { abas: p.abas.filter(a => TODAS_ABAS.includes(a)), botoes: p.botoes.filter(b => TODOS_BOTOES.includes(b)) };
 }
@@ -299,7 +300,7 @@ async function rotaAdmin(env, u, req, partes) {
 
 /* ---------------- diagnóstico (não mostra nenhum valor secreto) ---------------- */
 async function diagnostico(env) {
-  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-03-v4', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
+  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-25-v5', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
   if (d.banco_ligado) {
     try { await garantirTabelas(env); } catch (e) { d.erro_criar_tabelas = String(e.message || e).slice(0, 200); }
     for (const t of ['usuarios', 'registros', 'valores', 'tentativas', 'log']) {

@@ -8,8 +8,8 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/favicon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap">
-<link rel="stylesheet" href="assets/style.css?v=20261125-1900">
-<script src="assets/dados-bahia.js?v=20261125-1900"></script>
+<link rel="stylesheet" href="assets/style.css?v=20261125-1930">
+<script src="assets/dados-bahia.js?v=20261125-1930"></script>
 </head>
 <body class="bloqueado">
 
@@ -48,8 +48,8 @@
     <nav class="areas" role="tablist" aria-label="Áreas">
       <button class="area ativa" data-area="formacao" role="tab"><i data-ic="users"></i><span><b>Formação inicial</b><small>novas turmas</small></span></button>
       <button class="area" data-area="ativos" role="tab"><i data-ic="rocket"></i><span><b>Colaboradores ativos</b><small>reciclagem · alinhamento · novos conteúdos</small></span></button>
+      <button class="area" data-area="gestao" role="tab"><i data-ic="target"></i><span><b>Gestão da operação</b><small>painel · pendências · buscar consultor</small></span></button>
     </nav>
-    <button type="button" class="btn-buscar" id="btnBuscar" title="Buscar consultor: perfil, atestados, faltas, atrasos, feedbacks e medidas disciplinares"><i data-ic="search"></i><span><b>Buscar</b><small>ficha do consultor</small></span></button>
   </div>
   <div class="subbarra">
     <nav class="abas" data-area="formacao" role="tablist">
@@ -64,6 +64,10 @@
       <button class="aba" data-aba="at-registros" role="tab"><i data-ic="clipboard"></i>Registros <span class="contador" id="atContBase">0</span></button>
       <button class="aba" data-aba="at-dashboard" role="tab"><i data-ic="chart"></i>Dashboard</button>
       <button class="aba" data-aba="at-base" role="tab"><i data-ic="database"></i>Base de dados</button>
+    </nav>
+    <nav class="abas" data-area="gestao" role="tablist" hidden>
+      <button class="aba" data-aba="painel" role="tab"><i data-ic="chart"></i>Painel da operação <span class="contador contador-alerta" id="contPend" hidden>0</span></button>
+      <button class="aba" data-aba="buscar" role="tab"><i data-ic="search"></i>Buscar consultor</button>
     </nav>
   </div>
 </header>
@@ -165,6 +169,7 @@
 </section>
 
 <!-- ===================== BUSCAR (ficha do consultor) ===================== -->
+<section id="aba-painel" class="painel"><div id="painelRaiz"></div></section>
 <section id="aba-buscar" class="painel"><div id="buscarRaiz"></div></section>
 
 <!-- ===================== ANÁLISES ===================== -->
@@ -646,7 +651,7 @@
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="tip" class="tip" hidden></div>
 
-<script src="assets/config.js?v=20261125-1900"></script>
-<script src="assets/nuvem.js?v=20261125-1900"></script>
+<script src="assets/config.js?v=20261125-1930"></script>
+<script src="assets/nuvem.js?v=20261125-1930"></script>
 </body>
 </html>

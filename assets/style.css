@@ -860,3 +860,29 @@ button.quem:hover{background:rgba(255,255,255,.08)}
 .sai-mes span{width:70%;min-height:18px;background:linear-gradient(180deg,#ec835a,#d03b3b);border-radius:6px 6px 2px 2px;display:flex;justify-content:center;align-items:flex-start;color:#fff;font-size:11px;padding-top:2px}
 .sai-mes small{font-size:11px;color:var(--tinta-3);font-weight:600}
 .sai-meses{justify-content:flex-start}.sai-mes{flex:0 0 64px}.sai-mes span{width:34px}
+
+/* ---------- Gestão da operação: painel ---------- */
+.contador-alerta{background:#ec835a;color:#fff}
+.pn-kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.pn-pend{display:flex;flex-direction:column;gap:8px}
+.pn-item{border:1px solid var(--borda);border-left:4px solid var(--c,#9aa8b8);border-radius:10px;background:#fff}
+.pn-alta{--c:#d03b3b}.pn-media{--c:#eda100}.pn-baixa{--c:#2a78d6}
+.pn-item summary{display:flex;align-items:center;gap:12px;padding:10px 12px;cursor:pointer;list-style:none}
+.pn-item summary::-webkit-details-marker{display:none}
+.pn-ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 14%,#fff);color:var(--c);flex:0 0 auto}.pn-ic .ic{width:18px;height:18px}
+.pn-tx{flex:1;min-width:0;display:flex;flex-direction:column}.pn-tx b{font-size:14px}.pn-tx small{color:var(--tinta-3);font-size:12.5px}
+.pn-nivel{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--c);border:1px solid color-mix(in srgb,var(--c) 40%,#fff);border-radius:20px;padding:2px 8px}
+.pn-n{font-size:22px;min-width:36px;text-align:right;color:var(--c)}
+.pn-item ul{list-style:none;margin:0;padding:0 14px 8px 58px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:4px 16px;max-height:280px;overflow:auto}
+.pn-item li{display:flex;flex-direction:column;border-top:1px solid var(--borda);padding:5px 0;font-size:13px}.pn-item li small{color:var(--tinta-3);font-size:11.5px}
+.pn-item .btn-mini{margin:0 0 10px 58px}
+.pn-grade{display:grid;grid-template-columns:1.2fr 1fr;gap:16px;margin:16px 0}
+.pn-grade>.cartao{min-width:0;margin:0}
+.pn-funil{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.pn-et{display:flex;align-items:center;gap:12px}
+.pn-et span{width:var(--w);min-width:180px;background:var(--c);color:#fff;border-radius:8px;padding:9px 12px;font-size:13px;font-weight:600;display:flex;gap:8px;align-items:baseline}
+.pn-et span b{font-size:20px}
+.pn-et em{font-style:normal;font-size:12px;color:var(--tinta-3);font-weight:600;white-space:nowrap}
+.pn-perdas{margin-top:4px}
+#aba-painel .cartao+.cartao{margin-top:16px}
+@media (max-width:900px){.pn-grade{grid-template-columns:1fr}.pn-item ul{padding-left:14px}.pn-item .btn-mini{margin-left:14px}.pn-nivel{display:none}}

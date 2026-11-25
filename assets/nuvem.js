@@ -21,7 +21,7 @@ const K_SESSAO = 'inovacao_sessao_v2', K_PEND = 'inovacao_pendentes_v2', K_MIGRA
 const PERFIS = ['Treinamento', 'Supervisão', 'Gerência', 'Administrador'];
 const ITENS = {
   abas: [['cadastro', 'Formação · Cadastro de formação'], ['analise-trein', 'Formação · Análise treinamento'], ['analise-sup', 'Formação · Análise supervisão'], ['dashboard', 'Formação · Dashboard'], ['base', 'Formação · Base de dados'],
-    ['at-cadastro', 'Ativos · Registrar treinamento'], ['at-registros', 'Ativos · Registros'], ['at-dashboard', 'Ativos · Dashboard'], ['at-base', 'Ativos · Base de dados (BD da operação)'], ['buscar', 'Buscar · Ficha do consultor (atestados, faltas, medidas)']],
+    ['at-cadastro', 'Ativos · Registrar treinamento'], ['at-registros', 'Ativos · Registros'], ['at-dashboard', 'Ativos · Dashboard'], ['at-base', 'Ativos · Base de dados (BD da operação)'], ['painel', 'Gestão · Painel da operação (pendências e indicadores)'], ['buscar', 'Gestão · Buscar consultor (atestados, faltas, medidas)']],
   botoes: [['editar', 'Editar registros e análises'], ['excluir', 'Excluir registros'], ['exportar', 'Exportar planilhas (CSV)'], ['imprimir', 'Imprimir / PDF'], ['backup', 'Baixar e importar backup'],
     ['importarBD', 'Importar BD da operação'], ['supervisores', 'Gerenciar supervisores'], ['exemplo', 'Dados de exemplo'], ['apagar', 'Apagar tudo'], ['ocorrencias', 'Lançar ocorrências (atestado, falta, atraso, feedback, medida disciplinar)']]
 };
@@ -195,7 +195,7 @@ function aplicarPermissoes() {
   TODAS_ABAS.filter(a => !p.abas.includes(a)).forEach(a => { css += `.aba[data-aba="${a}"],#aba-${a}{display:none!important}`; });
   TODOS_BOTOES.filter(b => !p.botoes.includes(b)).forEach(b => { css += `[data-perm~="${b}"]{display:none!important}`; });
   if (!p.botoes.includes('excluir')) css += '[data-del]{display:none!important}';
-  if (!p.abas.includes('buscar')) css += '#btnBuscar{display:none!important}';
+  if (!['painel', 'buscar'].some(a => p.abas.includes(a))) css += '.area[data-area="gestao"]{display:none!important}';
   if (!p.botoes.includes('editar')) css += '.btn-icone[data-edit],.btn-icone[data-ids],#buscaEdit,#atBuscaEdit,.regs-lista [data-edit],[data-treinar]{display:none!important}td.lk{pointer-events:none;color:inherit!important;font-weight:600}';
   if (!['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base'].some(a => p.abas.includes(a))) css += '.area[data-area="formacao"]{display:none!important}';
   if (!['at-cadastro', 'at-registros', 'at-dashboard', 'at-base'].some(a => p.abas.includes(a))) css += '.area[data-area="ativos"]{display:none!important}';
@@ -233,7 +233,7 @@ function encerrar(msg) {
 }
 
 /* ---------------- carregar o site ---------------- */
-const SCRIPTS = ['assets/graficos.js', 'assets/app.js', 'assets/xlsx-leitor.js', 'assets/ativos.js', 'assets/analises.js', 'assets/buscar.js'];
+const SCRIPTS = ['assets/graficos.js', 'assets/app.js', 'assets/xlsx-leitor.js', 'assets/ativos.js', 'assets/analises.js', 'assets/buscar.js', 'assets/painel.js'];
 function carregarApp() {
   return new Promise(res => {
     let i = 0;
