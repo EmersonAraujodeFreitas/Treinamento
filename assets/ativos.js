@@ -833,6 +833,36 @@ function migrarQuadroAntigo() {
   quadro.bds = { [chaveArq(quadro.arquivo || 'bd')]: { arquivo: quadro.arquivo || 'BD', periodo: pa.periodo, doNome: pa.doNome, em: quadro.importadoEm || new Date().toISOString(), itens: quadro.itens.map(foto), desl: [] } };
   quadro.saidasLegado = quadro.saidas || [];
 }
+// aba de gestão (BD ADM): cargo, nome e status — define quem é supervisor de verdade
+function lerGestao(abas) {
+  const out = [];
+  for (const aba of abas) {
+    const iCab = aba.linhas.findIndex(l => l && l.some(v => limpaCab(v) === 'cargo') && l.some(v => limpaCab(v) === 'nome'));
+    if (iCab < 0) continue;
+    const cab = aba.linhas[iCab].map(limpaCab), ix = n => cab.indexOf(n);
+    for (const l of aba.linhas.slice(iCab + 1)) {
+      if (!l) continue;
+      const nome = titulo(l[ix('nome')]).toUpperCase(); if (!nome || nome.split(' ').length < 2) continue;
+      out.push({ nome, cargo: titulo(l[ix('cargo')]).toUpperCase(), status: ix('status') >= 0 ? titulo(l[ix('status')]) : '' });
+    }
+  }
+  return out;
+}
+// "KELLY DOS SANTOS - TARDE" vira "KELLY DOS SANTOS" quando o nome-base é um supervisor do BD ADM
+function ajustarSupervisores(itens, gestao) {
+  const ofic = gestao.filter(g => /supervis/i.test(g.cargo) && !/deslig/i.test(g.status)).map(g => g.nome);
+  if (!ofic.length) return 0;
+  const porNorm = new Map(ofic.map(n => [norm(n), n]));
+  let fora = 0;
+  itens.forEach(c => {
+    delete c.supForaQuadro;
+    if (!c.supervisor) return;
+    let n = porNorm.get(norm(c.supervisor));
+    if (!n) { const base = norm(c.supervisor.replace(/\s+-\s+.*$/, '')); n = porNorm.get(base); if (n) { c.supervisorPlanilha = c.supervisor; c.supervisor = n; } }
+    if (!n && c.status !== 'Desligado') { c.supForaQuadro = true; fora++; }
+  });
+  return fora;
+}
 async function importarBD(arquivo) {
   const abas = await XLSXLeitor.lerPlanilha(await arquivo.arrayBuffer());
   const pessoas = new Map(); let lidas = 0, desligados = 0; const usadas = [];
@@ -881,6 +911,8 @@ async function importarBD(arquivo) {
   }
   if (!pessoas.size) throw new Error('Não encontrei as colunas MATRÍCULA, NOME e SUPERVISOR em nenhuma aba.');
   const { desl, usadas: usadasDesl } = lerDesligamentos(abas);
+  const gestao = lerGestao(abas);
+  const supForaQuadro = ajustarSupervisores([...pessoas.values()], gestao);
   // quem está na aba de desligamento e ainda aparece no BD GERAL fica como desligado
   pessoas.forEach((c, k) => { const d = desl.get(k); if (d) { c.status = 'Desligado'; c.desligamento = d.desligamento || c.desligamento; } });
   const itens = [...pessoas.values()].sort((a, b) => cmpTxt(a.nome, b.nome));
@@ -893,17 +925,18 @@ async function importarBD(arquivo) {
   const maisNovo = Object.values(bds).sort(ordemBD).pop();
   const ehAtual = maisNovo === bds[k];
   quadro = ehAtual
-    ? { ...quadro, itens, arquivo: arquivo.name, periodo, importadoEm: bds[k].em, abas: usadas.concat(usadasDesl), bds }
+    ? { ...quadro, itens, arquivo: arquivo.name, periodo, importadoEm: bds[k].em, abas: usadas.concat(usadasDesl), bds, gestao: gestao.map(g => ({ nome: g.nome, cargo: g.cargo, status: g.status })) }
     : { ...quadro, bds };
   reconstruirHistorico();
   gravar(KEY_QUADRO, quadro);
   // a lista de supervisores passa a ser a do BD atual: quem não supervisiona mais ninguém sai da lista
   const antes = new Set(supervisores.map(norm));
-  const atuais = [...new Map(quadro.itens.filter(c => c.status !== 'Desligado' && c.supervisor).map(c => [norm(c.supervisor), c.supervisor])).values()].sort(cmpTxt);
+  const oficiais = (quadro.gestao || []).filter(g => /supervis/i.test(g.cargo) && !/deslig/i.test(g.status)).map(g => g.nome);
+  const atuais = (oficiais.length ? oficiais : [...new Map(quadro.itens.filter(c => c.status !== 'Desligado' && c.supervisor && !c.supForaQuadro).map(c => [norm(c.supervisor), c.supervisor])).values()]).sort(cmpTxt);
   const supRemovidos = atuais.length ? supervisores.filter(s => !atuais.some(a => norm(a) === norm(s))) : [];
   if (atuais.length) supervisores = atuais;
   salvarSup();
-  return { arquivo: arquivo.name, periodo, doNome, mesmoArquivo, ehAtual, total: itens.length, ativos: itens.filter(c => c.status !== 'Desligado').length, desligados, novosSup: atuais.filter(a => !antes.has(norm(a))).length, supRemovidos, abas: usadas };
+  return { supForaQuadro, arquivo: arquivo.name, periodo, doNome, mesmoArquivo, ehAtual, total: itens.length, ativos: itens.filter(c => c.status !== 'Desligado').length, desligados, novosSup: atuais.filter(a => !antes.has(norm(a))).length, supRemovidos, abas: usadas };
 }
 F('atImpBD').addEventListener('change', async e => {
   const fs = [...e.target.files]; e.target.value = ''; if (!fs.length) return;
@@ -920,6 +953,7 @@ F('atImpBD').addEventListener('change', async e => {
   renderQuadro(); renderBase(); renderComparacao(); renderSaidas();
   const c = quadro.comparacao || { entraram: [], sairam: [], desligados: [] };
   const atualizados = res.filter(r => r.mesmoArquivo).length, ult = res[res.length - 1];
+  if (ult.supForaQuadro) setTimeout(() => alert(`Atenção: ${ult.supForaQuadro} consultor(es) ativo(s) estão com um supervisor que não aparece no BD ADM (quadro de gestão) deste arquivo — por exemplo, na aba BD GERAL ADMISSÃO.\n\nEles ficam marcados com "fora do BD ADM" no quadro e aparecem nas pendências do Painel. O ideal é corrigir a coluna SUPERVISOR na planilha e importar de novo.`), 400);
   toast(`${res.length} BD(s) importado(s)${atualizados ? ` · ${atualizados} só atualizado(s)` : ''} · quadro: ${quadro.arquivo} · ${c.entraram.length} entraram · ${c.sairam.length} saíram · ${c.desligados.length} desligados${ult.supRemovidos.length ? ` · ${ult.supRemovidos.length} supervisor(es) fora do BD saíram da lista` : ''}`);
   const ca = F('atComparacao'); if (ca) ca.scrollIntoView({ behavior: 'smooth', block: 'start' });
   if (window.NUVEM && NUVEM.ativo()) NUVEM.publicarAgora().then(ok => { renderCompart(); toast(ok ? 'BD publicado para todos' : 'O BD não foi publicado: verifique o Administrativo → Publicação'); });
@@ -947,7 +981,7 @@ function renderQuadro() {
   const todosMarc = rows.length && rows.filter(c => c.status !== 'Desligado').every(c => QSEL.has(c.mat || c.nome));
   F('atTQuadro').innerHTML = `<thead><tr><th class="cel-ck"><input type="checkbox" id="atQuadroTodos" title="Marcar todos da lista"${todosMarc ? ' checked' : ''}></th><th>Colaborador</th><th>Matrícula</th><th>Login</th><th>Supervisor</th><th>IES</th><th>Operação</th><th>Grupo</th><th>Status</th><th>Turno</th><th>Tempo de casa</th><th class="dir">Treinamentos</th><th>Último</th><th></th></tr></thead>
   <tbody>${rows.slice(0, 600).map(c => { const t = treinos(c).sort((a, b) => (b.data || '').localeCompare(a.data || '')); return `<tr>
-    <td class="cel-ck">${c.status !== 'Desligado' ? `<input type="checkbox" data-sel="${esc(c.mat || c.nome)}"${QSEL.has(c.mat || c.nome) ? ' checked' : ''}>` : ''}</td><td><b>${esc(c.nome)}</b></td><td>${esc(c.mat)}</td><td>${esc(c.login)}</td><td>${esc(c.supervisor)}</td><td>${esc(c.ies || '—')}</td><td>${esc(c.operacao || '—')}</td><td>${esc(c.grupo)}</td><td>${tagSt(c.status)}</td><td>${esc(c.turno)}</td><td>${esc(c.tempoCasa)}</td>
+    <td class="cel-ck">${c.status !== 'Desligado' ? `<input type="checkbox" data-sel="${esc(c.mat || c.nome)}"${QSEL.has(c.mat || c.nome) ? ' checked' : ''}>` : ''}</td><td><b>${esc(c.nome)}</b></td><td>${esc(c.mat)}</td><td>${esc(c.login)}</td><td>${esc(c.supervisor)}${c.supForaQuadro ? ' <span class="tag alerta" title="Este supervisor não está no BD ADM (quadro de gestão) deste arquivo. A coluna SUPERVISOR da planilha está desatualizada.">fora do BD ADM</span>' : ''}</td><td>${esc(c.ies || '—')}</td><td>${esc(c.operacao || '—')}</td><td>${esc(c.grupo)}</td><td>${tagSt(c.status)}</td><td>${esc(c.turno)}</td><td>${esc(c.tempoCasa)}</td>
     <td class="dir">${t.length || '—'}</td><td>${t[0] ? `${dataBR(t[0].data)} · ${esc(t[0].tema)}` : '<span class="dica">nunca treinado</span>'}</td>
     <td>${c.status !== 'Desligado' ? `<button class="btn btn-sec btn-mini" data-treinar="${esc(c.mat || c.nome)}">${G.ic('plus', '')}Registrar</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="14" class="dica">Ninguém encontrado.</td></tr>'}</tbody>`;
   F('atQuadroSel').hidden = !QSEL.size; F('atQuadroSelTxt').textContent = `${QSEL.size} consultor${QSEL.size > 1 ? 'es' : ''} selecionado${QSEL.size > 1 ? 's' : ''}`;
@@ -1008,7 +1042,7 @@ function renderSaidas() {
   };
 }
 // supervisores com equipe ativa no BD atual (null quando ainda não há BD importado)
-A.supAtuais = () => { const s = new Set(quadro.itens.filter(c => c.status !== 'Desligado' && c.supervisor).map(c => norm(c.supervisor))); return s.size ? s : null; };
+A.supAtuais = () => { const of = (quadro.gestao || []).filter(g => /supervis/i.test(g.cargo) && !/deslig/i.test(g.status)).map(g => norm(g.nome)); const s = new Set(of.length ? of : quadro.itens.filter(c => c.status !== 'Desligado' && c.supervisor && !c.supForaQuadro).map(c => norm(c.supervisor))); return s.size ? s : null; };
 const QSEL = new Set();
 F('atTQuadro').addEventListener('change', e => {
   if (e.target.id === 'atQuadroTodos') { const q = norm(F('atBuscaQuadro').value), st = F('atQuadroStatus').value;

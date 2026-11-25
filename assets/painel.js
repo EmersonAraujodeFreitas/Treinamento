@@ -69,6 +69,10 @@ function pendencias(D) {
   add('baixa', 'users', 'Consultores com mais de 90 dias de casa sem reciclagem', 'Planejar reciclagem ou alinhamento.', 'at-base',
     nunca.map(c => pessoa(c.nome, `${c.supervisor || ''} · admissão ${dataBR(c.admissao)}`)));
 
+  // consultores com supervisor que não está no quadro de gestão (BD ADM)
+  const semSup = D.ativosBD.filter(c => c.supForaQuadro);
+  add('media', 'users', 'Consultores com supervisor fora do BD ADM', 'A coluna SUPERVISOR da planilha traz alguém que não está no quadro de gestão. Corrija no BD e importe de novo.', 'at-base',
+    semSup.map(c => pessoa(c.nome, `na planilha: ${c.supervisor} · ${c.grupo || ''}`)));
   // ocorrências
   const oc30 = D.oc.filter(o => o.data >= desde(30));
   add('alta', 'scale', 'Medidas disciplinares nos últimos 30 dias', 'Acompanhar com o supervisor e alinhar plano de desenvolvimento.', 'buscar',
@@ -116,8 +120,8 @@ function funil(D) {
 }
 
 function porSupervisor(D, I) {
-  const m = new Map(), FORA = 'Ex-supervisores (fora do BD atual)';
-  const atuais = new Set(D.ativosBD.map(c => norm(c.supervisor)).filter(Boolean));
+  const m = new Map(), FORA = 'Supervisor fora do BD ADM (planilha desatualizada)';
+  const atuais = (A.supAtuais && A.supAtuais()) || new Set(D.ativosBD.map(c => norm(c.supervisor)).filter(Boolean));
   const g = nome => { let k = (nome || 'Sem supervisor').toUpperCase(); if (nome && atuais.size && !atuais.has(norm(nome))) k = FORA; if (!m.has(k)) m.set(k, { sup: k, hc: 0, ferias: 0, desl90: 0, faltas: 0, atrasos: 0, atest: 0, diasAt: 0, medidas: 0, feedbacks: 0, trein90: 0 }); return m.get(k); };
   const supDe = new Map(); D.ativosBD.forEach(c => { supDe.set(chaveP(c.mat, c.nome), c.supervisor); supDe.set('n:' + norm(c.nome), c.supervisor); });
   D.ativosBD.forEach(c => { const x = g(c.supervisor); x.hc++; if (c.status !== 'Ativo') x.ferias++; });
