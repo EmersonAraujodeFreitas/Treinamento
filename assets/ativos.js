@@ -758,45 +758,80 @@ function lerDesligamentos(abas) {
 const chaveQ = c => c.mat || norm(c.nome);
 const mesesEntre = (a, b) => { if (!a || !b) return null; const m = (new Date(b + 'T12:00') - new Date(a + 'T12:00')) / (30.44 * 864e5); return m >= 0 ? m : null; };
 const tempoTxt = m => m === null ? '' : m < 1 ? `${Math.max(1, Math.round(m * 30.44))} dia(s)` : m < 12 ? `${Math.floor(m)} mês(es)` : `${Math.floor(m / 12)} ano(s)${Math.floor(m % 12) ? ` e ${Math.floor(m % 12)} mês(es)` : ''}`;
-// compara o BD novo com o anterior e atualiza o histórico de quem saiu
-function compararBD(antigo, novos, desl, arquivo, arquivoAnterior) {
-  const hojeISO = hoje();
-  const mapAnt = new Map((antigo || []).map(c => [chaveQ(c), c])), mapNovo = new Map(novos.map(c => [chaveQ(c), c]));
+/* ---------- vários BDs: cada arquivo vira uma "foto" do mês; o quadro mostra o mais recente ---------- */
+const MESES_PT = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const MESES_CURTO = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+// mês do BD pelo nome do arquivo (ex.: BD_GERAL_OUTUBRO_UJ-UVA.xlsm → 2026-10); sem mês no nome, vale o mês da importação
+function periodoDoArquivo(nome) {
+  const t = ' ' + norm(nome).replace(/\.[a-z0-9]+$/, '').replace(/[^a-z0-9]+/g, ' ') + ' ';
+  let mes = MESES_PT.findIndex(m => t.includes(' ' + m + ' '));
+  if (mes < 0) mes = MESES_CURTO.findIndex(m => t.includes(' ' + m + ' '));
+  const agora = hoje(), anoNome = (t.match(/ (20\d\d) /) || [])[1];
+  if (mes < 0) return { periodo: agora.slice(0, 7), doNome: false };
+  let ano = anoNome || agora.slice(0, 4);
+  // sem ano no nome: um mês "no futuro" é do ano passado (ex.: DEZEMBRO importado em janeiro)
+  if (!anoNome && `${ano}-${String(mes + 1).padStart(2, '0')}` > agora.slice(0, 7)) ano = String(+ano - 1);
+  return { periodo: `${ano}-${String(mes + 1).padStart(2, '0')}`, doNome: true };
+}
+const rotuloPeriodo = p => p ? `${['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][+p.slice(5, 7) - 1]}/${p.slice(0, 4)}` : '';
+const chaveArq = nome => norm(nome).replace(/\s+/g, ' ').trim();
+const CAMPOS_FOTO = ['mat', 'nome', 'idOlos', 'login', 'supervisor', 'gerente', 'grupo', 'ies', 'operacao', 'status', 'escala', 'turno', 'admissao', 'nascimento', 'bairro', 'cidade', 'desligamento'];
+const foto = c => { const o = {}; CAMPOS_FOTO.forEach(k => { if (c[k]) o[k] = c[k]; }); return o; };
+const ordemBD = (a, b) => a.periodo.localeCompare(b.periodo) || (a.em || '').localeCompare(b.em || '');
+
+// refaz comparação e histórico de saídas percorrendo os BDs em ordem de mês (não importa a ordem em que foram subidos)
+function reconstruirHistorico() {
+  const bds = Object.values(quadro.bds || {}).sort(ordemBD);
+  const saidas = new Map((quadro.saidasLegado || []).map(x => [x.chave, x]));
   const resumo = c => ({ nome: c.nome, mat: c.mat || '', supervisor: c.supervisor || '', grupo: c.grupo || '', ies: c.ies || '' });
-  const temAnterior = mapAnt.size > 0;
-  const entraram = temAnterior ? novos.filter(c => !mapAnt.has(chaveQ(c)) && c.status !== 'Desligado') : [];
-  const sumiram = (antigo || []).filter(c => !mapNovo.has(chaveQ(c)) && c.status !== 'Desligado');
-  const desligadosNovos = novos.filter(c => c.status === 'Desligado' && (!mapAnt.get(chaveQ(c)) || mapAnt.get(chaveQ(c)).status !== 'Desligado'));
-  const mudouSup = [], mudouStatus = [];
-  novos.forEach(c => { const a = mapAnt.get(chaveQ(c)); if (!a) return;
-    if (a.supervisor && c.supervisor && a.supervisor !== c.supervisor) mudouSup.push({ ...resumo(c), de: a.supervisor, para: c.supervisor });
-    if (a.status && c.status && a.status !== c.status && c.status !== 'Desligado') mudouStatus.push({ ...resumo(c), de: a.status, para: c.status }); });
-  // histórico de saídas (acumula entre importações)
-  const saidas = new Map((quadro.saidas || []).map(s => [s.chave, s]));
-  const registrar = (c, origem) => {
-    const k = chaveQ(c), d = desl.get(k) || {}, ant = saidas.get(k) || {};
-    const base = { ...(mapAnt.get(k) || {}), ...ant, ...Object.fromEntries(Object.entries(c).filter(([, v]) => v)), ...Object.fromEntries(Object.entries(d).filter(([, v]) => v)) };
-    const desligamento = d.desligamento || c.desligamento || ant.desligamento || '';
-    const origens = [...new Set([...(ant.origens || []), origem])];
-    saidas.set(k, {
-      chave: k, mat: base.mat || '', nome: base.nome, idOlos: base.idOlos || '', login: base.login || '', supervisor: base.supervisor || '', gerente: base.gerente || '', grupo: base.grupo || '',
-      ies: base.ies || '', operacao: base.operacao || '', escala: base.escala || '', turno: base.turno || '', admissao: base.admissao || '', nascimento: base.nascimento || '', bairro: base.bairro || '', cidade: base.cidade || '',
-      desligamento, tempoNaCasa: tempoTxt(mesesEntre(base.admissao, desligamento || hojeISO)), origens,
-      detectadoEm: ant.detectadoEm || hojeISO, arquivo: ant.arquivo || arquivo, ultimoArquivo: arquivo
-    });
-  };
-  novos.filter(c => c.status === 'Desligado').forEach(c => registrar(c, 'Status desligado no BD'));
-  desl.forEach(c => registrar(c, 'Aba de desligamento do BD'));
-  sumiram.forEach(c => registrar(c, 'Não está mais no BD'));
-  // quem voltou ativo no BD novo sai do histórico (readmissão ou correção)
-  novos.forEach(c => { const k = chaveQ(c); if (c.status !== 'Desligado' && !desl.has(k) && saidas.has(k)) saidas.delete(k); });
-  const comp = {
-    em: new Date().toISOString(), arquivo, arquivoAnterior: arquivoAnterior || '', temAnterior,
-    entraram: entraram.map(resumo), sairam: sumiram.map(c => ({ ...resumo(c), desligamento: (desl.get(chaveQ(c)) || {}).desligamento || '' })),
-    desligados: [...new Map([...desligadosNovos, ...[...desl.values()].filter(d => !(mapAnt.get(chaveQ(d)) || {}).status || mapAnt.get(chaveQ(d)).status !== 'Desligado')].map(c => [chaveQ(c), { ...resumo(c), desligamento: (desl.get(chaveQ(c)) || {}).desligamento || c.desligamento || '' }])).values()],
-    mudouSup, mudouStatus
-  };
-  return { saidas: [...saidas.values()].sort((a, b) => (b.desligamento || b.detectadoEm).localeCompare(a.desligamento || a.detectadoEm) || cmpTxt(a.nome, b.nome)), comp };
+  const importacoes = []; let ant = null, comp = null;
+  for (const bd of bds) {
+    const desl = new Map((bd.desl || []).map(d => [chaveQ(d), d]));
+    const mapAnt = new Map((ant ? ant.itens : []).map(c => [chaveQ(c), c])), mapNovo = new Map(bd.itens.map(c => [chaveQ(c), c]));
+    const ref = bd.periodo + '-01';
+    const registrar = (c, origem) => {
+      const k = chaveQ(c), d = desl.get(k) || {}, velho = saidas.get(k) || {};
+      const base = { ...(mapAnt.get(k) || {}), ...velho, ...Object.fromEntries(Object.entries(c).filter(([, v]) => v)), ...Object.fromEntries(Object.entries(d).filter(([, v]) => v)) };
+      const desligamento = d.desligamento || c.desligamento || velho.desligamento || '';
+      saidas.set(k, {
+        chave: k, mat: base.mat || '', nome: base.nome, idOlos: base.idOlos || '', login: base.login || '', supervisor: base.supervisor || '', gerente: base.gerente || '', grupo: base.grupo || '',
+        ies: base.ies || '', operacao: base.operacao || '', escala: base.escala || '', turno: base.turno || '', admissao: base.admissao || '', nascimento: base.nascimento || '', bairro: base.bairro || '', cidade: base.cidade || '',
+        desligamento, tempoNaCasa: tempoTxt(mesesEntre(base.admissao, desligamento || ref)), origens: [...new Set([...(velho.origens || []), origem])],
+        detectadoEm: velho.detectadoEm || ref, identificadoNo: velho.identificadoNo || rotuloPeriodo(bd.periodo), arquivo: velho.arquivo || bd.arquivo, ultimoArquivo: bd.arquivo
+      });
+    };
+    const entraram = ant ? bd.itens.filter(c => !mapAnt.has(chaveQ(c)) && c.status !== 'Desligado') : [];
+    const sumiram = ant ? ant.itens.filter(c => !mapNovo.has(chaveQ(c)) && c.status !== 'Desligado') : [];
+    const desligadosNovos = bd.itens.filter(c => c.status === 'Desligado' && (mapAnt.get(chaveQ(c)) || {}).status !== 'Desligado');
+    const deslAba = [...desl.values()].filter(d => (mapAnt.get(chaveQ(d)) || {}).status !== 'Desligado');
+    const mudouSup = [], mudouStatus = [];
+    bd.itens.forEach(c => { const a = mapAnt.get(chaveQ(c)); if (!a) return;
+      if (a.supervisor && c.supervisor && a.supervisor !== c.supervisor) mudouSup.push({ ...resumo(c), de: a.supervisor, para: c.supervisor });
+      if (a.status && c.status && a.status !== c.status && c.status !== 'Desligado') mudouStatus.push({ ...resumo(c), de: a.status, para: c.status }); });
+    bd.itens.filter(c => c.status === 'Desligado').forEach(c => registrar(c, 'Status desligado no BD'));
+    desl.forEach(c => registrar(c, 'Aba de desligamento do BD'));
+    sumiram.forEach(c => registrar(c, 'Não está mais no BD'));
+    // voltou ativo num BD mais novo: readmissão ou correção, sai do histórico
+    bd.itens.forEach(c => { const k = chaveQ(c); if (c.status !== 'Desligado' && !desl.has(k)) saidas.delete(k); });
+    comp = {
+      em: bd.em, arquivo: bd.arquivo, periodo: bd.periodo, arquivoAnterior: ant ? ant.arquivo : '', periodoAnterior: ant ? ant.periodo : '', temAnterior: !!ant,
+      entraram: entraram.map(resumo), sairam: sumiram.map(c => ({ ...resumo(c), desligamento: (desl.get(chaveQ(c)) || {}).desligamento || '' })),
+      desligados: [...new Map([...desligadosNovos, ...deslAba].map(c => [chaveQ(c), { ...resumo(c), desligamento: (desl.get(chaveQ(c)) || {}).desligamento || c.desligamento || '' }])).values()],
+      mudouSup, mudouStatus
+    };
+    importacoes.push({ arquivo: bd.arquivo, periodo: bd.periodo, doNome: bd.doNome, em: bd.em, total: bd.itens.length, ativos: bd.itens.filter(c => c.status !== 'Desligado').length, entraram: comp.entraram.length, sairam: comp.sairam.length, desligados: comp.desligados.length });
+    ant = bd;
+  }
+  quadro.saidas = [...saidas.values()].sort((a, b) => (b.desligamento || b.detectadoEm).localeCompare(a.desligamento || a.detectadoEm) || cmpTxt(a.nome, b.nome));
+  quadro.comparacao = comp;
+  quadro.importacoes = importacoes.reverse();
+}
+// quadro importado antes desta versão: vira a primeira "foto" e o histórico que já existia é preservado
+function migrarQuadroAntigo() {
+  if (quadro.bds || !quadro.itens || !quadro.itens.length) return;
+  const pa = periodoDoArquivo(quadro.arquivo || '');
+  quadro.bds = { [chaveArq(quadro.arquivo || 'bd')]: { arquivo: quadro.arquivo || 'BD', periodo: pa.periodo, doNome: pa.doNome, em: quadro.importadoEm || new Date().toISOString(), itens: quadro.itens.map(foto), desl: [] } };
+  quadro.saidasLegado = quadro.saidas || [];
 }
 async function importarBD(arquivo) {
   const abas = await XLSXLeitor.lerPlanilha(await arquivo.arrayBuffer());
@@ -849,9 +884,18 @@ async function importarBD(arquivo) {
   // quem está na aba de desligamento e ainda aparece no BD GERAL fica como desligado
   pessoas.forEach((c, k) => { const d = desl.get(k); if (d) { c.status = 'Desligado'; c.desligamento = d.desligamento || c.desligamento; } });
   const itens = [...pessoas.values()].sort((a, b) => cmpTxt(a.nome, b.nome));
-  const { saidas, comp } = compararBD(quadro.itens, itens, desl, arquivo.name, quadro.arquivo);
-  const importacoes = [{ arquivo: arquivo.name, em: comp.em, total: itens.length, ativos: itens.filter(c => c.status !== 'Desligado').length, entraram: comp.entraram.length, sairam: comp.sairam.length, desligados: comp.desligados.length }, ...(quadro.importacoes || [])].slice(0, 36);
-  quadro = { itens, arquivo: arquivo.name, importadoEm: comp.em, abas: usadas.concat(usadasDesl), saidas, comparacao: comp, importacoes };
+  migrarQuadroAntigo();
+  const { periodo, doNome } = periodoDoArquivo(arquivo.name), k = chaveArq(arquivo.name);
+  const bds = { ...(quadro.bds || {}) };
+  const mesmoArquivo = !!bds[k];
+  bds[k] = { arquivo: arquivo.name, periodo, doNome, em: new Date().toISOString(), itens: itens.map(foto), desl: [...desl.values()].map(foto) };
+  // o quadro mostra o BD mais recente (pelo mês do nome do arquivo; no mesmo mês, o último que subiu)
+  const maisNovo = Object.values(bds).sort(ordemBD).pop();
+  const ehAtual = maisNovo === bds[k];
+  quadro = ehAtual
+    ? { ...quadro, itens, arquivo: arquivo.name, periodo, importadoEm: bds[k].em, abas: usadas.concat(usadasDesl), bds }
+    : { ...quadro, bds };
+  reconstruirHistorico();
   gravar(KEY_QUADRO, quadro);
   // a lista de supervisores passa a ser a do BD atual: quem não supervisiona mais ninguém sai da lista
   const antes = new Set(supervisores.map(norm));
@@ -859,26 +903,32 @@ async function importarBD(arquivo) {
   const supRemovidos = atuais.length ? supervisores.filter(s => !atuais.some(a => norm(a) === norm(s))) : [];
   if (atuais.length) supervisores = atuais;
   salvarSup();
-  return { total: quadro.itens.length, ativos: ativosQuadro().length, desligados, novosSup: atuais.filter(a => !antes.has(norm(a))).length, supRemovidos, abas: usadas, comp };
+  return { arquivo: arquivo.name, periodo, doNome, mesmoArquivo, ehAtual, total: itens.length, ativos: itens.filter(c => c.status !== 'Desligado').length, desligados, novosSup: atuais.filter(a => !antes.has(norm(a))).length, supRemovidos, abas: usadas };
 }
 F('atImpBD').addEventListener('change', async e => {
-  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-  if (quadro.itens.length && !confirm(`Atualizar o quadro com o arquivo ${f.name}?\n\nO quadro passa a mostrar os dados do BD novo. O site compara com o BD atual (${quadro.itens.length} colaboradores, de ${quadro.arquivo}) e guarda no histórico quem saiu e quem foi desligado.\nOs registros de treinamento não são alterados.`)) return;
+  const fs = [...e.target.files]; e.target.value = ''; if (!fs.length) return;
+  // processa em ordem de mês para a comparação ficar certa mesmo subindo o ano inteiro de uma vez
+  fs.sort((a, b) => periodoDoArquivo(a.name).periodo.localeCompare(periodoDoArquivo(b.name).periodo));
+  const lista = fs.map(f => `• ${f.name} → ${periodoDoArquivo(f.name).doNome ? rotuloPeriodo(periodoDoArquivo(f.name).periodo) : 'sem mês no nome: ' + rotuloPeriodo(periodoDoArquivo(f.name).periodo)}${(quadro.bds || {})[chaveArq(f.name)] ? ' (já importado: só atualiza os dados)' : ''}`).join('\n');
+  if ((quadro.itens.length || fs.length > 1) && !confirm(`Importar ${fs.length} BD(s)?\n\n${lista}\n\nO quadro mostra sempre o BD mais recente. Os BDs são comparados mês a mês para guardar quem saiu e quem foi desligado. Arquivo com o mesmo nome de um já importado só atualiza os dados.\nOs registros de treinamento não são alterados.`)) return;
+  const res = [];
   try {
-    toast('Lendo a planilha…');
-    const r = await importarBD(f);
-    quadro.compartilhado = false; gravar(KEY_QUADRO, quadro);
-    renderQuadro(); renderBase(); renderComparacao(); renderSaidas();
-    toast(`${r.ativos} ativos no BD novo · ${r.comp.entraram.length} entraram · ${r.comp.sairam.length} saíram · ${r.comp.desligados.length} desligados${r.supRemovidos.length ? ` · ${r.supRemovidos.length} supervisor(es) fora do BD saíram da lista` : ''}`);
-    const ca = F('atComparacao'); if (ca) ca.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    if (window.NUVEM && NUVEM.ativo()) NUVEM.publicarAgora().then(ok => { renderCompart(); toast(ok ? 'BD publicado para todos' : 'O BD não foi publicado: verifique o Administrativo → Publicação'); });
-  } catch (err) { console.error(err); alert('Não foi possível importar: ' + err.message); }
+    for (const [i, f] of fs.entries()) { toast(`Lendo ${f.name} (${i + 1} de ${fs.length})…`); res.push(await importarBD(f)); }
+  } catch (err) { console.error(err); alert(`Não foi possível importar${res.length ? ` (os ${res.length} primeiros foram importados)` : ''}: ` + err.message); }
+  if (!res.length) return;
+  quadro.compartilhado = false; gravar(KEY_QUADRO, quadro);
+  renderQuadro(); renderBase(); renderComparacao(); renderSaidas();
+  const c = quadro.comparacao || { entraram: [], sairam: [], desligados: [] };
+  const atualizados = res.filter(r => r.mesmoArquivo).length, ult = res[res.length - 1];
+  toast(`${res.length} BD(s) importado(s)${atualizados ? ` · ${atualizados} só atualizado(s)` : ''} · quadro: ${quadro.arquivo} · ${c.entraram.length} entraram · ${c.sairam.length} saíram · ${c.desligados.length} desligados${ult.supRemovidos.length ? ` · ${ult.supRemovidos.length} supervisor(es) fora do BD saíram da lista` : ''}`);
+  const ca = F('atComparacao'); if (ca) ca.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (window.NUVEM && NUVEM.ativo()) NUVEM.publicarAgora().then(ok => { renderCompart(); toast(ok ? 'BD publicado para todos' : 'O BD não foi publicado: verifique o Administrativo → Publicação'); });
 });
 function renderQuadro() {
   const tem = quadro.itens.length > 0;
   F('atQuadroResumo').hidden = !tem; F('atTQuadro').parentElement.hidden = !tem; F('atQuadroStatus').hidden = !tem; F('atBuscaQuadro').hidden = !tem;
   if (!tem) { F('atQuadroInfo').textContent = 'Importe o BD GERAL (.xlsx ou .xlsm) para trazer todos os colaboradores da operação. CPF e RG não são importados.'; return; }
-  F('atQuadroInfo').textContent = `${quadro.arquivo} · importado em ${new Date(quadro.importadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · abas: ${(quadro.abas || []).join(', ')}`;
+  F('atQuadroInfo').textContent = `${quadro.periodo ? 'BD de ' + rotuloPeriodo(quadro.periodo) + ' · ' : ''}${quadro.arquivo} · importado em ${new Date(quadro.importadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · abas: ${(quadro.abas || []).join(', ')}`;
   const sts = [...new Set(quadro.itens.map(c => c.status))].sort(cmpTxt);
   const selSt = F('atQuadroStatus'), atualSt = selSt.value;
   selSt.innerHTML = '<option value="">Todos os status</option>' + sts.map(x => `<option${x === atualSt ? ' selected' : ''}>${esc(x)}</option>`).join('');
@@ -920,10 +970,10 @@ function renderComparacao() {
   ];
   const imps = quadro.importacoes || [];
   el.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('scale')}</span><div><h2>Comparação com o BD anterior</h2>
-      <p>${esc(c.arquivo)} ${c.temAnterior ? `comparado com ${esc(c.arquivoAnterior)}` : '(primeira importação: só os desligados foram registrados)'} · ${new Date(c.em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p></div></header>
+      <p>BD de <b>${rotuloPeriodo(c.periodo) || ''}</b> (${esc(c.arquivo)}) ${c.temAnterior ? `comparado com o BD de <b>${rotuloPeriodo(c.periodoAnterior)}</b> (${esc(c.arquivoAnterior)})` : '· primeiro BD: só os desligados foram registrados'}</p></div></header>
     <div class="cmp-grade">${blocos.map(([k, t, ic, cor, arr, f]) => `<details class="cmp cmp-${cor}"${arr.length && k !== 'status' ? ' open' : ''}><summary><span class="cmp-ic">${G.ic(ic, '')}</span><span>${t}</span><b>${arr.length}</b></summary>${lista(arr, f)}</details>`).join('')}</div>
-    ${imps.length > 1 ? `<details class="cmp-hist"><summary>Histórico de importações (${imps.length})</summary><div class="tabela-wrap"><table class="tabela"><thead><tr><th>Quando</th><th>Arquivo</th><th class="dir">Colaboradores</th><th class="dir">Ativos</th><th class="dir">Entraram</th><th class="dir">Saíram</th><th class="dir">Desligados</th></tr></thead><tbody>
-      ${imps.map(i => `<tr><td>${new Date(i.em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td><td>${esc(i.arquivo)}</td><td class="dir">${i.total}</td><td class="dir">${i.ativos}</td><td class="dir">${i.entraram}</td><td class="dir">${i.sairam}</td><td class="dir">${i.desligados}</td></tr>`).join('')}</tbody></table></div></details>` : ''}`;
+    ${imps.length ? `<details class="cmp-hist"${imps.length > 1 ? ' open' : ''}><summary>BDs importados (${imps.length}) · o quadro usa o mais recente</summary><div class="tabela-wrap"><table class="tabela"><thead><tr><th>Mês do BD</th><th>Arquivo</th><th>Importado em</th><th class="dir">Colaboradores</th><th class="dir">Ativos</th><th class="dir">Entraram</th><th class="dir">Saíram</th><th class="dir">Desligados</th></tr></thead><tbody>
+      ${imps.map((i, n) => `<tr${n === 0 ? ' class="cmp-atual"' : ''}><td><b>${rotuloPeriodo(i.periodo) || '—'}</b>${n === 0 ? ' <span class="tag bom">atual</span>' : ''}${i.periodo && i.doNome === false ? ' <span class="tag alerta" title="O nome do arquivo não tem o mês; foi usado o mês da importação">sem mês no nome</span>' : ''}</td><td>${esc(i.arquivo)}</td><td>${new Date(i.em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td><td class="dir">${i.total}</td><td class="dir">${i.ativos}</td><td class="dir">${i.entraram}</td><td class="dir">${i.sairam}</td><td class="dir">${i.desligados}</td></tr>`).join('')}</tbody></table></div></details>` : ''}`;
 }
 function renderSaidas() {
   const el = F('atSaidas'); if (!el) return;
@@ -945,15 +995,15 @@ function renderSaidas() {
         <input type="search" id="atSaiBusca" placeholder="Buscar" value="${esc(F('atSaiBusca') ? F('atSaiBusca').value : '')}">
         <button type="button" class="btn btn-sec" id="atSaiExp" data-perm="exportar">${G.ic('download')}Exportar</button></div></header>
     ${porMes.length ? `<div class="sai-meses">${porMes.map(([m, n]) => `<div class="sai-mes"><span style="height:${Math.round(n / max * 100)}%"><b>${n}</b></span><small>${m}</small></div>`).join('')}</div>` : ''}
-    <div class="tabela-wrap"><table class="tabela"><thead><tr><th>Colaborador</th><th>Matrícula</th><th>Supervisor</th><th>Grupo</th><th>IES</th><th>Admissão</th><th>Desligamento</th><th>Tempo na casa</th><th>Como foi identificado</th><th>Identificado em</th></tr></thead><tbody>
+    <div class="tabela-wrap"><table class="tabela"><thead><tr><th>Colaborador</th><th>Matrícula</th><th>Supervisor</th><th>Grupo</th><th>IES</th><th>Admissão</th><th>Desligamento</th><th>Tempo na casa</th><th>Como foi identificado</th><th>Identificado no BD de</th></tr></thead><tbody>
     ${rows.map(s => `<tr><td><b>${esc(s.nome)}</b></td><td>${esc(s.mat)}</td><td>${esc(s.supervisor)}</td><td>${esc(s.grupo)}</td><td>${esc(s.ies || '—')}</td><td>${dataBR(s.admissao) || '—'}</td><td>${s.desligamento ? dataBR(s.desligamento) : '<span class="dica">sem data no BD</span>'}</td><td>${esc(s.tempoNaCasa || '—')}</td>
-      <td>${(s.origens || []).map(o => `<span class="tag ${/aba|status/i.test(o) ? 'ruim' : 'alerta'}">${esc(o)}</span>`).join(' ')}</td><td>${dataBR(s.detectadoEm)}</td></tr>`).join('') || `<tr><td colspan="10" class="dica">${todas.length ? 'Ninguém com esses filtros.' : 'Nenhuma saída registrada ainda. Ela aparece a partir da próxima importação do BD.'}</td></tr>`}
+      <td>${(s.origens || []).map(o => `<span class="tag ${/aba|status/i.test(o) ? 'ruim' : 'alerta'}">${esc(o)}</span>`).join(' ')}</td><td>${esc(s.identificadoNo || dataBR(s.detectadoEm))}</td></tr>`).join('') || `<tr><td colspan="10" class="dica">${todas.length ? 'Ninguém com esses filtros.' : 'Nenhuma saída registrada ainda. Importe os BDs dos meses anteriores para montar o histórico.'}</td></tr>`}
     </tbody></table></div>`;
   if (foco) { const b = F('atSaiBusca'); b.focus(); b.setSelectionRange(b.value.length, b.value.length); }
   F('atSaiMes').onchange = renderSaidas; F('atSaiSup').onchange = renderSaidas; F('atSaiBusca').oninput = renderSaidas;
   F('atSaiExp').onclick = () => {
-    const cab = ['Colaborador', 'Matrícula', 'ID Olos', 'Login', 'Supervisor', 'Gerente', 'Grupo', 'IES', 'Operação', 'Escala', 'Admissão', 'Desligamento', 'Tempo na casa', 'Como foi identificado', 'Identificado em', 'Arquivo'];
-    const lin = rows.map(s => [s.nome, s.mat, s.idOlos, s.login, s.supervisor, s.gerente, s.grupo, s.ies, s.operacao, s.escala, dataBR(s.admissao), dataBR(s.desligamento), s.tempoNaCasa, (s.origens || []).join(' / '), dataBR(s.detectadoEm), s.arquivo]);
+    const cab = ['Colaborador', 'Matrícula', 'ID Olos', 'Login', 'Supervisor', 'Gerente', 'Grupo', 'IES', 'Operação', 'Escala', 'Admissão', 'Desligamento', 'Tempo na casa', 'Como foi identificado', 'Identificado no BD de', 'Arquivo'];
+    const lin = rows.map(s => [s.nome, s.mat, s.idOlos, s.login, s.supervisor, s.gerente, s.grupo, s.ies, s.operacao, s.escala, dataBR(s.admissao), dataBR(s.desligamento), s.tempoNaCasa, (s.origens || []).join(' / '), s.identificadoNo || dataBR(s.detectadoEm), s.arquivo]);
     A.baixar(`desligados-e-saidas-${hoje()}.csv`, '﻿' + [cab, ...lin].map(x => x.map(A.csvCel).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
   };
 }
