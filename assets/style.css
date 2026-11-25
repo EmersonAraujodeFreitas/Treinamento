@@ -901,3 +901,4 @@ button.quem:hover{background:rgba(255,255,255,.08)}
 @media (min-width:981px) and (max-width:1320px){.usuario-topo .quem{display:none}}
 @media (min-width:981px) and (max-width:1180px){.area>.ic{display:none}}
 .cmp-atual td{background:var(--bom-bg)}
+#atQuadroCard .cab-acoes{flex-wrap:wrap;justify-content:flex-end}#atQuadroStatus{max-width:330px}#atQuadroAviso .aviso-bd{margin:0 0 12px}

@@ -20,7 +20,7 @@ const raiz = document.getElementById('painelRaiz');
 
 function dados() {
   const quadro = ler(K.quadro, { itens: [] });
-  const ativosBD = (quadro.itens || []).filter(c => c.status !== 'Desligado');
+  const ativosBD = (quadro.itens || []).filter(c => c.status !== 'Desligado' && !c.supForaQuadro);
   const form = A.vista ? A.vista() : A.formacao();
   const an = ler(K.an, []);
   const sup = new Map(an.filter(a => a.tipo === 'supervisao').map(a => [a.treinandoId, a]));
@@ -70,8 +70,8 @@ function pendencias(D) {
     nunca.map(c => pessoa(c.nome, `${c.supervisor || ''} · admissão ${dataBR(c.admissao)}`)));
 
   // consultores com supervisor que não está no quadro de gestão (BD ADM)
-  const semSup = D.ativosBD.filter(c => c.supForaQuadro);
-  add('media', 'users', 'Consultores com supervisor fora do BD ADM', 'A coluna SUPERVISOR da planilha traz alguém que não está no quadro de gestão. Corrija no BD e importe de novo.', 'at-base',
+  const semSup = (D.quadro.itens || []).filter(c => c.supForaQuadro && c.status !== 'Desligado');
+  add('media', 'users', 'Consultores com hierarquia desatualizada no BD', 'O supervisor na planilha não está no quadro de gestão (BD ADM). Eles ficam fora do quadro vigente e dos indicadores até o BD ser corrigido.', 'at-base',
     semSup.map(c => pessoa(c.nome, `na planilha: ${c.supervisor} · ${c.grupo || ''}`)));
   // ocorrências
   const oc30 = D.oc.filter(o => o.data >= desde(30));

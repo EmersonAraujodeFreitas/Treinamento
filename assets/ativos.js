@@ -20,7 +20,9 @@ const supReal = v => supervisores.find(n => norm(n) === norm(v));
 const KEY_QUADRO = 'inovacao_treinamento_quadro_v1';
 let quadro = ler(KEY_QUADRO, { itens: [], arquivo: '', importadoEm: '' });
 quadro.itens.forEach(c => { if (c.bairro && !c.cidade) { const lc = A.acharBairro(c.bairro); c.cidade = lc.cidade; c.bairro = lc.bairro; } });
-const ativosQuadro = () => quadro.itens.filter(c => c.status !== 'Desligado');
+// vigente = está no BD mais recente, não foi desligado e o supervisor está no quadro de gestão (BD ADM)
+const vigente = c => c.status !== 'Desligado' && !c.supForaQuadro;
+const ativosQuadro = () => quadro.itens.filter(vigente);
 const salvar = () => { gravar(KEY, regs); F('atContBase').textContent = regs.length; rotuloExemplo(); };
 
 const TIPOS = ['Reciclagem', 'Alinhamento', 'Novo conteúdo', 'Novo produto'];
@@ -346,7 +348,7 @@ const LOTE = new Map();   // chave -> pessoa
 const RES = new Map();    // chave -> { presenca, pre, pos, qa, qd }
 const chaveP = c => c.mat || c.matricula || norm(c.email || c.nome);
 function pessoasLote() {
-  if (quadro.itens.length) return quadro.itens.map(c => ({ k: chaveP(c), nome: c.nome, matricula: c.mat, idOlos: c.idOlos, hubspot: c.hubspot, escala: c.escala, nascimento: c.nascimento, admissao: c.admissao, email: c.email, supervisor: c.supervisor, ies: c.ies, operacao: c.operacao, turno: c.turno, tempoCasa: c.tempoCasa, cidade: c.cidade, bairro: c.bairro, status: c.status, login: c.login }));
+  if (quadro.itens.length) return quadro.itens.filter(vigente).map(c => ({ k: chaveP(c), nome: c.nome, matricula: c.mat, idOlos: c.idOlos, hubspot: c.hubspot, escala: c.escala, nascimento: c.nascimento, admissao: c.admissao, email: c.email, supervisor: c.supervisor, ies: c.ies, operacao: c.operacao, turno: c.turno, tempoCasa: c.tempoCasa, cidade: c.cidade, bairro: c.bairro, status: c.status, login: c.login }));
   return colaboradores().map(c => ({ k: chaveP(c), nome: c.nome, matricula: c.matricula, email: c.email, supervisor: c.supervisor, ies: c.instituicao, operacao: c.operacao, turno: c.turno, tempoCasa: c.tempoCasa, cidade: c.cidade, bairro: c.bairro, status: 'Ativo', login: '' }));
 }
 function modo(m) {
@@ -775,7 +777,7 @@ function periodoDoArquivo(nome) {
 }
 const rotuloPeriodo = p => p ? `${['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][+p.slice(5, 7) - 1]}/${p.slice(0, 4)}` : '';
 const chaveArq = nome => norm(nome).replace(/\s+/g, ' ').trim();
-const CAMPOS_FOTO = ['mat', 'nome', 'idOlos', 'login', 'supervisor', 'gerente', 'grupo', 'ies', 'operacao', 'status', 'escala', 'turno', 'admissao', 'nascimento', 'bairro', 'cidade', 'desligamento'];
+const CAMPOS_FOTO = ['mat', 'nome', 'idOlos', 'login', 'supervisor', 'gerente', 'grupo', 'ies', 'operacao', 'status', 'escala', 'turno', 'admissao', 'nascimento', 'bairro', 'cidade', 'desligamento', 'supForaQuadro'];
 const foto = c => { const o = {}; CAMPOS_FOTO.forEach(k => { if (c[k]) o[k] = c[k]; }); return o; };
 const ordemBD = (a, b) => a.periodo.localeCompare(b.periodo) || (a.em || '').localeCompare(b.em || '');
 
@@ -958,16 +960,28 @@ F('atImpBD').addEventListener('change', async e => {
   const ca = F('atComparacao'); if (ca) ca.scrollIntoView({ behavior: 'smooth', block: 'start' });
   if (window.NUVEM && NUVEM.ativo()) NUVEM.publicarAgora().then(ok => { renderCompart(); toast(ok ? 'BD publicado para todos' : 'O BD não foi publicado: verifique o Administrativo → Publicação'); });
 });
+const filtroSt = (c, st) => !st ? vigente(c) : st === '__todos' ? true : st === '__deslig' ? c.status === 'Desligado' : st === '__fora' ? c.supForaQuadro && c.status !== 'Desligado' : c.status === st && !c.supForaQuadro;
 function renderQuadro() {
   const tem = quadro.itens.length > 0;
-  F('atQuadroResumo').hidden = !tem; F('atTQuadro').parentElement.hidden = !tem; F('atQuadroStatus').hidden = !tem; F('atBuscaQuadro').hidden = !tem;
+  F('atQuadroResumo').hidden = !tem; F('atTQuadro').parentElement.hidden = !tem; F('atQuadroStatus').hidden = !tem; F('atBuscaQuadro').hidden = !tem; F('atQuadroBD').hidden = !tem;
   if (!tem) { F('atQuadroInfo').textContent = 'Importe o BD GERAL (.xlsx ou .xlsm) para trazer todos os colaboradores da operação. CPF e RG não são importados.'; return; }
   F('atQuadroInfo').textContent = `${quadro.periodo ? 'BD de ' + rotuloPeriodo(quadro.periodo) + ' · ' : ''}${quadro.arquivo} · importado em ${new Date(quadro.importadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · abas: ${(quadro.abas || []).join(', ')}`;
-  const sts = [...new Set(quadro.itens.map(c => c.status))].sort(cmpTxt);
+  // filtro de BD: o atual (padrão) ou um BD anterior, só para consulta
+  const bdsOrd = Object.entries(quadro.bds || {}).sort((a, b) => ordemBD(b[1], a[1]));
+  const selBD = F('atQuadroBD'), bdSel = selBD.value && (quadro.bds || {})[selBD.value] && bdsOrd[0] && selBD.value !== bdsOrd[0][0] ? selBD.value : '';
+  selBD.innerHTML = bdsOrd.map(([k, b], i) => `<option value="${i ? esc(k) : ''}"${(i ? k === bdSel : !bdSel) ? ' selected' : ''}>${i ? 'BD anterior: ' : 'BD atual: '}${rotuloPeriodo(b.periodo)}</option>`).join('') || '<option value="">BD atual</option>';
+  selBD.hidden = bdsOrd.length < 2;
+  const base = bdSel ? quadro.bds[bdSel].itens.map(c => ({ ...c, tempoCasa: tempoDeCasa(c.admissao) })) : quadro.itens;
+  if (bdSel) F('atQuadroInfo').textContent = `Consultando o BD de ${rotuloPeriodo(quadro.bds[bdSel].periodo)} (${quadro.bds[bdSel].arquivo}) · só leitura. O quadro atual é o BD de ${rotuloPeriodo(quadro.periodo)}.`;
+  const sts = [...new Set(base.filter(c => c.status !== 'Desligado').map(c => c.status))].sort(cmpTxt);
+  const nFora = base.filter(c => c.supForaQuadro && c.status !== 'Desligado').length, nDesl = base.filter(c => c.status === 'Desligado').length;
   const selSt = F('atQuadroStatus'), atualSt = selSt.value;
-  selSt.innerHTML = '<option value="">Todos os status</option>' + sts.map(x => `<option${x === atualSt ? ' selected' : ''}>${esc(x)}</option>`).join('');
+  selSt.innerHTML = `<option value="">Quadro vigente (sem desligados e hierarquia atualizada)</option>` + sts.map(x => `<option${x === atualSt ? ' selected' : ''}>${esc(x)}</option>`).join('')
+    + (nDesl ? `<option value="__deslig"${atualSt === '__deslig' ? ' selected' : ''}>Desligados (${nDesl})</option>` : '')
+    + (nFora ? `<option value="__fora"${atualSt === '__fora' ? ' selected' : ''}>Hierarquia desatualizada: fora do BD ADM (${nFora})</option>` : '')
+    + `<option value="__todos"${atualSt === '__todos' ? ' selected' : ''}>Todos do arquivo</option>`;
   const treinos = c => regs.filter(r => (c.email && norm(r.email) === norm(c.email)) || (c.mat && r.matricula === c.mat) || norm(r.nome) === norm(c.nome));
-  const at = ativosQuadro();
+  const at = base.filter(vigente);
   const cont = (f) => at.filter(f).length;
   const treinados = at.filter(c => treinos(c).some(r => r.presenca === 'Presente')).length;
   F('atQuadroResumo').innerHTML = [
@@ -976,14 +990,17 @@ function renderQuadro() {
     ['clock', 'Férias / afastados', cont(c => c.status !== 'Ativo'), ''], ['check', 'Já treinados', treinados, at.length ? pct(treinados / at.length) : '']
   ].map(([ic, t, v, sub]) => `<div class="qr"><span class="qr-ic">${G.ic(ic, '')}</span><div><small>${t}</small><b>${v.toLocaleString('pt-BR')}</b>${sub ? `<em>${sub}</em>` : ''}</div></div>`).join('');
   const q = norm(F('atBuscaQuadro').value), st = selSt.value;
-  const rows = quadro.itens.filter(c => (!st || c.status === st) && (!q || norm([c.nome, c.login, c.mat, c.supervisor, c.grupo, c.bairro].join(' ')).includes(q)));
+  const rows = base.filter(c => filtroSt(c, st) && (!q || norm([c.nome, c.login, c.mat, c.supervisor, c.grupo, c.bairro].join(' ')).includes(q)));
+  const ro = !!bdSel;
   const tagSt = x => `<span class="tag ${x === 'Ativo' ? 'bom' : x === 'Desligado' ? 'ruim' : 'alerta'}">${esc(x)}</span>`;
-  const todosMarc = rows.length && rows.filter(c => c.status !== 'Desligado').every(c => QSEL.has(c.mat || c.nome));
-  F('atTQuadro').innerHTML = `<thead><tr><th class="cel-ck"><input type="checkbox" id="atQuadroTodos" title="Marcar todos da lista"${todosMarc ? ' checked' : ''}></th><th>Colaborador</th><th>Matrícula</th><th>Login</th><th>Supervisor</th><th>IES</th><th>Operação</th><th>Grupo</th><th>Status</th><th>Turno</th><th>Tempo de casa</th><th class="dir">Treinamentos</th><th>Último</th><th></th></tr></thead>
+  const todosMarc = !ro && rows.length && rows.filter(vigente).every(c => QSEL.has(c.mat || c.nome));
+  F('atTQuadro').innerHTML = `<thead><tr><th class="cel-ck">${ro ? '' : `<input type="checkbox" id="atQuadroTodos" title="Marcar todos da lista"${todosMarc ? ' checked' : ''}>`}</th><th>Colaborador</th><th>Matrícula</th><th>Login</th><th>Supervisor</th><th>IES</th><th>Operação</th><th>Grupo</th><th>Status</th><th>Turno</th><th>Tempo de casa</th><th class="dir">Treinamentos</th><th>Último</th><th></th></tr></thead>
   <tbody>${rows.slice(0, 600).map(c => { const t = treinos(c).sort((a, b) => (b.data || '').localeCompare(a.data || '')); return `<tr>
-    <td class="cel-ck">${c.status !== 'Desligado' ? `<input type="checkbox" data-sel="${esc(c.mat || c.nome)}"${QSEL.has(c.mat || c.nome) ? ' checked' : ''}>` : ''}</td><td><b>${esc(c.nome)}</b></td><td>${esc(c.mat)}</td><td>${esc(c.login)}</td><td>${esc(c.supervisor)}${c.supForaQuadro ? ' <span class="tag alerta" title="Este supervisor não está no BD ADM (quadro de gestão) deste arquivo. A coluna SUPERVISOR da planilha está desatualizada.">fora do BD ADM</span>' : ''}</td><td>${esc(c.ies || '—')}</td><td>${esc(c.operacao || '—')}</td><td>${esc(c.grupo)}</td><td>${tagSt(c.status)}</td><td>${esc(c.turno)}</td><td>${esc(c.tempoCasa)}</td>
+    <td class="cel-ck">${!ro && vigente(c) ? `<input type="checkbox" data-sel="${esc(c.mat || c.nome)}"${QSEL.has(c.mat || c.nome) ? ' checked' : ''}>` : ''}</td><td><b>${esc(c.nome)}</b></td><td>${esc(c.mat)}</td><td>${esc(c.login)}</td><td>${esc(c.supervisor)}${c.supForaQuadro ? ' <span class="tag alerta" title="Este supervisor não está no BD ADM (quadro de gestão) deste arquivo. A coluna SUPERVISOR da planilha está desatualizada.">fora do BD ADM</span>' : ''}</td><td>${esc(c.ies || '—')}</td><td>${esc(c.operacao || '—')}</td><td>${esc(c.grupo)}</td><td>${tagSt(c.status)}</td><td>${esc(c.turno)}</td><td>${esc(c.tempoCasa)}</td>
     <td class="dir">${t.length || '—'}</td><td>${t[0] ? `${dataBR(t[0].data)} · ${esc(t[0].tema)}` : '<span class="dica">nunca treinado</span>'}</td>
-    <td>${c.status !== 'Desligado' ? `<button class="btn btn-sec btn-mini" data-treinar="${esc(c.mat || c.nome)}">${G.ic('plus', '')}Registrar</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="14" class="dica">Ninguém encontrado.</td></tr>'}</tbody>`;
+    <td>${!ro && vigente(c) ? `<button class="btn btn-sec btn-mini" data-treinar="${esc(c.mat || c.nome)}">${G.ic('plus', '')}Registrar</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="14" class="dica">Ninguém encontrado.</td></tr>'}</tbody>`;
+  const aviso = F('atQuadroAviso');
+  if (aviso) aviso.innerHTML = !ro && nFora && !st ? `<div class="aviso-bd">${G.ic('alert', '')}<span><b>${nFora} consultor(es)</b> do arquivo estão com um supervisor que não aparece no BD ADM (quadro de gestão), como na aba BD GERAL ADMISSÃO desatualizada. Eles não entram no quadro vigente nem nos indicadores. Para ver, escolha <b>Hierarquia desatualizada</b> no filtro.</span></div>` : '';
   F('atQuadroSel').hidden = !QSEL.size; F('atQuadroSelTxt').textContent = `${QSEL.size} consultor${QSEL.size > 1 ? 'es' : ''} selecionado${QSEL.size > 1 ? 's' : ''}`;
   renderCompart();
 }
@@ -1046,7 +1063,7 @@ A.supAtuais = () => { const of = (quadro.gestao || []).filter(g => /supervis/i.t
 const QSEL = new Set();
 F('atTQuadro').addEventListener('change', e => {
   if (e.target.id === 'atQuadroTodos') { const q = norm(F('atBuscaQuadro').value), st = F('atQuadroStatus').value;
-    quadro.itens.filter(c => c.status !== 'Desligado' && (!st || c.status === st) && (!q || norm([c.nome, c.login, c.mat, c.supervisor, c.grupo, c.bairro].join(' ')).includes(q))).forEach(c => e.target.checked ? QSEL.add(c.mat || c.nome) : QSEL.delete(c.mat || c.nome));
+    quadro.itens.filter(c => vigente(c) && filtroSt(c, st) && (!q || norm([c.nome, c.login, c.mat, c.supervisor, c.grupo, c.bairro].join(' ')).includes(q))).forEach(c => e.target.checked ? QSEL.add(c.mat || c.nome) : QSEL.delete(c.mat || c.nome));
     renderQuadro(); return; }
   const ck = e.target.closest('[data-sel]'); if (!ck) return;
   ck.checked ? QSEL.add(ck.dataset.sel) : QSEL.delete(ck.dataset.sel);
@@ -1060,6 +1077,7 @@ F('atQuadroSelReg').onclick = () => {
 };
 F('atBuscaQuadro').addEventListener('input', renderQuadro);
 F('atQuadroStatus').addEventListener('change', renderQuadro);
+F('atQuadroBD').addEventListener('change', () => { QSEL.clear(); renderQuadro(); });
 F('atTQuadro').addEventListener('click', e => {
   const b = e.target.closest('[data-treinar]'); if (!b) return;
   const c = quadro.itens.find(x => (x.mat || x.nome) === b.dataset.treinar); if (!c) return;
