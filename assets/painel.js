@@ -148,7 +148,7 @@ function render() {
     <div class="cab-acoes"><button type="button" class="btn btn-sec" id="pnAtualizar">${G.ic('clock')}Atualizar</button></div>
   </div>
   <div class="kpis pn-kpis">
-    ${kp('Headcount ativo', I.hc, D.quadro.importadoEm ? `BD de ${dataBR(D.quadro.importadoEm.slice(0, 10))}` : 'importe o BD', '#0f3a6b', 'users')}
+    ${kp('Headcount', I.hc, D.quadro.importadoEm ? `${D.ativosBD.filter(c => /^ativ/.test(norm(c.status))).length} em atividade · ${D.ativosBD.filter(c => !/^ativ/.test(norm(c.status))).length} férias/afastados` : 'importe o BD', '#0f3a6b', 'users')}
     ${kp('Em formação', Fu.emTrein, 'turmas em treinamento', '#2a78d6', 'exam')}
     ${kp('Em experiência', Fu.emExp, 'acompanhados pela supervisão', '#6250d6', 'headset')}
     ${kp('Turnover do mês', I.turnover === null ? '—' : fmt(I.turnover * 100, 1) + '%', `${I.deslMes} desligamento(s) em ${mesTxt(hoje().slice(0, 7))}`, '#d03b3b', 'down')}

@@ -985,9 +985,9 @@ function renderQuadro() {
   const cont = (f) => at.filter(f).length;
   const treinados = at.filter(c => treinos(c).some(r => r.presenca === 'Presente')).length;
   F('atQuadroResumo').innerHTML = [
-    ['users', 'Ativos no quadro', at.length, ''], ['building', 'UVA', cont(c => c.ies === 'UVA'), ''], ['building', 'Unijorge', cont(c => c.ies === 'Unijorge'), ''],
+    ['users', 'Headcount', at.length, `${cont(c => /^ativ/.test(norm(c.status)))} em atividade`], ['building', 'UVA', cont(c => c.ies === 'UVA'), ''], ['building', 'Unijorge', cont(c => c.ies === 'Unijorge'), ''],
     ['briefcase', 'Captação', cont(c => c.operacao === 'Captação'), ''], ['headset', 'Permanência', cont(c => c.operacao === 'Permanência'), ''],
-    ['clock', 'Férias / afastados', cont(c => c.status !== 'Ativo'), ''], ['check', 'Já treinados', treinados, at.length ? pct(treinados / at.length) : '']
+    ['clock', 'Férias / afastados', cont(c => !/^ativ/.test(norm(c.status))), 'seguem no headcount'], ['check', 'Já treinados', treinados, at.length ? pct(treinados / at.length) : '']
   ].map(([ic, t, v, sub]) => `<div class="qr"><span class="qr-ic">${G.ic(ic, '')}</span><div><small>${t}</small><b>${v.toLocaleString('pt-BR')}</b>${sub ? `<em>${sub}</em>` : ''}</div></div>`).join('');
   const q = norm(F('atBuscaQuadro').value), st = selSt.value;
   const rows = base.filter(c => filtroSt(c, st) && (!q || norm([c.nome, c.login, c.mat, c.supervisor, c.grupo, c.bairro].join(' ')).includes(q)));
@@ -999,8 +999,7 @@ function renderQuadro() {
     <td class="cel-ck">${!ro && vigente(c) ? `<input type="checkbox" data-sel="${esc(c.mat || c.nome)}"${QSEL.has(c.mat || c.nome) ? ' checked' : ''}>` : ''}</td><td><b>${esc(c.nome)}</b></td><td>${esc(c.mat)}</td><td>${esc(c.login)}</td><td>${esc(c.supervisor)}${c.supForaQuadro ? ' <span class="tag alerta" title="Este supervisor não está no BD ADM (quadro de gestão) deste arquivo. A coluna SUPERVISOR da planilha está desatualizada.">fora do BD ADM</span>' : ''}</td><td>${esc(c.ies || '—')}</td><td>${esc(c.operacao || '—')}</td><td>${esc(c.grupo)}</td><td>${tagSt(c.status)}</td><td>${esc(c.turno)}</td><td>${esc(c.tempoCasa)}</td>
     <td class="dir">${t.length || '—'}</td><td>${t[0] ? `${dataBR(t[0].data)} · ${esc(t[0].tema)}` : '<span class="dica">nunca treinado</span>'}</td>
     <td>${!ro && vigente(c) ? `<button class="btn btn-sec btn-mini" data-treinar="${esc(c.mat || c.nome)}">${G.ic('plus', '')}Registrar</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="14" class="dica">Ninguém encontrado.</td></tr>'}</tbody>`;
-  const aviso = F('atQuadroAviso');
-  if (aviso) aviso.innerHTML = !ro && nFora && !st ? `<div class="aviso-bd">${G.ic('alert', '')}<span><b>${nFora} consultor(es)</b> do arquivo estão com um supervisor que não aparece no BD ADM (quadro de gestão), como na aba BD GERAL ADMISSÃO desatualizada. Eles não entram no quadro vigente nem nos indicadores. Para ver, escolha <b>Hierarquia desatualizada</b> no filtro.</span></div>` : '';
+  const aviso = F('atQuadroAviso'); if (aviso) aviso.innerHTML = '';
   F('atQuadroSel').hidden = !QSEL.size; F('atQuadroSelTxt').textContent = `${QSEL.size} consultor${QSEL.size > 1 ? 'es' : ''} selecionado${QSEL.size > 1 ? 's' : ''}`;
   renderCompart();
 }
