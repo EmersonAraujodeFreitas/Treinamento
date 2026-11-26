@@ -114,7 +114,18 @@ raiz.innerHTML = `
         <div class="mini-campo"><small>CID</small><div class="cid-auto"><input class="a-cid" id="ocCid" placeholder="Ex.: J11 ou gripe" autocomplete="off" spellcheck="false"><ul class="auto-lista" hidden></ul></div></div>
         <div class="cid-desc"><small>Significado</small><span><i>Digite o código ou parte do nome da doença</i></span></div>
       </div>
+      <div class="oc-c oc-prog" data-t="Advertência Suspensão" id="ocProg"></div>
       <label class="campo"><span id="ocDescRot">Descrição</span><textarea id="ocDesc" rows="3" placeholder="O que aconteceu, combinado, motivo da medida…"></textarea></label>
+      <fieldset class="oc-c oc-plano" data-t="Feedback Advertência Suspensão"><legend>${G.ic('target', '')}Plano de ação e ciência</legend>
+        <div class="grade g3">
+          <label class="campo c3"><span>Combinado com o colaborador</span><textarea id="ocComb" rows="2" placeholder="O que ele vai fazer de diferente e como será acompanhado"></textarea></label>
+          <label class="campo"><span>Reavaliar em</span><input type="date" id="ocReav"></label>
+          <label class="campo"><span>Ciência do colaborador</span><select id="ocCiencia"><option>Pendente</option><option>Ciente (assinou)</option><option>Ciente (verbal)</option><option>Recusou-se a assinar</option></select></label>
+          <label class="campo"><span>Data da ciência</span><input type="date" id="ocCienciaData"></label>
+          <label class="campo"><span>Resultado da reavaliação</span><select id="ocResult"><option>Em andamento</option><option>Cumprido</option><option>Parcialmente cumprido</option><option>Não cumprido</option></select></label>
+          <label class="campo c2"><span>Observação da reavaliação</span><input id="ocResultObs"></label>
+        </div>
+      </fieldset>
       <div class="dlg-rod"><small class="msg" id="ocMsg"></small><span><button class="btn btn-sec" value="cancelar" formnovalidate>Cancelar</button> <button type="button" class="btn btn-pri" id="ocSalvar">${G.ic('check')}Salvar ocorrência</button></span></div>
     </form>
   </dialog>`;
@@ -238,6 +249,7 @@ const n0 = v => v ? v : '<span class="zero">0</span>';
 
 /* ---------------- ficha de um consultor ---------------- */
 function idade(d) { if (!d) return ''; const n = new Date(d + 'T12:00'), h = new Date(); let i = h.getFullYear() - n.getFullYear(); if (h.getMonth() < n.getMonth() || (h.getMonth() === n.getMonth() && h.getDate() < n.getDate())) i--; return i > 0 && i < 110 ? i + ' anos' : ''; }
+let ultimaFicha = null;
 function ficha(p, lista) {
   const extra = doTreinamento(p).filter(o => noPeriodo(o.data));
   const tudo = lista.concat(extra).sort((a, b) => (b.data || '').localeCompare(a.data || '') || (b.criadoEm || '').localeCompare(a.criadoEm || ''));
@@ -284,12 +296,15 @@ function ficha(p, lista) {
       </article>
     </div>
 
+    ${A.blocoDesempenho ? A.blocoDesempenho(p) : ''}
+    ${A.blocoMonitorias ? A.blocoMonitorias(p) : ''}
     <article class="cartao">
       <header class="cab-card"><span class="icb">${G.ic('calendar')}</span><div><h2>Histórico de ocorrências</h2><p>${tudo.length} registro(s) no período</p></div>
         <div class="bs-filtros" id="bsTiposFiltro">${Object.keys(TIPOS).map(t => `<button type="button" class="chip-f" data-t="${t}">${t}</button>`).join('')}</div></header>
       <ul class="bs-linha" id="bsLinha">${tudo.map(o => itemOc(o)).join('') || '<li class="vazio-lote">Nenhuma ocorrência no período.</li>'}</ul>
     </article>`;
   F('bsLancar').onclick = () => abrirOc(p);
+  if (ultimaFicha !== p.k) { ultimaFicha = p.k; if (window.NUVEM && NUVEM.registrarAcesso) NUVEM.registrarAcesso(p.nome); }
   F('bsTiposFiltro').addEventListener('click', e => {
     const b = e.target.closest('.chip-f'); if (!b) return; b.classList.toggle('on');
     const on = $$('.chip-f.on', F('bsTiposFiltro')).map(x => x.dataset.t);
@@ -313,6 +328,7 @@ function itemOc(o) {
     <div class="bs-it"><div class="bs-it-top"><b>${esc(o.tipo)}</b><small>${dataBR(o.data)}</small>${o.origem ? `<span class="tag neutro">${esc(o.origem)}</span>` : ''}</div>
       ${det.filter(Boolean).length ? `<div class="bs-det">${det.filter(Boolean).join(' · ')}</div>` : ''}
       ${o.descricao ? `<p>${esc(o.descricao)}</p>` : ''}
+      ${o.combinado || o.reavaliarEm || (o.ciencia && o.ciencia !== '') ? `<div class="bs-plano">${o.combinado ? `<span><b>Combinado:</b> ${esc(o.combinado)}</span>` : ''}${o.reavaliarEm ? `<span class="tag ${o.resultado && o.resultado !== 'Em andamento' ? (o.resultado === 'Cumprido' ? 'bom' : o.resultado === 'Não cumprido' ? 'ruim' : 'alerta') : o.reavaliarEm < hoje() ? 'ruim' : 'neutro'}">${o.resultado && o.resultado !== 'Em andamento' ? esc(o.resultado) : (o.reavaliarEm < hoje() ? 'reavaliação vencida ' : 'reavaliar em ') + dataBR(o.reavaliarEm)}</span>` : ''}${o.ciencia ? `<span class="tag ${/^Ciente/.test(o.ciencia) ? 'bom' : o.ciencia === 'Pendente' ? 'alerta' : 'ruim'}">${esc(o.ciencia)}${o.cienciaData ? ' · ' + dataBR(o.cienciaData) : ''}</span>` : ''}</div>` : ''}
       ${o.registradoPor ? `<small class="dica">Lançado por ${esc(o.registradoPor)}${o.criadoEm ? ' em ' + new Date(o.criadoEm).toLocaleDateString('pt-BR') : ''}</small>` : ''}</div>
     ${o.soLeitura ? '' : `<div class="acoes-linha"><button type="button" class="btn-icone" data-oc-edit="${o.id}" data-perm="ocorrencias editar" title="Editar">${G.ic('edit', '')}</button><button type="button" class="btn-icone" data-oc-del="${o.id}" data-perm="ocorrencias excluir" title="Excluir">${G.ic('trash', '')}</button></div>`}</li>`;
 }
@@ -323,7 +339,30 @@ function setTipo(t) {
   const s = F('ocTipo'); s.dataset.valor = t || ''; $$('button', s).forEach(b => b.classList.toggle('on', b.dataset.v === t)); s.classList.remove('invalido');
   $$('.oc-c', F('ocForm')).forEach(el => el.hidden = !t || !el.dataset.t.split(' ').includes(t));
   F('ocDescRot').innerHTML = ['Feedback', 'Advertência', 'Suspensão'].includes(t) ? 'Descrição / motivo <i class="obr">*</i>' : 'Descrição';
+  progressao(t);
 }
+// sugestão da próxima medida pelo histórico dos últimos 12 meses (apoio à decisão, não substitui o RH)
+function progressao(t) {
+  const el = F('ocProg'); if (!el || !alvo || !['Advertência', 'Suspensão'].includes(t)) { if (el) el.innerHTML = ''; return; }
+  const desde12 = new Date(); desde12.setFullYear(desde12.getFullYear() - 1); const d12 = desde12.toISOString().slice(0, 10);
+  const meus = ocorr.filter(o => o.data >= d12 && o.id !== F('ocId').value && ((alvo.matricula && String(o.matricula) === String(alvo.matricula)) || norm(o.nome) === norm(alvo.nome)));
+  const verb = meus.filter(o => o.tipo === 'Advertência' && o.forma !== 'Escrita').length, escr = meus.filter(o => o.tipo === 'Advertência' && o.forma === 'Escrita').length;
+  const susp = meus.filter(o => o.tipo === 'Suspensão'), diasS = susp.reduce((a, o) => a + (o.dias || 0), 0);
+  const faltas = meus.filter(o => o.tipo === 'Falta' && o.justificada !== 'Sim').length;
+  const sug = susp.length ? `Suspensão com mais dias (já teve ${susp.length}, total de ${diasS} dia(s)) ou avaliar desligamento com o RH`
+    : escr ? 'Suspensão (1 dia)' : verb ? 'Advertência escrita' : 'Advertência verbal';
+  el.innerHTML = `<div class="aviso-fluxo">${G.ic('scale', '')}<div><b>Histórico de 12 meses: ${verb} advertência(s) verbal(is), ${escr} escrita(s), ${susp.length} suspensão(ões)${faltas ? `, ${faltas} falta(s) sem justificativa` : ''}.</b><span>Próximo passo sugerido pela progressão: <b>${sug}</b>. Confirme com o RH antes de aplicar.</span></div></div>`;
+}
+A.registrarFeedback = f => {
+  ocorr = ler(KEY, []);
+  const reav = new Date((f.data || hoje()) + 'T12:00'); reav.setDate(reav.getDate() + (f.prazoDias || 15));
+  ocorr.push({ id: uid(), criadoEm: new Date().toISOString(), registradoPor: (window.NUVEM && NUVEM.usuario && (NUVEM.usuario() || {}).nome) || '', nome: f.nome, matricula: f.matricula || '', supervisor: f.supervisor || '', tipo: 'Feedback', data: f.data || hoje(), feedbackTipo: f.feedbackTipo || 'Construtivo', descricao: f.descricao || '', combinado: f.combinado || '', reavaliarEm: reav.toISOString().slice(0, 10), ciencia: 'Pendente', resultado: 'Em andamento', origem: f.origem || '', atualizadoEm: new Date().toISOString() });
+  salvar();
+};
+A.abrirFicha = nome => {
+  const { lista } = pessoas(); const p = lista.find(x => norm(x.nome) === norm(nome)); if (!p) return;
+  estado.pessoa = p.k; F('bsNome').value = p.nome; A.abrirAba('buscar'); render();
+};
 F('ocTipo').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setTipo(b.dataset.v); });
 function abrirOc(p, o) {
   alvo = p; const f = F('ocForm'); f.reset();
@@ -338,6 +377,10 @@ function abrirOc(p, o) {
   F('ocCid').value = o && o.cid || ''; F('ocCidLinha').dataset.desc = o && o.cidDesc || '';
   const d = $('.cid-desc', F('ocCidLinha')); d.classList.remove('cid-erro'); $('span', d).innerHTML = o && o.cid ? esc(o.cidDesc || 'CID não encontrado') : '<i>Digite o código ou parte do nome da doença</i>';
   F('ocDesc').value = o && o.descricao || '';
+  F('ocComb').value = o && o.combinado || ''; F('ocReav').value = o && o.reavaliarEm || '';
+  F('ocCiencia').value = o && o.ciencia || 'Pendente'; F('ocCienciaData').value = o && o.cienciaData || '';
+  F('ocResult').value = o && o.resultado || 'Em andamento'; F('ocResultObs').value = o && o.resultadoObs || '';
+  progressao(o ? o.tipo : '');
   F('dlgOcorr').showModal();
 }
 F('ocForm').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); });
@@ -371,6 +414,7 @@ F('ocSalvar').onclick = () => {
   if (t === 'Falta') o.justificada = F('ocJust').value;
   if (t === 'Feedback') o.feedbackTipo = F('ocFb').value;
   if (t === 'Advertência') o.forma = F('ocForma').value;
+  if (['Feedback', 'Advertência', 'Suspensão'].includes(t)) Object.assign(o, { combinado: F('ocComb').value.trim(), reavaliarEm: F('ocReav').value, ciencia: F('ocCiencia').value, cienciaData: F('ocCienciaData').value, resultado: F('ocResult').value, resultadoObs: F('ocResultObs').value.trim() });
   if (o.editadoPor === undefined) delete o.editadoPor;
   salvar(); F('dlgOcorr').close(); render();
   toast(id ? 'Ocorrência atualizada' : `${t}: ocorrência lançada para ${alvo.nome.split(' ')[0]}`);

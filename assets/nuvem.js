@@ -12,10 +12,10 @@
 const API = String(window.TREINAMENTO_API || localStorage.getItem('inovacao_api_url') || '').replace(/\/+$/, '');
 const VERSAO_APP = document.currentScript ? (document.currentScript.src.split('?v=')[1] || '') : '';
 const DS = {
-  formacao: 'inovacao_treinamento_registros_v1', ativos: 'inovacao_treinamento_ativos_v1', analises: 'inovacao_treinamento_analises_v1', ocorrencias: 'inovacao_treinamento_ocorrencias_v1',
+  formacao: 'inovacao_treinamento_registros_v1', ativos: 'inovacao_treinamento_ativos_v1', analises: 'inovacao_treinamento_analises_v1', ocorrencias: 'inovacao_treinamento_ocorrencias_v1', monitorias: 'inovacao_treinamento_monitorias_v1', agenda: 'inovacao_treinamento_agenda_v1', admissao: 'inovacao_treinamento_admissao_v1', desempenho: 'inovacao_treinamento_desempenho_v1', motivos: 'inovacao_treinamento_motivos_v1',
   quadro: 'inovacao_treinamento_quadro_v1', gestao: 'inovacao_treinamento_gestao_v1', supervisores: 'inovacao_treinamento_supervisores_v1', bairros: 'inovacao_treinamento_bairros_v1', meta: 'inovacao_treinamento_meta_v1'
 };
-const LISTAS = ['formacao', 'ativos', 'analises', 'ocorrencias'], VALORES = ['quadro', 'gestao', 'supervisores', 'bairros', 'meta'];
+const LISTAS = ['formacao', 'ativos', 'analises', 'ocorrencias', 'monitorias', 'agenda', 'admissao'], VALORES = ['quadro', 'gestao', 'supervisores', 'bairros', 'meta', 'desempenho', 'motivos'];
 const CHAVE_DS = Object.fromEntries(Object.entries(DS).map(([k, v]) => [v, k]));
 const K_SESSAO = 'inovacao_sessao_v2', K_PEND = 'inovacao_pendentes_v2', K_MIGRADO = 'inovacao_migrado_v2';
 const PERFIS = ['Treinamento', 'Supervisão', 'Gerência', 'Consulta', 'Administrador'];
@@ -28,9 +28,9 @@ const PERFIL_DESC = {
 };
 const ITENS = {
   abas: [['cadastro', 'Formação · Cadastro de formação'], ['analise-trein', 'Formação · Análise treinamento'], ['analise-sup', 'Formação · Análise supervisão'], ['dashboard', 'Formação · Dashboard'], ['base', 'Formação · Base de dados'],
-    ['at-cadastro', 'Ativos · Registrar treinamento'], ['at-registros', 'Ativos · Registros'], ['at-dashboard', 'Ativos · Dashboard'], ['at-base', 'Ativos · Base de dados (BD da operação)'], ['at-gestao', 'Ativos · Quadro de gestão (BD ADM)'], ['painel', 'Gestão · Painel da operação (pendências e indicadores)'], ['buscar', 'Gestão · Buscar consultor (atestados, faltas, medidas)']],
+    ['at-cadastro', 'Ativos · Registrar treinamento'], ['at-registros', 'Ativos · Registros'], ['at-dashboard', 'Ativos · Dashboard'], ['at-base', 'Ativos · Base de dados (BD da operação)'], ['at-gestao', 'Ativos · Quadro de gestão (BD ADM)'], ['painel', 'Gestão · Painel da operação (pendências e indicadores)'], ['buscar', 'Gestão · Buscar consultor (atestados, faltas, medidas)'], ['desempenho', 'Gestão · Desempenho (Olos, HubSpot e metas)'], ['monitorias', 'Gestão · Monitorias de qualidade'], ['agenda', 'Formação · Planejamento de turmas e reciclagens'], ['admissao', 'Formação · Checklist de admissão']],
   botoes: [['editar', 'Editar registros e análises'], ['excluir', 'Excluir registros'], ['exportar', 'Exportar planilhas (CSV)'], ['imprimir', 'Imprimir / PDF'], ['backup', 'Baixar e importar backup'],
-    ['importarBD', 'Importar BD da operação'], ['supervisores', 'Gerenciar supervisores'], ['exemplo', 'Dados de exemplo'], ['apagar', 'Apagar tudo'], ['ocorrencias', 'Lançar ocorrências (atestado, falta, atraso, feedback, medida disciplinar)']]
+    ['importarBD', 'Importar BD da operação'], ['supervisores', 'Gerenciar supervisores'], ['exemplo', 'Dados de exemplo'], ['apagar', 'Apagar tudo'], ['ocorrencias', 'Lançar ocorrências (atestado, falta, atraso, feedback, medida disciplinar)'], ['monitorar', 'Lançar monitorias de qualidade'], ['importarDesempenho', 'Importar relatórios de desempenho']]
 };
 const TODAS_ABAS = ITENS.abas.map(a => a[0]), TODOS_BOTOES = ITENS.botoes.map(b => b[0]);
 const MAX_LOTE = 30;
@@ -202,9 +202,9 @@ function aplicarPermissoes() {
   TODAS_ABAS.filter(a => !p.abas.includes(a)).forEach(a => { css += `.aba[data-aba="${a}"],#aba-${a}{display:none!important}`; });
   TODOS_BOTOES.filter(b => !p.botoes.includes(b)).forEach(b => { css += `[data-perm~="${b}"]{display:none!important}`; });
   if (!p.botoes.includes('excluir')) css += '[data-del]{display:none!important}';
-  if (!['painel', 'buscar'].some(a => p.abas.includes(a))) css += '.grupo[data-area="gestao"],.area[data-area="gestao"]{display:none!important}';
+  if (!['painel', 'buscar', 'desempenho', 'monitorias'].some(a => p.abas.includes(a))) css += '.grupo[data-area="gestao"],.area[data-area="gestao"]{display:none!important}';
   if (!p.botoes.includes('editar')) css += '.btn-icone[data-edit],.btn-icone[data-ids],#buscaEdit,#atBuscaEdit,.regs-lista [data-edit],[data-treinar]{display:none!important}td.lk{pointer-events:none;color:inherit!important;font-weight:600}';
-  if (!['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base'].some(a => p.abas.includes(a))) css += '.grupo[data-area="formacao"],.area[data-area="formacao"]{display:none!important}';
+  if (!['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'agenda', 'admissao'].some(a => p.abas.includes(a))) css += '.grupo[data-area="formacao"],.area[data-area="formacao"]{display:none!important}';
   if (!['at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'at-gestao'].some(a => p.abas.includes(a))) css += '.grupo[data-area="ativos"],.area[data-area="ativos"]{display:none!important}';
   let st = document.getElementById('estiloPermissoes');
   if (!st) { st = document.createElement('style'); st.id = 'estiloPermissoes'; document.head.appendChild(st); }
@@ -281,7 +281,7 @@ function encerrar(msg) {
 }
 
 /* ---------------- carregar o site ---------------- */
-const SCRIPTS = ['assets/graficos.js', 'assets/app.js', 'assets/xlsx-leitor.js', 'assets/ativos.js', 'assets/analises.js', 'assets/buscar.js', 'assets/painel.js'];
+const SCRIPTS = ['assets/graficos.js', 'assets/app.js', 'assets/xlsx-leitor.js', 'assets/ativos.js', 'assets/analises.js', 'assets/buscar.js', 'assets/painel.js', 'assets/desempenho.js', 'assets/monitorias.js', 'assets/agenda.js', 'assets/relatorio.js'];
 function carregarApp() {
   return new Promise(res => {
     let i = 0;
@@ -453,7 +453,9 @@ async function renderAdmin(aba) {
       <div class="adm-bloco"><h3>Trazer dados do sistema anterior</h3>
         <p class="dica">Os cadastros feitos na versão anterior (que guardava os dados no GitHub) são trazidos para cá e enviados ao servidor. Use o usuário e a senha que você usava naquela versão.</p>
         <div class="adm-grade"><label class="campo"><span>Usuário anterior</span><input id="antUsuario" value="EMERSON"></label><label class="campo"><span>Senha anterior</span><input type="password" id="antSenha" autocomplete="off"></label></div>
-        <div class="adm-acoes"><button type="button" class="btn btn-sec" id="antImportar">Importar dados anteriores</button></div><p class="msg" id="antMsg"></p></div>`;
+        <div class="adm-acoes"><button type="button" class="btn btn-sec" id="antImportar">Importar dados anteriores</button></div><p class="msg" id="antMsg"></p></div>
+      <div class="adm-bloco" id="admLgpd"></div>`;
+    document.dispatchEvent(new CustomEvent('admin-servidor', { detail: document.getElementById('admLgpd') }));
     const m = document.getElementById('admMsg');
     document.getElementById('antImportar').onclick = async () => {
       const am = document.getElementById('antMsg'); am.textContent = 'Abrindo os dados anteriores…'; am.className = 'msg';
@@ -584,7 +586,7 @@ async function importarAntigo(usuario, senha) {
 /* ---------------- API para os outros módulos ---------------- */
 window.NUVEM = {
   usuario: () => sessao && { ...sessao.usuario }, ehAdmin, pode, permissoes,
-  equipe: () => sessao && sessao.equipe || null, publicarAgora: () => enviar(), status: () => statusSinc, ativo: () => !modoLocal(), abrirAdmin, servidorDesatualizado: () => servidorDesatualizado
+  equipe: () => sessao && sessao.equipe || null, registrarAcesso: nome => { if (!modoLocal() && sessao) api('POST', '/acesso-ficha', { nome }).catch(() => {}); }, publicarAgora: () => enviar(), status: () => statusSinc, ativo: () => !modoLocal(), abrirAdmin, servidorDesatualizado: () => servidorDesatualizado
 };
 
 /* ---------------- menu lateral e tema ---------------- */

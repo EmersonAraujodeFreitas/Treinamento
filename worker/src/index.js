@@ -11,21 +11,21 @@
    Banco D1 ligado com o nome DB
    ========================================================= */
 
-const DATASETS_LISTA = ['formacao', 'ativos', 'analises', 'ocorrencias'];
-const VALORES = ['quadro', 'gestao', 'supervisores', 'bairros', 'meta'];
+const DATASETS_LISTA = ['formacao', 'ativos', 'analises', 'ocorrencias', 'monitorias', 'agenda', 'admissao'];
+const VALORES = ['quadro', 'gestao', 'supervisores', 'bairros', 'meta', 'desempenho', 'motivos'];
 const PERFIS = ['Treinamento', 'Supervisão', 'Gerência', 'Consulta', 'Administrador'];
-const TODAS_ABAS = ['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar', 'painel', 'at-gestao'];
-const TODOS_BOTOES = ['editar', 'excluir', 'exportar', 'imprimir', 'backup', 'importarBD', 'supervisores', 'exemplo', 'apagar', 'ocorrencias'];
-const ITENS_NOVOS = ['buscar', 'ocorrencias', 'painel', 'at-gestao']; // perfis salvos antes destes itens recebem o padrão
+const TODAS_ABAS = ['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar', 'painel', 'at-gestao', 'desempenho', 'monitorias', 'agenda', 'admissao'];
+const TODOS_BOTOES = ['editar', 'excluir', 'exportar', 'imprimir', 'backup', 'importarBD', 'supervisores', 'exemplo', 'apagar', 'ocorrencias', 'monitorar', 'importarDesempenho'];
+const ITENS_NOVOS = ['buscar', 'ocorrencias', 'painel', 'at-gestao', 'desempenho', 'monitorias', 'agenda', 'admissao', 'monitorar', 'importarDesempenho']; // perfis salvos antes destes itens recebem o padrão
 // perfis prontos: o administrador só escolhe o perfil ao criar o usuário
 const PERFIS_VERSAO = 2; // perfis salvos em versão anterior voltam para este padrão
 const PERM_PADRAO = {
   // treinamento: formação inicial inteira, reciclagens dos ativos e ocorrências
-  'Treinamento': { abas: ['painel', 'cadastro', 'analise-trein', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar'], botoes: ['editar', 'excluir', 'exportar', 'imprimir', 'supervisores', 'ocorrencias'] },
+  'Treinamento': { abas: ['painel', 'cadastro', 'analise-trein', 'dashboard', 'base', 'agenda', 'admissao', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar', 'monitorias', 'desempenho'], botoes: ['editar', 'excluir', 'exportar', 'imprimir', 'supervisores', 'ocorrencias', 'monitorar'] },
   // supervisão: só a própria equipe (vínculo automático pelo nome no BD ADM)
-  'Supervisão': { abas: ['painel', 'buscar', 'analise-sup', 'at-cadastro', 'at-registros', 'at-dashboard'], botoes: ['editar', 'exportar', 'imprimir', 'ocorrencias'] },
+  'Supervisão': { abas: ['painel', 'buscar', 'desempenho', 'monitorias', 'analise-sup', 'at-cadastro', 'at-registros', 'at-dashboard'], botoes: ['editar', 'exportar', 'imprimir', 'ocorrencias', 'monitorar'] },
   // gerência: vê tudo, sem alterar
-  'Gerência': { abas: ['painel', 'buscar', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-registros', 'at-dashboard', 'at-base', 'at-gestao'], botoes: ['exportar', 'imprimir'] },
+  'Gerência': { abas: ['painel', 'buscar', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-registros', 'at-dashboard', 'at-base', 'at-gestao', 'desempenho', 'monitorias', 'agenda', 'admissao'], botoes: ['exportar', 'imprimir'] },
   // consulta: só indicadores, sem dados sensíveis
   'Consulta': { abas: ['painel', 'dashboard', 'at-dashboard'], botoes: ['imprimir'] }
 };
@@ -104,8 +104,8 @@ async function permissoesDe(env, perfil) {
 function acessoDe(perfil, perm) {
   const tem = a => perm.abas.includes(a), bt = b => perm.botoes.includes(b);
   if (perfil === 'Administrador') {
-    return { ler: { formacao: true, ativos: true, quadro: true, gestao: true, supervisores: true, bairros: true, meta: true, analises: ['treinamento', 'supervisao'], ocorrencias: true },
-      escrever: { formacao: true, ativos: true, quadro: true, gestao: true, supervisores: true, bairros: true, meta: true, analises: ['treinamento', 'supervisao'], ocorrencias: true }, editar: true, excluir: true };
+    return { ler: { formacao: true, ativos: true, quadro: true, gestao: true, supervisores: true, bairros: true, meta: true, analises: ['treinamento', 'supervisao'], ocorrencias: true, monitorias: true, agenda: true, admissao: true, desempenho: true, motivos: true },
+      escrever: { formacao: true, ativos: true, quadro: true, gestao: true, supervisores: true, bairros: true, meta: true, analises: ['treinamento', 'supervisao'], ocorrencias: true, monitorias: true, agenda: true, admissao: true, desempenho: true, motivos: true }, editar: true, excluir: true };
   }
   const anLer = [], anEsc = [];
   if (tem('dashboard')) anLer.push('treinamento', 'supervisao');
@@ -116,14 +116,18 @@ function acessoDe(perfil, perm) {
     ler: {
       formacao: ['cadastro', 'dashboard', 'base', 'analise-trein', 'analise-sup'].some(tem),
       ativos, quadro: tem('at-cadastro') || tem('at-base') || tem('buscar'), gestao: tem('at-gestao'), supervisores: ativos, bairros: true, meta: true, analises: [...new Set(anLer)],
-      ocorrencias: tem('buscar')
+      ocorrencias: tem('buscar'),
+      monitorias: tem('monitorias') || tem('buscar'), agenda: tem('agenda') || tem('cadastro') || tem('at-cadastro'), admissao: tem('admissao') || tem('painel'),
+      desempenho: tem('desempenho') || tem('buscar'), motivos: tem('at-base') || tem('painel') || tem('buscar')
     },
     escrever: {
       formacao: tem('cadastro') || (tem('base') && (bt('editar') || bt('excluir') || bt('apagar') || bt('exemplo') || bt('backup'))),
       ativos: tem('at-cadastro') || (tem('at-registros') && (bt('editar') || bt('excluir') || bt('apagar') || bt('exemplo') || bt('backup'))),
       quadro: bt('importarBD'), gestao: bt('importarBD'), supervisores: bt('supervisores') || tem('at-cadastro'), bairros: tem('cadastro') || tem('at-cadastro'), meta: tem('dashboard'),
       analises: [...new Set(anEsc)],
-      ocorrencias: tem('buscar') && bt('ocorrencias')
+      ocorrencias: tem('buscar') && bt('ocorrencias'),
+      monitorias: tem('monitorias') && bt('monitorar'), agenda: tem('agenda'), admissao: tem('admissao'),
+      desempenho: tem('desempenho') && bt('importarDesempenho'), motivos: tem('at-base')
     },
     editar: bt('editar'), excluir: bt('excluir') || bt('apagar')
   };
@@ -221,13 +225,14 @@ async function rotaEstado(env, u) {
     if (ds === 'analises') linhas = ac.ler.analises.length ? await todos(env, `SELECT dados FROM registros WHERE dataset = 'analises' AND apagado = 0 AND tipo IN (${ac.ler.analises.map(() => '?').join(',')})`, ...ac.ler.analises) : [];
     else if (ac.ler[ds]) linhas = await todos(env, 'SELECT dados FROM registros WHERE dataset = ? AND apagado = 0', ds);
     // supervisor: ocorrências e treinamentos só da própria equipe
-    if (esc && linhas && (ds === 'ocorrencias' || ds === 'ativos')) linhas = linhas.filter(r => { try { return esc.daEquipe(JSON.parse(r.dados)); } catch (e) { return false; } });
+    if (esc && linhas && (ds === 'ocorrencias' || ds === 'ativos' || ds === 'monitorias')) linhas = linhas.filter(r => { try { return esc.daEquipe(JSON.parse(r.dados)); } catch (e) { return false; } });
     partes.push(JSON.stringify(ds) + ':' + (linhas ? '[' + linhas.map(r => r.dados).join(',') + ']' : 'null'));
   }
   for (const v of VALORES) {
     const r = vals.find(x => x.chave === v);
     let txt = ac.ler[v] && r ? r.dados : 'null';
     if (v === 'quadro' && esc && txt !== 'null') txt = JSON.stringify(quadroDaEquipe(JSON.parse(txt), esc));
+    if (v === 'desempenho' && esc && txt !== 'null') { const d = JSON.parse(txt); d.dados = (d.dados || []).filter(x => esc.daEquipe(x)); txt = JSON.stringify(d); }
     partes.push(JSON.stringify(v) + ':' + txt);
   }
   const cab = { versao: await versao(env), usuario: { usuario: u.usuario, nome: u.nome, perfil: u.perfil, trocarSenha: !!u.trocar_senha }, permissoes: perm, acesso: ac, equipe: esc ? { supervisor: esc.supervisor || '', pessoas: esc.nomes.size } : null };
@@ -251,7 +256,7 @@ async function rotaSincronizar(env, u, req) {
       const tipo = ds === 'analises' ? (rec.tipo === 'supervisao' ? 'supervisao' : 'treinamento') : null;
       const podeEsc = ds === 'analises' ? ac.escrever.analises.includes(tipo) : ac.escrever[ds];
       if (!podeEsc) { recusados.push({ ds, id: rec.id, motivo: 'sem permissão' }); continue; }
-      if (esc && (ds === 'ocorrencias' || ds === 'ativos') && !esc.daEquipe(rec)) { recusados.push({ ds, id: rec.id, motivo: 'fora da sua equipe' }); continue; }
+      if (esc && (ds === 'ocorrencias' || ds === 'ativos' || ds === 'monitorias') && !esc.daEquipe(rec)) { recusados.push({ ds, id: rec.id, motivo: 'fora da sua equipe' }); continue; }
       const atual = existentes.get(rec.id);
       if (atual && !atual.apagado && !ac.editar) { recusados.push({ ds, id: rec.id, motivo: 'sem permissão para editar' }); continue; }
       if (atual && ds === 'analises' && atual.tipo && atual.tipo !== tipo) { recusados.push({ ds, id: rec.id, motivo: 'tipo diferente' }); continue; }
@@ -354,7 +359,7 @@ async function rotaAdmin(env, u, req, partes) {
 
 /* ---------------- diagnóstico (não mostra nenhum valor secreto) ---------------- */
 async function diagnostico(env) {
-  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-26-v8', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
+  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-27-v9', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
   if (d.banco_ligado) {
     try { await garantirTabelas(env); } catch (e) { d.erro_criar_tabelas = String(e.message || e).slice(0, 200); }
     for (const t of ['usuarios', 'registros', 'valores', 'tentativas', 'log']) {
@@ -396,6 +401,8 @@ export default {
       const u = await autenticar(env, req);
       if (u.trocar_senha && rota !== 'senha') throw new Erro(403, 'Troque a senha para continuar.');
       if (rota === 'senha' && req.method === 'POST') return resposta(env, req, await rotaTrocarSenha(env, u, req));
+      // LGPD: registra quem abriu a ficha de um consultor
+      if (rota === 'acesso-ficha' && req.method === 'POST') { const c = await req.json().catch(() => ({})); await registrar(env, u.usuario, 'abriu ficha', String(c.nome || '').slice(0, 120)); return resposta(env, req, { ok: true }); }
       if (rota === 'renovar' && req.method === 'POST') return resposta(env, req, { token: await criarSessao(env, u) });
       if (rota === 'versao' && req.method === 'GET') return resposta(env, req, { versao: await versao(env) });
       if (rota === 'estado' && req.method === 'GET') return resposta(env, req, await rotaEstado(env, u));

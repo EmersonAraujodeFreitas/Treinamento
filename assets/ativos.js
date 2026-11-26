@@ -17,7 +17,8 @@ const SUP_PADRAO = ['ALINE DA CONCEIÇÃO SANTOS', 'ANA JULIA CRUZ LEITE', 'DEBO
 let supervisores = ler(KEY_SUP, null) || SUP_PADRAO.slice();
 const salvarSup = () => { supervisores = [...new Map(supervisores.filter(Boolean).map(n => [norm(n), n.trim().replace(/\s+/g, ' ')])).values()].sort(cmpTxt); gravar(KEY_SUP, supervisores); };
 const supReal = v => supervisores.find(n => norm(n) === norm(v));
-const KEY_QUADRO = 'inovacao_treinamento_quadro_v1', KEY_GESTAO = 'inovacao_treinamento_gestao_v1';
+const KEY_QUADRO = 'inovacao_treinamento_quadro_v1', KEY_GESTAO = 'inovacao_treinamento_gestao_v1', KEY_MOTIVOS = 'inovacao_treinamento_motivos_v1';
+const MOTIVOS_SAIDA = ['Pedido de demissão', 'Abandono de emprego', 'Término do contrato de experiência', 'Dispensa sem justa causa', 'Dispensa por justa causa', 'Acordo entre as partes', 'Transferência ou promoção interna', 'Outro'];
 let quadro = ler(KEY_QUADRO, { itens: [], arquivo: '', importadoEm: '' });
 quadro.itens.forEach(c => { if (c.bairro && !c.cidade) { const lc = A.acharBairro(c.bairro); c.cidade = lc.cidade; c.bairro = lc.bairro; } });
 // vigente = está no BD mais recente, não foi desligado e o supervisor está no quadro de gestão (BD ADM)
@@ -1051,6 +1052,7 @@ function renderSaidas() {
   const meses = [...new Set(todas.map(mesDe))].sort().reverse();
   const sups = [...new Set(todas.map(s => s.supervisor).filter(Boolean))].sort(cmpTxt);
   const fm = F('atSaiMes') ? F('atSaiMes').value : '', fs = F('atSaiSup') ? F('atSaiSup').value : '', fq = F('atSaiBusca') ? norm(F('atSaiBusca').value) : '';
+  const motivos = ler(KEY_MOTIVOS, {}) || {}, podeMotivo = !window.NUVEM || !NUVEM.pode || NUVEM.pode('at-base');
   const rows = todas.filter(s => (!fm || mesDe(s) === fm) && (!fs || s.supervisor === fs) && (!fq || norm([s.nome, s.mat, s.login, s.grupo].join(' ')).includes(fq)));
   const porMes = meses.slice(0, 12).reverse().map(m => [nomeMes(m), todas.filter(s => mesDe(s) === m).length]);
   const max = Math.max(1, ...porMes.map(x => x[1]));
@@ -1061,15 +1063,16 @@ function renderSaidas() {
         <input type="search" id="atSaiBusca" placeholder="Buscar" value="${esc(F('atSaiBusca') ? F('atSaiBusca').value : '')}">
         <button type="button" class="btn btn-sec" id="atSaiExp" data-perm="exportar">${G.ic('download')}Exportar</button></div></header>
     ${porMes.length ? `<div class="sai-meses">${porMes.map(([m, n]) => `<div class="sai-mes"><span style="height:${Math.round(n / max * 100)}%"><b>${n}</b></span><small>${m}</small></div>`).join('')}</div>` : ''}
-    <div class="tabela-wrap"><table class="tabela"><thead><tr><th>Colaborador</th><th>Matrícula</th><th>Supervisor</th><th>Grupo</th><th>IES</th><th>Admissão</th><th>Desligamento</th><th>Tempo na casa</th><th>Como foi identificado</th><th>Identificado no BD de</th></tr></thead><tbody>
+    <div class="tabela-wrap"><table class="tabela"><thead><tr><th>Colaborador</th><th>Matrícula</th><th>Supervisor</th><th>Grupo</th><th>IES</th><th>Admissão</th><th>Desligamento</th><th>Tempo na casa</th><th>Motivo da saída</th><th>Como foi identificado</th><th>Identificado no BD de</th></tr></thead><tbody>
     ${rows.map(s => `<tr><td><b>${esc(s.nome)}</b></td><td>${esc(s.mat)}</td><td>${esc(s.supervisor)}</td><td>${esc(s.grupo)}</td><td>${esc(s.ies || '—')}</td><td>${dataBR(s.admissao) || '—'}</td><td>${s.desligamento ? dataBR(s.desligamento) : '<span class="dica">sem data no BD</span>'}</td><td>${esc(s.tempoNaCasa || '—')}</td>
-      <td>${(s.origens || []).map(o => `<span class="tag ${/aba|status/i.test(o) ? 'ruim' : 'alerta'}">${esc(o)}</span>`).join(' ')}</td><td>${esc(s.identificadoNo || dataBR(s.detectadoEm))}</td></tr>`).join('') || `<tr><td colspan="10" class="dica">${todas.length ? 'Ninguém com esses filtros.' : 'Nenhuma saída registrada ainda. Importe os BDs dos meses anteriores para montar o histórico.'}</td></tr>`}
+      <td>${podeMotivo ? `<select class="sai-motivo" data-chave="${esc(s.chave)}"><option value="">Informar…</option>${MOTIVOS_SAIDA.map(m => `<option${motivos[s.chave] === m ? ' selected' : ''}>${m}</option>`).join('')}</select>` : esc(motivos[s.chave] || '—')}</td><td>${(s.origens || []).map(o => `<span class="tag ${/aba|status/i.test(o) ? 'ruim' : 'alerta'}">${esc(o)}</span>`).join(' ')}</td><td>${esc(s.identificadoNo || dataBR(s.detectadoEm))}</td></tr>`).join('') || `<tr><td colspan="11" class="dica">${todas.length ? 'Ninguém com esses filtros.' : 'Nenhuma saída registrada ainda. Importe os BDs dos meses anteriores para montar o histórico.'}</td></tr>`}
     </tbody></table></div>`;
   if (foco) { const b = F('atSaiBusca'); b.focus(); b.setSelectionRange(b.value.length, b.value.length); }
   F('atSaiMes').onchange = renderSaidas; F('atSaiSup').onchange = renderSaidas; F('atSaiBusca').oninput = renderSaidas;
+  el.querySelectorAll('.sai-motivo').forEach(sel => sel.onchange = () => { const m = ler(KEY_MOTIVOS, {}) || {}; if (sel.value) m[sel.dataset.chave] = sel.value; else delete m[sel.dataset.chave]; gravar(KEY_MOTIVOS, m); toast('Motivo salvo'); });
   F('atSaiExp').onclick = () => {
-    const cab = ['Colaborador', 'Matrícula', 'ID Olos', 'Login', 'Supervisor', 'Gerente', 'Grupo', 'IES', 'Operação', 'Escala', 'Admissão', 'Desligamento', 'Tempo na casa', 'Como foi identificado', 'Identificado no BD de', 'Arquivo'];
-    const lin = rows.map(s => [s.nome, s.mat, s.idOlos, s.login, s.supervisor, s.gerente, s.grupo, s.ies, s.operacao, s.escala, dataBR(s.admissao), dataBR(s.desligamento), s.tempoNaCasa, (s.origens || []).join(' / '), s.identificadoNo || dataBR(s.detectadoEm), s.arquivo]);
+    const cab = ['Colaborador', 'Matrícula', 'ID Olos', 'Login', 'Supervisor', 'Gerente', 'Grupo', 'IES', 'Operação', 'Escala', 'Admissão', 'Desligamento', 'Tempo na casa', 'Motivo da saída', 'Como foi identificado', 'Identificado no BD de', 'Arquivo'];
+    const lin = rows.map(s => [s.nome, s.mat, s.idOlos, s.login, s.supervisor, s.gerente, s.grupo, s.ies, s.operacao, s.escala, dataBR(s.admissao), dataBR(s.desligamento), s.tempoNaCasa, motivos[s.chave] || '', (s.origens || []).join(' / '), s.identificadoNo || dataBR(s.detectadoEm), s.arquivo]);
     A.baixar(`desligados-e-saidas-${hoje()}.csv`, '﻿' + [cab, ...lin].map(x => x.map(A.csvCel).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
   };
 }

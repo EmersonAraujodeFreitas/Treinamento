@@ -133,7 +133,7 @@ function diasUteis(a, b) {
 
 /* ---------------- abas ---------------- */
 const ULTIMA = { formacao: 'cadastro', ativos: 'at-cadastro', gestao: 'painel' };
-const AREA_DE = n => n === 'painel' || n === 'buscar' ? 'gestao' : n.startsWith('at-') ? 'ativos' : 'formacao';
+const AREA_DE = n => ['painel', 'buscar', 'desempenho', 'monitorias'].includes(n) ? 'gestao' : n.startsWith('at-') ? 'ativos' : 'formacao';
 function abrirAba(nome) {
   const area = AREA_DE(nome), buscar = nome === 'buscar';
   ULTIMA[area] = nome;
@@ -299,12 +299,16 @@ const vista = () => { const m = mapaSup(); return registros.map(r => efetivo(r, 
 // datalists de turma / instrutor
 function atualizarDatalists() {
   const uniq = k => [...new Set(registros.map(r => r[k]).filter(Boolean))].sort(cmpTxt);
-  F('listaTurmas').innerHTML = uniq('turma').map(t => `<option value="${esc(t)}">`).join('');
+  const planejadas = (ler('inovacao_treinamento_agenda_v1', []) || []).filter(e => e.tipo === 'Turma de formação' && e.status !== 'Cancelado').map(e => e.titulo);
+  F('listaTurmas').innerHTML = [...new Set(uniq('turma').concat(planejadas))].sort(cmpTxt).map(t => `<option value="${esc(t)}">`).join('');
   F('listaInstrutores').innerHTML = uniq('instrutor').map(t => `<option value="${esc(t)}">`).join('');
 }
 // ao escolher uma turma existente, puxa datas e instrutor
 F('turma').addEventListener('change', () => {
-  const r = registros.find(x => x.turma === F('turma').value.trim()); if (!r || F('id').value) return;
+  let r = registros.find(x => x.turma === F('turma').value.trim());
+  // turma planejada no Planejamento: puxa datas, instrutor, IES e operação
+  if (!r) { const e = (ler('inovacao_treinamento_agenda_v1', []) || []).find(x => x.tipo === 'Turma de formação' && x.titulo === F('turma').value.trim()); if (e) r = { dataInicio: e.dataInicio, dataFim: e.dataFim, instrutor: e.instrutor, instituicao: e.ies, operacao: e.operacao, modalidade: /on-?line|remot/i.test(e.modalidade || '') ? 'Remota' : /presencial/i.test(e.modalidade || '') ? 'Presencial' : '' }; }
+  if (!r || F('id').value) return;
   ['dataInicio', 'dataFim', 'instrutor', 'instituicao', 'operacao', 'turnoTurma', 'modalidade'].forEach(k => { if (!F(k).value && r[k]) F(k).value = r[k]; });
 });
 
@@ -837,7 +841,7 @@ document.addEventListener('click', () => setTimeout(obs, 0));
 window.APP = { $, $$, norm, num, media, fmt, pct, esc, uid, hoje, dataBR, cmpTxt, toast, baixar, ler, gravar, autocomplete, abrirAba, signoDe,
   MUN, MUN_NORM, regiaoDe, bairrosDaCidade, aprenderBairro, acharBairro, nomeProprio, csvCel, parseCSV, dataISO, formacao: () => registros, formacaoFiltrada: () => aplicaFiltros(vista().map(enriquecer)), salvarFormacao: r => { const i = registros.findIndex(x => x.id === r.id); if (i >= 0) registros[i] = r; salvarRegistros(); }, notaCalculada, efetivo, mapaSup, vista, COMPORT, idadeDe, diasUteis, meta: () => meta(), regiaoDe };
 const inicial = (location.hash || '').slice(1);
-window.addEventListener('load-app', () => { if (['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'at-gestao', 'buscar', 'painel'].includes(inicial)) abrirAba(inicial); });
+window.addEventListener('load-app', () => { if (['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'at-gestao', 'buscar', 'painel', 'desempenho', 'monitorias', 'agenda', 'admissao'].includes(inicial)) abrirAba(inicial); });
 /* atualização vinda de outro usuário (sincronização) */
 window.addEventListener('dados-atualizados', () => {
   registros = ler(KEY, []); bairrosAprendidos = ler(KEY_B, {}); F('meta').value = ler(KEY_META, 7);

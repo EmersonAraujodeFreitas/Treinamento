@@ -9,8 +9,8 @@
 <link rel="apple-touch-icon" href="assets/favicon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap">
 <script>try{var t=localStorage.getItem('inovacao_tema');if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'escuro':'claro';document.documentElement.dataset.tema=t;if(localStorage.getItem('inovacao_menu')==='recolhido')document.documentElement.classList.add('menu-recolhido');}catch(e){document.documentElement.dataset.tema='claro';}</script>
-<link rel="stylesheet" href="assets/style.css?v=20261126-2100">
-<script src="assets/dados-bahia.js?v=20261126-2100"></script>
+<link rel="stylesheet" href="assets/style.css?v=20261127-0100">
+<script src="assets/dados-bahia.js?v=20261127-0100"></script>
 </head>
 <body class="bloqueado carregando">
 
@@ -66,16 +66,20 @@
     <nav class="abas" data-area="gestao">
       <button class="aba" data-aba="painel"><i data-ic="home"></i><span class="aba-txt">Minha área</span><span class="contador contador-alerta" id="contPend" hidden>0</span></button>
       <button class="aba" data-aba="buscar"><i data-ic="search"></i><span class="aba-txt">Buscar consultor</span></button>
+      <button class="aba" data-aba="desempenho"><i data-ic="trophy"></i><span class="aba-txt">Desempenho</span></button>
+      <button class="aba" data-aba="monitorias"><i data-ic="headset"></i><span class="aba-txt">Monitorias</span></button>
     </nav>
   </div>
   <div class="grupo" data-area="formacao">
     <button class="area ativa" data-area="formacao"><i data-ic="users"></i><span><b>Formação inicial</b></span></button>
     <nav class="abas" data-area="formacao">
+      <button class="aba" data-aba="agenda"><i data-ic="calendar"></i><span class="aba-txt">Planejamento</span></button>
       <button class="aba ativa" data-aba="cadastro"><i data-ic="clipboard"></i><span class="aba-txt">Cadastro de formação</span></button>
       <button class="aba" data-aba="analise-trein"><i data-ic="exam"></i><span class="aba-txt">Análise treinamento</span></button>
       <button class="aba" data-aba="analise-sup"><i data-ic="headset"></i><span class="aba-txt">Análise supervisão</span></button>
       <button class="aba" data-aba="dashboard"><i data-ic="chart"></i><span class="aba-txt">Dashboard</span></button>
       <button class="aba" data-aba="base"><i data-ic="database"></i><span class="aba-txt">Base de dados</span><span class="contador" id="contBase">0</span></button>
+      <button class="aba" data-aba="admissao"><i data-ic="check"></i><span class="aba-txt">Checklist de admissão</span></button>
     </nav>
   </div>
   <div class="grupo" data-area="ativos">
@@ -188,6 +192,10 @@
   </form>
 </section>
 
+<section id="aba-desempenho" class="painel"><div id="desRaiz"></div></section>
+<section id="aba-monitorias" class="painel"><div id="monRaiz"></div></section>
+<section id="aba-agenda" class="painel"><div id="agRaiz"></div></section>
+<section id="aba-admissao" class="painel"><div id="admRaiz"></div></section>
 <section id="aba-at-gestao" class="painel"><div id="atGestaoRaiz"></div></section>
 
 <!-- ===================== BUSCAR (ficha do consultor) ===================== -->
@@ -674,7 +682,7 @@
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="tip" class="tip" hidden></div>
 
-<script src="assets/config.js?v=20261126-2100"></script>
-<script src="assets/nuvem.js?v=20261126-2100"></script>
+<script src="assets/config.js?v=20261127-0100"></script>
+<script src="assets/nuvem.js?v=20261127-0100"></script>
 </body>
 </html>

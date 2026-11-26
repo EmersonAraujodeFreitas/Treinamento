@@ -9,7 +9,7 @@
 'use strict';
 const A = window.APP;
 const { $$, norm, fmt, pct, esc, hoje, dataBR, cmpTxt, ler } = A;
-const K = { quadro: 'inovacao_treinamento_quadro_v1', ativos: 'inovacao_treinamento_ativos_v1', an: 'inovacao_treinamento_analises_v1', oc: 'inovacao_treinamento_ocorrencias_v1' };
+const K = { motivos: 'inovacao_treinamento_motivos_v1', admissao: 'inovacao_treinamento_admissao_v1', agenda: 'inovacao_treinamento_agenda_v1', quadro: 'inovacao_treinamento_quadro_v1', ativos: 'inovacao_treinamento_ativos_v1', an: 'inovacao_treinamento_analises_v1', oc: 'inovacao_treinamento_ocorrencias_v1' };
 const EXP_TOTAL = 90, EXP_MARCO = 45, BD_VELHO = 35;
 const somaDias = (iso, d) => { const x = new Date(iso + 'T12:00'); x.setDate(x.getDate() + d); return x.toISOString().slice(0, 10); };
 const diasAte = iso => Math.round((new Date(iso + 'T12:00') - new Date(hoje() + 'T12:00')) / 864e5);
@@ -25,7 +25,7 @@ function dados() {
   const an = ler(K.an, []);
   const sup = new Map(an.filter(a => a.tipo === 'supervisao').map(a => [a.treinandoId, a]));
   const trein = new Map(an.filter(a => a.tipo === 'treinamento').map(a => [a.treinandoId, a]));
-  return { quadro, ativosBD, form, sup, trein, regs: ler(K.ativos, []), oc: ler(K.oc, []) };
+  return { quadro, ativosBD, form, sup, trein, regs: ler(K.ativos, []), oc: ler(K.oc, []), motivos: ler(K.motivos, {}) || {}, admissao: ler(K.admissao, []) || [], agenda: ler(K.agenda, []) || [] };
 }
 const chaveP = (mat, nome) => mat ? 'm:' + mat : 'n:' + norm(nome);
 
@@ -76,6 +76,13 @@ function pendencias(D) {
   // consultores com supervisor que não está no quadro de gestão (BD ADM)
   const semSup = (D.quadro.itens || []).filter(c => c.supForaQuadro && c.status !== 'Desligado');
 
+  // feedbacks e medidas: plano de ação e ciência
+  add('alta', 'scale', 'Medidas disciplinares sem ciência do colaborador', 'Advertência ou suspensão aplicada sem registro de ciência. Registre a assinatura ou a recusa.', 'buscar',
+    D.oc.filter(o => (o.tipo === 'Advertência' || o.tipo === 'Suspensão') && o.ciencia === 'Pendente').map(o => pessoa(o.nome, `${o.tipo} de ${dataBR(o.data)}`)));
+  add('media', 'target', 'Reavaliações de feedback vencidas', 'O prazo do combinado passou: registre se foi cumprido.', 'buscar',
+    D.oc.filter(o => o.reavaliarEm && o.reavaliarEm < hoje() && (!o.resultado || o.resultado === 'Em andamento')).map(o => pessoa(o.nome, `${o.tipo}${o.origem ? ' (' + o.origem + ')' : ''} de ${dataBR(o.data)} · reavaliar em ${dataBR(o.reavaliarEm)}`)));
+  // checklist de admissão incompleto perto do fim do treinamento
+  if (A.pendenciasAdmissao) { const pa = A.pendenciasAdmissao(); add('media', 'check', 'Checklist de admissão incompleto', 'Treinamento termina em até 5 dias (ou já terminou) e ainda faltam acessos ou documentos.', 'admissao', pa.map(x => pessoa(x.nome, `faltam: ${x.faltam.join(', ')}`))); }
   // ocorrências
   const oc30 = D.oc.filter(o => o.data >= desde(30));
   add('alta', 'scale', 'Medidas disciplinares nos últimos 30 dias', 'Acompanhar com o supervisor e alinhar plano de desenvolvimento.', 'buscar',
@@ -108,6 +115,31 @@ function indicadores(D) {
   return { hc, deslMes, turnover, absente, diasPerdidos, uteis, porMes, saidas };
 }
 
+const MOTIVO_TIPO = { 'Pedido de demissão': 'Voluntário', 'Abandono de emprego': 'Voluntário', 'Término do contrato de experiência': 'Involuntário', 'Dispensa sem justa causa': 'Involuntário', 'Dispensa por justa causa': 'Involuntário', 'Acordo entre as partes': 'Acordo', 'Transferência ou promoção interna': 'Movimentação', 'Outro': 'Outro' };
+function saidasAnalise(D) {
+  const s12 = (D.quadro.saidas || []).filter(s => (s.desligamento || s.detectadoEm || '') >= desde(365));
+  const motivoDe = s => D.motivos[s.chave] || '';
+  const porMotivo = {}; s12.forEach(s => { const m = motivoDe(s) || 'Sem motivo informado'; porMotivo[m] = (porMotivo[m] || 0) + 1; });
+  const tipos = { Voluntário: 0, Involuntário: 0, Acordo: 0, Movimentação: 0, Outro: 0, 'Sem motivo': 0 };
+  s12.forEach(s => { const m = motivoDe(s); tipos[m ? MOTIVO_TIPO[m] || 'Outro' : 'Sem motivo']++; });
+  const faixa = s => { const a = s.admissao, d = s.desligamento || s.detectadoEm; if (!a || !d) return 'Sem data'; const m = (new Date(d) - new Date(a)) / (30.44 * 864e5); return m < 3 ? 'Até 3 meses' : m < 6 ? '3 a 6 meses' : m < 12 ? '6 a 12 meses' : 'Mais de 1 ano'; };
+  const porFaixa = { 'Até 3 meses': 0, '3 a 6 meses': 0, '6 a 12 meses': 0, 'Mais de 1 ano': 0, 'Sem data': 0 }; s12.forEach(s => porFaixa[faixa(s)]++);
+  return { total: s12.length, porMotivo, tipos, porFaixa };
+}
+// curva de retenção da formação: dos que começaram há pelo menos N dias, quantos seguiam na operação no dia N
+function retencao(D) {
+  const saidas = new Map((D.quadro.saidas || []).map(s => [norm(s.nome), s.desligamento || s.detectadoEm]));
+  const lin = D.form.filter(r => r.dataInicio).map(r => {
+    let saiu = saidas.get(norm(r.nome)) || '';
+    if (!saiu && (r.status === 'Reprovado' || r.status === 'Desistente')) saiu = r.dataFim || r.dataInicio;
+    const s = D.sup.get(r.id); if (!saiu && s && s.concluido && s.resultadoFinal !== 'Efetivado') saiu = s.concluidoEm || '';
+    return { r, ini: r.dataInicio, saiu };
+  });
+  const marcos = [30, 60, 90, 180];
+  const taxa = (xs, n) => { const el = xs.filter(x => x.ini <= desde(n)); if (!el.length) return null; const ok = el.filter(x => !x.saiu || (new Date(x.saiu) - new Date(x.ini)) / 864e5 > n); return { pct: ok.length / el.length, n: el.length }; };
+  const turmas = {}; lin.forEach(x => (turmas[x.r.turma || 'Sem turma'] = turmas[x.r.turma || 'Sem turma'] || []).push(x));
+  return { marcos, geral: marcos.map(n => taxa(lin, n)), turmas: Object.entries(turmas).map(([t, xs]) => ({ t, ini: xs.map(x => x.ini).sort()[0], cad: xs.length, v: marcos.map(n => taxa(xs, n)) })).sort((a, b) => (b.ini || '').localeCompare(a.ini || '')).slice(0, 10) };
+}
 function funil(D) {
   const f = D.form;
   const enviados = f.filter(r => r.enviadoSupEm || r.etapa === 'supervisao' || (r.etapa === 'concluido' && D.sup.has(r.id)));
@@ -137,7 +169,7 @@ function porSupervisor(D, I) {
 
 /* ---------------- tela ---------------- */
 function render() {
-  const D = dados(), P = pendencias(D), I = indicadores(D), Fu = funil(D), S = porSupervisor(D, I);
+  const D = dados(), P = pendencias(D), I = indicadores(D), Fu = funil(D), S = porSupervisor(D, I), SA = saidasAnalise(D), RT = retencao(D);
   const total = P.reduce((s, p) => s + p.itens.length, 0);
   const urg = P.filter(p => p.nivel === 'alta').reduce((s, p) => s + p.itens.length, 0), aten = P.filter(p => p.nivel === 'media').reduce((s, p) => s + p.itens.length, 0);
   contador(urg + aten);
@@ -153,7 +185,7 @@ function render() {
   raiz.innerHTML = `
   <div class="cab-pagina pn-cab">
     <div><h1>Olá, ${esc(String(u.nome || u.usuario || '').split(' ')[0])}</h1><p class="sub">${subPerfil} · ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}</p></div>
-    <div class="cab-acoes"><span class="tag neutro pn-perfil">${G.ic('user', '')}${esc(perfil)}</span><button type="button" class="btn btn-sec" id="pnAtualizar">${G.ic('clock')}Atualizar</button></div>
+    <div class="cab-acoes"><span class="tag neutro pn-perfil">${G.ic('user', '')}${esc(perfil)}</span><button type="button" class="btn btn-sec" id="pnRel" data-perm="imprimir">${G.ic('print')}Relatório do mês</button><button type="button" class="btn btn-sec" id="pnAtualizar">${G.ic('clock')}Atualizar</button></div>
   </div>
   ${atalhos.length ? `<div class="pn-atalhos">${atalhos.map(a => `<button type="button" class="pn-atalho" data-ir="${a.aba}"${a.acao ? ` data-acao="${a.acao}"` : ''}><span class="pn-at-ic">${G.ic(a.ic, '')}</span><span><b>${a.t}</b><small>${a.d}</small></span></button>`).join('')}</div>` : ''}
   <div class="kpis pn-kpis">
@@ -187,6 +219,18 @@ function render() {
     </article>
   </div>
 
+  ${perfil === 'Consulta' || perfil === 'Supervisão' ? '' : `<div class="pn-grade">
+    <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('down')}</span><div><h2>Por que estão saindo</h2><p>Desligamentos dos últimos 12 meses (${SA.total}) · motivo informado em Base de dados (BD) → Desligados e saídas</p></div></header>
+      ${SA.total ? `<div class="an-chips">${Object.entries(SA.tipos).filter(([, v]) => v).map(([k, v]) => `<span><small>${k}</small><b>${v} <em class="dica">${pct(v / SA.total)}</em></b></span>`).join('')}</div>
+      <h3 class="sub-titulo">Motivos</h3><div class="mon-crit">${Object.entries(SA.porMotivo).sort((a, b) => b[1] - a[1]).map(([m, v]) => `<div class="mon-c"><span>${esc(m)}</span><i><b style="width:${Math.round(v / SA.total * 100)}%;--c:${/Pedido|Abandono/.test(m) ? '#eb6834' : /Sem motivo/.test(m) ? '#9aa8b8' : '#2a78d6'}"></b></i><em>${v}</em></div>`).join('')}</div>
+      <h3 class="sub-titulo">Tempo de casa na saída</h3><div class="mon-crit">${Object.entries(SA.porFaixa).filter(([, v]) => v).map(([m, v]) => `<div class="mon-c"><span>${m}</span><i><b style="width:${Math.round(v / SA.total * 100)}%;--c:#6250d6"></b></i><em>${v}</em></div>`).join('')}</div>` : '<p class="dica">Sem desligamentos registrados nos últimos 12 meses.</p>'}
+    </article>
+    <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('target')}</span><div><h2>Retenção da formação</h2><p>Dos que começaram o treinamento, quantos seguiam na operação depois de 30, 60, 90 e 180 dias</p></div></header>
+      <div class="ret-marcos">${RT.marcos.map((n, i) => `<div><b>${RT.geral[i] ? pct(RT.geral[i].pct) : '—'}</b><small>${n} dias${RT.geral[i] ? ` · ${RT.geral[i].n} pessoa(s)` : ''}</small></div>`).join('')}</div>
+      ${RT.turmas.length ? `<div class="tabela-wrap"><table class="tabela"><thead><tr><th>Turma</th><th>Início</th><th class="dir">Cadastrados</th>${RT.marcos.map(n => `<th class="dir">${n}d</th>`).join('')}</tr></thead><tbody>${RT.turmas.map(t => `<tr><td><b>${esc(t.t)}</b></td><td>${dataBR(t.ini)}</td><td class="dir">${t.cad}</td>${t.v.map(x => `<td class="dir">${x ? `<span class="tag ${x.pct >= .8 ? 'bom' : x.pct >= .6 ? 'alerta' : 'ruim'}">${pct(x.pct)}</span>` : '<span class="dica">—</span>'}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '<p class="dica">Sem turmas com data de início.</p>'}
+    </article>
+  </div>`}
+
   <article class="cartao">
     <header class="cab-card"><span class="icb">${G.ic('users')}</span><div><h2>Visão por supervisor</h2><p>Equipe ativa no BD, desligamentos (90 dias), ocorrências (30 dias) e treinamentos (90 dias)</p></div></header>
     ${S.length ? `<div class="tabela-wrap"><table class="tabela"><thead><tr><th>Supervisor</th><th class="dir">Equipe</th><th class="dir">Férias/afast.</th><th class="dir">Desligados 90d</th><th class="dir">Faltas</th><th class="dir">Atrasos</th><th class="dir">Atestados (dias)</th><th class="dir">Advert./susp.</th><th class="dir">Feedbacks</th><th class="dir">Treinados 90d</th></tr></thead><tbody>
@@ -202,6 +246,7 @@ function render() {
   </article>`}`;
   G.icones(raiz);
   document.getElementById('pnAtualizar').onclick = render;
+  document.getElementById('pnRel').onclick = () => A.relatorioMensal && A.relatorioMensal();
   raiz.querySelectorAll('[data-ir]').forEach(b => b.onclick = () => A.abrirAba(b.dataset.ir));
 }
 const z = v => v ? v : '<span class="zero">0</span>';
