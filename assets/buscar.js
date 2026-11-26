@@ -24,7 +24,7 @@ const TIPOS = {
 const FEEDBACKS = ['Positivo', 'Construtivo', 'Orientação'];
 const FORMAS_ADV = ['Verbal', 'Escrita'];
 const PERIODOS = [['tudo', 'Todo o período'], ['30', 'Últimos 30 dias'], ['90', 'Últimos 90 dias'], ['180', 'Últimos 6 meses'], ['365', 'Últimos 12 meses']];
-const estado = { pessoa: null, periodo: 'tudo', sup: '', q: '', ord: { k: 'total', asc: false }, soCom: true };
+const estado = { pessoa: null, periodo: 'tudo', sup: '', q: '', ord: { k: 'total', asc: false }, soCom: true, status: 'ativos' };
 const pode = x => !window.NUVEM || !NUVEM.pode || NUVEM.pode(x);
 
 /* ---------------- quem é quem ---------------- */
@@ -42,7 +42,7 @@ function pessoas() {
     return p;
   };
   const q = ler(KEY_QUADRO, { itens: [] });
-  (q.itens || []).forEach(c => add({ nome: c.nome, matricula: c.mat, login: c.login, idOlos: c.idOlos, hubspot: c.hubspot, supervisor: c.supervisor, gerente: c.gerente, ies: c.ies, operacao: c.operacao, grupo: c.grupo, status: c.status, escala: c.escala, turno: c.turno, bairro: c.bairro, cidade: c.cidade, admissao: c.admissao, tempoCasa: c.tempoCasa, nascimento: c.nascimento, signo: c.signoBD, desligamento: c.desligamento }, 'BD da operação'));
+  (q.itens || []).forEach(c => add({ nome: c.nome, matricula: c.mat, login: c.login, idOlos: c.idOlos, hubspot: c.hubspot, supervisor: c.supervisor, gerente: c.gerente, ies: c.ies, operacao: c.operacao, grupo: c.grupo, status: c.status, escala: c.escala, turno: c.turno, bairro: c.bairro, cidade: c.cidade, admissao: c.admissao, tempoCasa: c.tempoCasa, nascimento: c.nascimento, signo: c.signoBD, desligamento: c.desligamento, foraBD: !!c.supForaQuadro }, 'BD da operação'));
   ler(KEY_ATIVOS, []).forEach(r => add({ nome: r.nome, matricula: r.matricula, login: r.login, idOlos: r.idOlos, hubspot: r.hubspot, supervisor: r.supervisor, ies: r.instituicao, operacao: r.operacao, escala: r.escala, turno: r.turno, bairro: r.bairro, cidade: r.cidade, admissao: r.admissao, nascimento: r.nascimento }, 'Treinamentos de ativos'));
   (q.saidas || []).forEach(c => add({ nome: c.nome, matricula: c.mat, login: c.login, idOlos: c.idOlos, supervisor: c.supervisor, gerente: c.gerente, ies: c.ies, operacao: c.operacao, grupo: c.grupo, status: 'Desligado', escala: c.escala, turno: c.turno, bairro: c.bairro, cidade: c.cidade, admissao: c.admissao, nascimento: c.nascimento, desligamento: c.desligamento }, 'Histórico de desligados'));
   (A.vista ? A.vista() : A.formacao()).forEach(r => { const p = add({ nome: r.nome, ies: r.instituicao, operacao: r.operacao, bairro: r.bairro, cidade: r.cidade, nascimento: r.nascimento, statusFormacao: r.status }, 'Formação inicial'); if (p) p.formacaoId = r.id; });
@@ -167,6 +167,21 @@ function render() {
   G.icones(F('bsConteudo'));
 }
 
+/* ---------------- filtro de status (padrão: ativos da empresa) ---------------- */
+// ativo = não desligado; férias, INSS e licenças contam como ativos. Treinandos em formação/experiência também.
+const STATUS_F = [['ativos', 'Ativos (inclui férias e afastados)'], ['atividade', 'Em atividade'], ['afastados', 'Férias e afastados'], ['formacao', 'Em formação ou experiência'], ['desligados', 'Desligados'], ['fora', 'Hierarquia desatualizada'], ['todos', 'Todos']];
+function grupoSt(p, k) {
+  const st = norm(p.status || ''), desl = /deslig/.test(st) || /deslig|reprov|desist/i.test(p.statusFormacao || '') && !p.status;
+  const form = !p.status && /treinamento|experi/i.test(p.statusFormacao || '');
+  const ativoBD = p.status && !desl && !p.foraBD;
+  if (k === 'todos') return true;
+  if (k === 'desligados') return desl;
+  if (k === 'fora') return !!p.foraBD && !desl;
+  if (k === 'formacao') return form;
+  if (k === 'atividade') return ativoBD && /^ativ/.test(st);
+  if (k === 'afastados') return ativoBD && !/^ativ/.test(st);
+  return ativoBD || form; // ativos
+}
 /* ---------------- panorama de todos ---------------- */
 const COLS = [['nome', 'Consultor'], ['supervisor', 'Supervisor'], ['status', 'Status'], ['atestados', 'Atestados', 1], ['diasAtestado', 'Dias de atestado', 1], ['faltas', 'Faltas', 1], ['atrasos', 'Atrasos', 1], ['feedbacks', 'Feedbacks', 1], ['advert', 'Advertências', 1], ['susp', 'Suspensões', 1], ['diasSusp', 'Dias de suspensão', 1], ['ultimo', 'Último registro']];
 function panorama(lista, porPessoa) {
@@ -176,6 +191,8 @@ function panorama(lista, porPessoa) {
   let linhas = lista.map(p => ({ p, ...resumoDe(porPessoa.get(p.k) || []), nome: p.nome, supervisor: p.supervisor || '', status: p.status || p.statusFormacao || '' }));
   const geral = resumoDe([].concat(...[...porPessoa.values()]));
   if (estado.sup) linhas = linhas.filter(l => l.supervisor === estado.sup);
+  const contSt = {}; STATUS_F.forEach(([k]) => contSt[k] = linhas.filter(l => grupoSt(l.p, k)).length);
+  linhas = linhas.filter(l => grupoSt(l.p, estado.status));
   if (estado.soCom) linhas = linhas.filter(l => l.total || l.feedbacks);
   const o = estado.ord;
   linhas.sort((a, b) => { const x = a[o.k], y = b[o.k]; const r = typeof x === 'number' ? x - y : cmpTxt(x || '', y || ''); return (o.asc ? r : -r) || cmpTxt(a.nome, b.nome); });
@@ -194,6 +211,7 @@ function panorama(lista, porPessoa) {
     <article class="cartao">
       <header class="cab-card"><span class="icb">${G.ic('users')}</span><div><h2>Consultores e ocorrências</h2><p>Clique no nome para abrir a ficha completa</p></div>
         <div class="bs-filtros">
+          <label class="bs-sel">${G.ic('check', '')}<select id="bsStatus">${STATUS_F.filter(([k]) => k === 'ativos' || k === 'todos' || contSt[k]).map(([k, t]) => `<option value="${k}"${k === estado.status ? ' selected' : ''}>${t} (${contSt[k]})</option>`).join('')}</select></label>
           <label class="bs-sel">${G.ic('users', '')}<select id="bsSup"><option value="">Todos os supervisores</option>${sups.map(s => `<option${s === estado.sup ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
           <label class="bs-toggle" title="Mostrar só consultores com ocorrência no período"><input type="checkbox" id="bsSoCom"${estado.soCom ? ' checked' : ''}><i></i><span>Só com ocorrência</span></label>
           <button type="button" class="btn btn-sec" id="bsExp" data-perm="exportar">${G.ic('download')}Exportar</button>
@@ -206,6 +224,7 @@ function panorama(lista, porPessoa) {
       </tbody></table></div>
     </article>`;
   F('bsSup').onchange = e => { estado.sup = e.target.value; render(); };
+  F('bsStatus').onchange = e => { estado.status = e.target.value; render(); };
   F('bsSoCom').onchange = e => { estado.soCom = e.target.checked; render(); };
   F('bsExp').onclick = () => {
     const cab = ['Consultor', 'Matrícula', 'Supervisor', 'Status', 'Atestados', 'Dias de atestado', 'Faltas', 'Faltas sem justificativa', 'Atrasos', 'Minutos de atraso', 'Feedbacks positivos', 'Feedbacks construtivos', 'Orientações', 'Advertências verbais', 'Advertências escritas', 'Suspensões', 'Dias de suspensão', 'Último registro'];
