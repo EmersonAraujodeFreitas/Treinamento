@@ -13,14 +13,21 @@
 
 const DATASETS_LISTA = ['formacao', 'ativos', 'analises', 'ocorrencias'];
 const VALORES = ['quadro', 'supervisores', 'bairros', 'meta'];
-const PERFIS = ['Treinamento', 'Supervisão', 'Gerência', 'Administrador'];
+const PERFIS = ['Treinamento', 'Supervisão', 'Gerência', 'Consulta', 'Administrador'];
 const TODAS_ABAS = ['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar', 'painel'];
 const TODOS_BOTOES = ['editar', 'excluir', 'exportar', 'imprimir', 'backup', 'importarBD', 'supervisores', 'exemplo', 'apagar', 'ocorrencias'];
 const ITENS_NOVOS = ['buscar', 'ocorrencias', 'painel']; // perfis salvos antes destes itens recebem o padrão
+// perfis prontos: o administrador só escolhe o perfil ao criar o usuário
+const PERFIS_VERSAO = 2; // perfis salvos em versão anterior voltam para este padrão
 const PERM_PADRAO = {
-  'Treinamento': { abas: ['cadastro', 'analise-trein', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar', 'painel'], botoes: ['editar', 'excluir', 'exportar', 'imprimir', 'supervisores', 'ocorrencias'] },
-  'Supervisão': { abas: ['analise-sup', 'dashboard', 'at-registros', 'at-dashboard', 'buscar', 'painel'], botoes: ['editar', 'exportar', 'imprimir', 'ocorrencias'] },
-  'Gerência': { abas: ['analise-trein', 'analise-sup', 'dashboard', 'base', 'at-registros', 'at-dashboard', 'at-base', 'buscar', 'painel'], botoes: ['exportar', 'imprimir'] }
+  // treinamento: formação inicial inteira, reciclagens dos ativos e ocorrências
+  'Treinamento': { abas: ['painel', 'cadastro', 'analise-trein', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar'], botoes: ['editar', 'excluir', 'exportar', 'imprimir', 'supervisores', 'ocorrencias'] },
+  // supervisão: só a própria equipe (vínculo automático pelo nome no BD ADM)
+  'Supervisão': { abas: ['painel', 'buscar', 'analise-sup', 'at-cadastro', 'at-registros', 'at-dashboard'], botoes: ['editar', 'exportar', 'imprimir', 'ocorrencias'] },
+  // gerência: vê tudo, sem alterar
+  'Gerência': { abas: ['painel', 'buscar', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-registros', 'at-dashboard', 'at-base'], botoes: ['exportar', 'imprimir'] },
+  // consulta: só indicadores, sem dados sensíveis
+  'Consulta': { abas: ['painel', 'dashboard', 'at-dashboard'], botoes: ['imprimir'] }
 };
 const ADMIN_INICIAL = { usuario: 'EMERSON', nome: 'Emerson', senha: '12345678' };
 const ITERACOES = 10000; // a PIMENTA (segredo do servidor) protege as senhas mesmo se o banco vazar
@@ -84,7 +91,8 @@ async function garantirAdmin(env) {
 /* ---------------- permissões ---------------- */
 async function permissoesDe(env, perfil) {
   if (perfil === 'Administrador') return { abas: TODAS_ABAS, botoes: TODOS_BOTOES };
-  const perfis = await lerValor(env, 'perfis', {});
+  let perfis = await lerValor(env, 'perfis', {});
+  if ((perfis._versao || 0) < PERFIS_VERSAO) perfis = {};
   let p = perfis[perfil] || PERM_PADRAO[perfil] || { abas: [], botoes: [] };
   if (perfis[perfil]) {
     // itens criados depois que o perfil foi salvo recebem o padrão do perfil
@@ -119,6 +127,36 @@ function acessoDe(perfil, perm) {
     },
     editar: bt('editar'), excluir: bt('excluir') || bt('apagar')
   };
+}
+
+/* ---------------- equipe do supervisor (vínculo automático pelo nome) ---------------- */
+const normN = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim();
+function acharSupervisor(nome, candidatos) {
+  const n = normN(nome); if (!n) return null;
+  const c = [...new Set(candidatos.filter(Boolean))];
+  const exato = c.find(x => normN(x) === n); if (exato) return exato;
+  const tk = n.split(' ').filter(t => t.length > 2);
+  if (tk.length >= 2) { const todos = c.filter(x => { const t = normN(x).split(' '); return tk.every(k => t.includes(k)); }); if (todos.length === 1) return todos[0]; }
+  const p = n.split(' '); if (p.length >= 2) { const pu = c.filter(x => { const t = normN(x).split(' '); return t[0] === p[0] && t[t.length - 1] === p[p.length - 1]; }); if (pu.length === 1) return pu[0]; }
+  return null;
+}
+function candidatosSup(q) {
+  const of = ((q && q.gestao) || []).filter(g => /SUPERVIS/i.test(g.cargo || '')).map(g => g.nome);
+  return of.length ? of : [...new Set(((q && q.itens) || []).map(c => c.supervisor))];
+}
+// devolve null para quem vê tudo; para Supervisão, a equipe (pode vir vazia se o nome não for encontrado)
+async function escopoDe(env, u, quadro) {
+  if (u.perfil !== 'Supervisão') return null;
+  const q = quadro !== undefined ? quadro : await lerValor(env, 'quadro', null);
+  const sup = acharSupervisor(u.nome, candidatosSup(q));
+  const mats = new Set(), nomes = new Set();
+  if (sup) ((q && q.itens) || []).concat((q && q.saidas) || []).forEach(c => { if (normN(c.supervisor) === normN(sup)) { if (c.mat) mats.add(String(c.mat)); nomes.add(normN(c.nome)); } });
+  return { supervisor: sup, mats, nomes, daEquipe: r => !!sup && ((r.matricula && mats.has(String(r.matricula))) || (r.mat && mats.has(String(r.mat))) || nomes.has(normN(r.nome)) || normN(r.supervisor) === normN(sup)) };
+}
+function quadroDaEquipe(q, esc) {
+  if (!q) return q;
+  const daSup = c => esc.supervisor && normN(c.supervisor) === normN(esc.supervisor);
+  return { ...q, itens: (q.itens || []).filter(daSup), saidas: (q.saidas || []).filter(daSup), bds: {}, comparacao: null, importacoes: [], equipeDe: esc.supervisor || '' };
 }
 
 /* ---------------- sessão ---------------- */
@@ -174,21 +212,31 @@ async function rotaTrocarSenha(env, u, req) {
 }
 async function rotaEstado(env, u) {
   const perm = await permissoesDe(env, u.perfil), ac = acessoDe(u.perfil, perm);
+  const vals = await todos(env, `SELECT chave, dados FROM valores WHERE chave IN (${VALORES.map(() => '?').join(',')})`, ...VALORES);
+  const rq = vals.find(x => x.chave === 'quadro');
+  const esc = await escopoDe(env, u, rq ? JSON.parse(rq.dados) : null);
   const partes = [];
   for (const ds of DATASETS_LISTA) {
     let linhas = null;
     if (ds === 'analises') linhas = ac.ler.analises.length ? await todos(env, `SELECT dados FROM registros WHERE dataset = 'analises' AND apagado = 0 AND tipo IN (${ac.ler.analises.map(() => '?').join(',')})`, ...ac.ler.analises) : [];
     else if (ac.ler[ds]) linhas = await todos(env, 'SELECT dados FROM registros WHERE dataset = ? AND apagado = 0', ds);
+    // supervisor: ocorrências e treinamentos só da própria equipe
+    if (esc && linhas && (ds === 'ocorrencias' || ds === 'ativos')) linhas = linhas.filter(r => { try { return esc.daEquipe(JSON.parse(r.dados)); } catch (e) { return false; } });
     partes.push(JSON.stringify(ds) + ':' + (linhas ? '[' + linhas.map(r => r.dados).join(',') + ']' : 'null'));
   }
-  const vals = ac.ler ? await todos(env, `SELECT chave, dados FROM valores WHERE chave IN (${VALORES.map(() => '?').join(',')})`, ...VALORES) : [];
-  for (const v of VALORES) { const r = vals.find(x => x.chave === v); partes.push(JSON.stringify(v) + ':' + (ac.ler[v] && r ? r.dados : 'null')); }
-  const cab = { versao: await versao(env), usuario: { usuario: u.usuario, nome: u.nome, perfil: u.perfil, trocarSenha: !!u.trocar_senha }, permissoes: perm, acesso: ac };
+  for (const v of VALORES) {
+    const r = vals.find(x => x.chave === v);
+    let txt = ac.ler[v] && r ? r.dados : 'null';
+    if (v === 'quadro' && esc && txt !== 'null') txt = JSON.stringify(quadroDaEquipe(JSON.parse(txt), esc));
+    partes.push(JSON.stringify(v) + ':' + txt);
+  }
+  const cab = { versao: await versao(env), usuario: { usuario: u.usuario, nome: u.nome, perfil: u.perfil, trocarSenha: !!u.trocar_senha }, permissoes: perm, acesso: ac, equipe: esc ? { supervisor: esc.supervisor || '', pessoas: esc.nomes.size } : null };
   return { __bruto: JSON.stringify(cab).slice(0, -1) + ',"datasets":{' + partes.join(',') + '}}' };
 }
 async function rotaSincronizar(env, u, req) {
   const corpo = await req.json();
   const perm = await permissoesDe(env, u.perfil), ac = acessoDe(u.perfil, perm);
+  const esc = await escopoDe(env, u);
   const recusados = [], escritas = [];
   const listas = corpo.listas || {};
   let total = 0;
@@ -203,6 +251,7 @@ async function rotaSincronizar(env, u, req) {
       const tipo = ds === 'analises' ? (rec.tipo === 'supervisao' ? 'supervisao' : 'treinamento') : null;
       const podeEsc = ds === 'analises' ? ac.escrever.analises.includes(tipo) : ac.escrever[ds];
       if (!podeEsc) { recusados.push({ ds, id: rec.id, motivo: 'sem permissão' }); continue; }
+      if (esc && (ds === 'ocorrencias' || ds === 'ativos') && !esc.daEquipe(rec)) { recusados.push({ ds, id: rec.id, motivo: 'fora da sua equipe' }); continue; }
       const atual = existentes.get(rec.id);
       if (atual && !atual.apagado && !ac.editar) { recusados.push({ ds, id: rec.id, motivo: 'sem permissão para editar' }); continue; }
       if (atual && ds === 'analises' && atual.tipo && atual.tipo !== tipo) { recusados.push({ ds, id: rec.id, motivo: 'tipo diferente' }); continue; }
@@ -246,7 +295,12 @@ async function rotaAdmin(env, u, req, partes) {
   soAdmin(u);
   const m = req.method;
   if (partes[1] === 'usuarios') {
-    if (m === 'GET') return { usuarios: await todos(env, 'SELECT usuario, nome, perfil, ativo, trocar_senha, criado_em, atualizado_em FROM usuarios ORDER BY usuario') };
+    if (m === 'GET') {
+      const us = await todos(env, 'SELECT usuario, nome, perfil, ativo, trocar_senha, criado_em, atualizado_em FROM usuarios ORDER BY usuario');
+      const cand = candidatosSup(await lerValor(env, 'quadro', null));
+      us.forEach(x => { if (x.perfil === 'Supervisão') x.equipe = acharSupervisor(x.nome, cand) || ''; });
+      return { usuarios: us, supervisoresBD: cand };
+    }
     if (m === 'POST') {
       const { usuario, nome, perfil, senha } = await req.json();
       const id = normU(usuario).replace(/\s+/g, '.');
@@ -285,10 +339,10 @@ async function rotaAdmin(env, u, req, partes) {
     }
   }
   if (partes[1] === 'permissoes') {
-    if (m === 'GET') return { perfis: await lerValor(env, 'perfis', {}), padrao: PERM_PADRAO };
+    if (m === 'GET') { const pf = await lerValor(env, 'perfis', {}); return { perfis: (pf._versao || 0) < PERFIS_VERSAO ? {} : pf, padrao: PERM_PADRAO }; }
     if (m === 'PUT') {
-      const { perfis } = await req.json(); const limpo = {};
-      for (const p of ['Treinamento', 'Supervisão', 'Gerência']) if (perfis && perfis[p]) limpo[p] = { abas: (perfis[p].abas || []).filter(a => TODAS_ABAS.includes(a)), botoes: (perfis[p].botoes || []).filter(b => TODOS_BOTOES.includes(b)), itens: [...TODAS_ABAS, ...TODOS_BOTOES] };
+      const { perfis } = await req.json(); const limpo = { _versao: PERFIS_VERSAO };
+      for (const p of ['Treinamento', 'Supervisão', 'Gerência', 'Consulta']) if (perfis && perfis[p]) limpo[p] = { abas: (perfis[p].abas || []).filter(a => TODAS_ABAS.includes(a)), botoes: (perfis[p].botoes || []).filter(b => TODOS_BOTOES.includes(b)), itens: [...TODAS_ABAS, ...TODOS_BOTOES] };
       await gravarValor(env, 'perfis', limpo, u.usuario); await subirVersao(env);
       await registrar(env, u.usuario, 'alterou-permissoes', '');
       return { ok: true };
@@ -300,7 +354,7 @@ async function rotaAdmin(env, u, req, partes) {
 
 /* ---------------- diagnóstico (não mostra nenhum valor secreto) ---------------- */
 async function diagnostico(env) {
-  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-26-v6', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
+  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-26-v7', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
   if (d.banco_ligado) {
     try { await garantirTabelas(env); } catch (e) { d.erro_criar_tabelas = String(e.message || e).slice(0, 200); }
     for (const t of ['usuarios', 'registros', 'valores', 'tentativas', 'log']) {

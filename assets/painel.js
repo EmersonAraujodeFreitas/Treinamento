@@ -32,7 +32,12 @@ const chaveP = (mat, nome) => mat ? 'm:' + mat : 'n:' + norm(nome);
 /* ---------------- pendências ---------------- */
 function pendencias(D) {
   const P = [];
-  const add = (nivel, ic, titulo, desc, aba, itens) => { if (itens.length) P.push({ nivel, ic, titulo, desc, aba, itens }); };
+  // cada perfil só vê as pendências da guia em que ele resolve (BD só para quem importa)
+  const add = (nivel, ic, titulo, desc, aba, itens) => {
+    if (!itens.length || !podeVer(aba)) return;
+    if ((ic === 'database' || /hierarquia/i.test(titulo)) && !podeVer('importarBD')) return;
+    P.push({ nivel, ic, titulo, desc, aba, itens });
+  };
   const pessoa = (nome, info) => ({ nome, info });
 
   // formação: treinamento terminou e ninguém confirmou o envio
@@ -142,11 +147,17 @@ function render() {
   const maxM = Math.max(1, ...I.porMes.map(x => x.n));
   const etapas = [['Cadastrados', Fu.cad, '#0f3a6b'], ['Enviados para supervisão', Fu.enviados, '#2a78d6'], ['Efetivados', Fu.efetivados, '#1baf7a']];
   const nivelTxt = { alta: 'Urgente', media: 'Atenção', baixa: 'Planejar' };
+  const u = (window.NUVEM && NUVEM.usuario && NUVEM.usuario()) || { nome: 'Emerson', perfil: 'Administrador' };
+  const perfil = u.perfil, eq = window.NUVEM && NUVEM.equipe && NUVEM.equipe();
+  const subPerfil = perfil === 'Supervisão' ? (eq && eq.supervisor ? `Sua equipe: <b>${esc(eq.supervisor)}</b> · ${I.hc} consultor(es)` : '<span class="tag alerta">Seu nome não foi encontrado como supervisor no BD ADM. Peça ao administrador para conferir seu nome completo.</span>')
+    : perfil === 'Treinamento' ? 'Formação inicial, reciclagens e ocorrências' : perfil === 'Consulta' ? 'Indicadores da operação' : 'Visão geral de toda a operação';
+  const atalhos = ATALHOS.filter(a => a.perfis.includes(perfil) && podeVer(a.aba));
   raiz.innerHTML = `
-  <div class="cab-pagina">
-    <div><h1>Painel da operação</h1><p class="sub">O que precisa ser feito hoje e como está a operação · ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}</p></div>
-    <div class="cab-acoes"><button type="button" class="btn btn-sec" id="pnAtualizar">${G.ic('clock')}Atualizar</button></div>
+  <div class="cab-pagina pn-cab">
+    <div><h1>Olá, ${esc(String(u.nome || u.usuario || '').split(' ')[0])}</h1><p class="sub">${subPerfil} · ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}</p></div>
+    <div class="cab-acoes"><span class="tag neutro pn-perfil">${G.ic('user', '')}${esc(perfil)}</span><button type="button" class="btn btn-sec" id="pnAtualizar">${G.ic('clock')}Atualizar</button></div>
   </div>
+  ${atalhos.length ? `<div class="pn-atalhos">${atalhos.map(a => `<button type="button" class="pn-atalho" data-ir="${a.aba}"${a.acao ? ` data-acao="${a.acao}"` : ''}><span class="pn-at-ic">${G.ic(a.ic, '')}</span><span><b>${a.t}</b><small>${a.d}</small></span></button>`).join('')}</div>` : ''}
   <div class="kpis pn-kpis">
     ${kp('Headcount', I.hc, D.quadro.importadoEm ? `${D.ativosBD.filter(c => /^ativ/.test(norm(c.status))).length} em atividade · ${D.ativosBD.filter(c => !/^ativ/.test(norm(c.status))).length} férias/afastados` : 'importe o BD', '#0f3a6b', 'users')}
     ${kp('Em formação', Fu.emTrein, 'turmas em treinamento', '#2a78d6', 'exam')}
@@ -156,14 +167,14 @@ function render() {
     ${kp('Pendências', urg + aten, `${urg} urgente(s) · ${aten} de atenção${total - urg - aten ? ` · ${total - urg - aten} para planejar` : ''}`, urg + aten ? '#ec835a' : '#1baf7a', 'flag')}
   </div>
 
-  <article class="cartao">
+  ${perfil === 'Consulta' ? '' : `<article class="cartao">
     <header class="cab-card"><span class="icb">${G.ic('flag')}</span><div><h2>Pendências</h2><p>Em ordem de prioridade. Clique para ver os nomes e abra a guia certa para resolver.</p></div></header>
     ${P.length ? `<div class="pn-pend">${P.map((p, i) => `<details class="pn-item pn-${p.nivel}"${i < 2 && p.nivel === 'alta' ? ' open' : ''}>
       <summary><span class="pn-ic">${G.ic(p.ic, '')}</span><span class="pn-tx"><b>${esc(p.titulo)}</b><small>${esc(p.desc)}</small></span><span class="pn-nivel">${nivelTxt[p.nivel]}</span><b class="pn-n">${p.itens.length}</b></summary>
       <ul>${p.itens.slice(0, 60).map(x => `<li><b>${esc(x.nome)}</b><small>${esc(x.info)}</small></li>`).join('')}${p.itens.length > 60 ? `<li class="dica">e mais ${p.itens.length - 60}…</li>` : ''}</ul>
       ${podeVer(p.aba) ? `<button type="button" class="btn btn-sec btn-mini" data-ir="${p.aba}">${G.ic('arrow-right', '')}Abrir ${esc(NOME_ABA[p.aba] || '')}</button>` : ''}
     </details>`).join('')}</div>` : `<div class="g-vazio">${G.ic('check', '')}<span>Nenhuma pendência. Operação em dia.</span></div>`}
-  </article>
+  </article>`}
 
   <div class="pn-grade">
     <article class="cartao">
@@ -185,17 +196,30 @@ function render() {
     </tbody></table></div>` : '<p class="dica">Importe o BD da operação para ver as equipes.</p>'}
   </article>
 
-  <article class="cartao">
+  ${perfil === 'Supervisão' ? '' : `<article class="cartao">
     <header class="cab-card"><span class="icb">${G.ic('exam')}</span><div><h2>Turmas</h2><p>Situação de cada turma de formação</p></div></header>
     ${Fu.turmas.length ? `<div class="tabela-wrap"><table class="tabela"><thead><tr><th>Turma</th><th>Início</th><th class="dir">Cadastrados</th><th class="dir">Em treinamento</th><th class="dir">Em experiência</th><th class="dir">Efetivados</th><th class="dir">Perdas</th><th class="dir">Retenção</th></tr></thead><tbody>
       ${Fu.turmas.slice(0, 40).map(t => `<tr><td><b>${esc(t.turma)}</b></td><td>${dataBR(t.ini) || '—'}</td><td class="dir">${t.cad}</td><td class="dir">${z(t.trein)}</td><td class="dir">${z(t.exp)}</td><td class="dir">${z(t.efet)}</td><td class="dir">${t.perda ? `<span class="tag ruim">${t.perda}</span>` : z(0)}</td><td class="dir">${t.efet + t.perda ? pct(t.efet / (t.efet + t.perda)) : '—'}</td></tr>`).join('')}
     </tbody></table></div>` : '<p class="dica">Nenhuma turma cadastrada.</p>'}
-  </article>`;
+  </article>`}`;
   G.icones(raiz);
   document.getElementById('pnAtualizar').onclick = render;
   raiz.querySelectorAll('[data-ir]').forEach(b => b.onclick = () => A.abrirAba(b.dataset.ir));
 }
 const z = v => v ? v : '<span class="zero">0</span>';
+// atalhos de cada perfil (só aparecem se a guia estiver liberada)
+const ATALHOS = [
+  { t: 'Novo cadastro', d: 'Treinando da turma', ic: 'plus', aba: 'cadastro', perfis: ['Treinamento', 'Administrador'] },
+  { t: 'Análise treinamento', d: 'Apontamentos e envio', ic: 'exam', aba: 'analise-trein', perfis: ['Treinamento', 'Administrador'] },
+  { t: 'Minha equipe', d: 'Ficha de cada consultor', ic: 'users', aba: 'buscar', perfis: ['Supervisão'] },
+  { t: 'Análise supervisão', d: 'Período de experiência', ic: 'headset', aba: 'analise-sup', perfis: ['Supervisão', 'Administrador'] },
+  { t: 'Registrar treinamento', d: 'Reciclagem ou alinhamento', ic: 'rocket', aba: 'at-cadastro', perfis: ['Treinamento', 'Supervisão', 'Administrador'] },
+  { t: 'Lançar ocorrência', d: 'Atestado, falta, feedback…', ic: 'flag', aba: 'buscar', perfis: ['Treinamento', 'Administrador'] },
+  { t: 'Buscar consultor', d: 'Perfil e ocorrências', ic: 'search', aba: 'buscar', perfis: ['Gerência'] },
+  { t: 'Dashboard formação', d: 'Indicadores das turmas', ic: 'chart', aba: 'dashboard', perfis: ['Gerência', 'Consulta'] },
+  { t: 'Dashboard ativos', d: 'Reciclagens e alinhamentos', ic: 'chart', aba: 'at-dashboard', perfis: ['Gerência', 'Consulta', 'Supervisão'] },
+  { t: 'Importar BD', d: 'Atualizar o quadro do mês', ic: 'database', aba: 'at-base', perfis: ['Administrador'] }
+];
 function contador(n) { const c = document.getElementById('contPend'); if (c) { c.textContent = n; c.hidden = !n; c.title = n + ' pendência(s) urgentes ou de atenção'; } }
 const contarPend = () => { try { contador(pendencias(dados()).filter(p => p.nivel !== 'baixa').reduce((s, p) => s + p.itens.length, 0)); } catch (e) { /* contador é opcional */ } };
 const NOME_ABA = { 'analise-trein': 'Análise treinamento', 'analise-sup': 'Análise supervisão', 'at-registros': 'Registros', 'at-base': 'Base de dados', buscar: 'Buscar consultor' };

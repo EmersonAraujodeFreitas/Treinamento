@@ -18,7 +18,14 @@ const DS = {
 const LISTAS = ['formacao', 'ativos', 'analises', 'ocorrencias'], VALORES = ['quadro', 'supervisores', 'bairros', 'meta'];
 const CHAVE_DS = Object.fromEntries(Object.entries(DS).map(([k, v]) => [v, k]));
 const K_SESSAO = 'inovacao_sessao_v2', K_PEND = 'inovacao_pendentes_v2', K_MIGRADO = 'inovacao_migrado_v2';
-const PERFIS = ['Treinamento', 'Supervisão', 'Gerência', 'Administrador'];
+const PERFIS = ['Treinamento', 'Supervisão', 'Gerência', 'Consulta', 'Administrador'];
+const PERFIL_DESC = {
+  'Treinamento': 'Formação inicial completa (cadastro, análise do treinamento, base), reciclagens dos ativos e ocorrências.',
+  'Supervisão': 'Só a própria equipe: painel, ficha dos consultores, ocorrências, análise da experiência e treinamentos da equipe. A equipe é ligada sozinha pelo nome completo no BD ADM.',
+  'Gerência': 'Vê tudo (todas as equipes e indicadores), sem alterar dados.',
+  'Consulta': 'Só indicadores: painel e dashboards, sem dados sensíveis.',
+  'Administrador': 'Tudo, inclusive usuários, importação do BD e publicação.'
+};
 const ITENS = {
   abas: [['cadastro', 'Formação · Cadastro de formação'], ['analise-trein', 'Formação · Análise treinamento'], ['analise-sup', 'Formação · Análise supervisão'], ['dashboard', 'Formação · Dashboard'], ['base', 'Formação · Base de dados'],
     ['at-cadastro', 'Ativos · Registrar treinamento'], ['at-registros', 'Ativos · Registros'], ['at-dashboard', 'Ativos · Dashboard'], ['at-base', 'Ativos · Base de dados (BD da operação)'], ['painel', 'Gestão · Painel da operação (pendências e indicadores)'], ['buscar', 'Gestão · Buscar consultor (atestados, faltas, medidas)']],
@@ -153,7 +160,7 @@ function aplicarEstado(est) {
   } finally { aplicando = false; }
   gravarJ(K_PEND, p);
   versaoLocal = est.versao;
-  sessao.permissoes = est.permissoes; sessao.usuario = est.usuario; salvarSessao();
+  sessao.permissoes = est.permissoes; sessao.usuario = est.usuario; sessao.equipe = est.equipe || null; salvarSessao();
   window.dispatchEvent(new CustomEvent('dados-atualizados'));
   aplicarPermissoes(); atualizarTopo();
 }
@@ -195,10 +202,10 @@ function aplicarPermissoes() {
   TODAS_ABAS.filter(a => !p.abas.includes(a)).forEach(a => { css += `.aba[data-aba="${a}"],#aba-${a}{display:none!important}`; });
   TODOS_BOTOES.filter(b => !p.botoes.includes(b)).forEach(b => { css += `[data-perm~="${b}"]{display:none!important}`; });
   if (!p.botoes.includes('excluir')) css += '[data-del]{display:none!important}';
-  if (!['painel', 'buscar'].some(a => p.abas.includes(a))) css += '.area[data-area="gestao"]{display:none!important}';
+  if (!['painel', 'buscar'].some(a => p.abas.includes(a))) css += '.grupo[data-area="gestao"],.area[data-area="gestao"]{display:none!important}';
   if (!p.botoes.includes('editar')) css += '.btn-icone[data-edit],.btn-icone[data-ids],#buscaEdit,#atBuscaEdit,.regs-lista [data-edit],[data-treinar]{display:none!important}td.lk{pointer-events:none;color:inherit!important;font-weight:600}';
-  if (!['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base'].some(a => p.abas.includes(a))) css += '.area[data-area="formacao"]{display:none!important}';
-  if (!['at-cadastro', 'at-registros', 'at-dashboard', 'at-base'].some(a => p.abas.includes(a))) css += '.area[data-area="ativos"]{display:none!important}';
+  if (!['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base'].some(a => p.abas.includes(a))) css += '.grupo[data-area="formacao"],.area[data-area="formacao"]{display:none!important}';
+  if (!['at-cadastro', 'at-registros', 'at-dashboard', 'at-base'].some(a => p.abas.includes(a))) css += '.grupo[data-area="ativos"],.area[data-area="ativos"]{display:none!important}';
   let st = document.getElementById('estiloPermissoes');
   if (!st) { st = document.createElement('style'); st.id = 'estiloPermissoes'; document.head.appendChild(st); }
   st.textContent = css;
@@ -295,6 +302,8 @@ async function iniciar() {
   await carregarApp();
   window.dispatchEvent(new Event('load-app'));
   aplicarPermissoes();
+  // início de cada perfil: a "Minha área"
+  if (!location.hash && pode('painel') && window.APP) window.APP.abrirAba('painel');
   setStatus(modoLocal() ? 'local' : contarPendentes() ? 'pendente' : 'ok');
   if (!modoLocal()) { iniciarAtualizacaoAoVivo(); if (contarPendentes()) enviar(); }
   vigiarInatividade();
@@ -467,24 +476,29 @@ async function renderAdmin(aba) {
   corpo.innerHTML = '<p class="dica">Carregando…</p>';
   if (aba === 'usuarios') {
     let lista = [];
-    try { lista = (await api('GET', '/admin/usuarios')).usuarios; } catch (e) { corpo.innerHTML = `<p class="msg erro">${esc(e.message)}</p>`; return; }
+    let supsBD = [];
+    try { const r = await api('GET', '/admin/usuarios'); lista = r.usuarios; supsBD = r.supervisoresBD || []; } catch (e) { corpo.innerHTML = `<p class="msg erro">${esc(e.message)}</p>`; return; }
     corpo.innerHTML = `
       <div class="adm-bloco"><h3>Novo usuário</h3>
         <div class="adm-grade">
           <label class="campo"><span>Usuário (login)</span><input id="nuUsuario" placeholder="Ex.: MARIA.SILVA" autocomplete="off"></label>
-          <label class="campo"><span>Nome</span><input id="nuNome" placeholder="Nome para exibir"></label>
+          <label class="campo"><span>Nome completo</span><input id="nuNome" placeholder="Como está no BD" list="nuSups"><datalist id="nuSups">${supsBD.map(n => `<option value="${esc(n)}">`).join('')}</datalist></label>
           <label class="campo"><span>Perfil</span><select id="nuPerfil">${PERFIS.map(p => `<option>${p}</option>`).join('')}</select></label>
           <label class="campo"><span>Senha provisória</span><input type="text" id="nuSenha" placeholder="Mínimo 8 caracteres" autocomplete="off"></label>
         </div>
-        <p class="dica">No primeiro acesso a pessoa é obrigada a criar a própria senha.</p>
+        <p class="dica perfil-desc" id="nuDesc"></p>
+        <p class="dica">No primeiro acesso a pessoa é obrigada a criar a própria senha. Os perfis já vêm prontos: é só escolher.</p>
         <div class="adm-acoes"><button type="button" class="btn btn-pri" id="nuCriar">Criar usuário</button><span class="msg" id="nuMsg"></span></div></div>
       <div class="adm-bloco"><h3>Usuários (${lista.length})</h3>
-        <table class="tabela adm-tab"><thead><tr><th>Usuário</th><th>Nome</th><th>Perfil</th><th>Situação</th><th></th></tr></thead><tbody>
-        ${lista.map(u => { const eu = normU(u.usuario) === normU(sessao.usuario.usuario); return `<tr data-u="${esc(u.usuario)}"><td><b>${esc(u.usuario)}</b></td><td>${esc(u.nome)}</td>
+        <table class="tabela adm-tab"><thead><tr><th>Usuário</th><th>Nome</th><th>Perfil</th><th>Equipe</th><th>Situação</th><th></th></tr></thead><tbody>
+        ${lista.map(u => { const eu = normU(u.usuario) === normU(sessao.usuario.usuario); return `<tr data-u="${esc(u.usuario)}"><td><b>${esc(u.usuario)}</b></td><td>${esc(u.nome)} <button type="button" class="btn-link-mini" data-acao="nome" title="Corrigir o nome completo">editar</button></td>
           <td><select data-acao="perfil"${eu ? ' disabled' : ''}>${PERFIS.map(p => `<option${p === u.perfil ? ' selected' : ''}>${p}</option>`).join('')}</select></td>
+          <td>${u.perfil === 'Supervisão' ? (u.equipe ? `<span class="tag bom" title="Ligado automaticamente pelo nome">${esc(u.equipe)}</span>` : '<span class="tag alerta" title="O nome não bate com nenhum supervisor do BD ADM. Edite o nome completo.">nome não encontrado no BD</span>') : u.perfil === 'Administrador' || u.perfil === 'Gerência' ? '<span class="dica">todas</span>' : '<span class="dica">—</span>'}</td>
           <td>${u.ativo ? '<span class="tag bom">Ativo</span>' : '<span class="tag ruim">Desativado</span>'}${u.trocar_senha ? ' <span class="tag alerta">senha provisória</span>' : ''}</td>
           <td class="adm-bts"><button type="button" class="btn btn-sec btn-mini" data-acao="senha">Nova senha</button>${eu ? '' : `<button type="button" class="btn btn-sec btn-mini" data-acao="ativo">${u.ativo ? 'Desativar' : 'Ativar'}</button><button type="button" class="btn btn-perigo btn-mini" data-acao="excluir">Excluir</button>`}</td></tr>`; }).join('')}
         </tbody></table><p class="msg" id="usMsg"></p></div>`;
+    const desc = () => { document.getElementById('nuDesc').innerHTML = `<b>${esc(document.getElementById('nuPerfil').value)}:</b> ${esc(PERFIL_DESC[document.getElementById('nuPerfil').value] || '')}`; };
+    document.getElementById('nuPerfil').onchange = desc; desc();
     document.getElementById('nuCriar').onclick = async () => {
       const m = document.getElementById('nuMsg');
       try {
@@ -496,6 +510,7 @@ async function renderAdmin(aba) {
       const b = e.target.closest('button[data-acao]'); if (!b) return;
       const usuario = b.closest('tr').dataset.u, m = document.getElementById('usMsg'), url = '/admin/usuarios/' + encodeURIComponent(usuario);
       try {
+        if (b.dataset.acao === 'nome') { const n = prompt(`Nome completo de ${usuario} (para Supervisão, igual ao BD ADM):`, b.closest('td').firstChild.textContent.trim()); if (!n) return; await api('PATCH', url, { nome: n }); renderAdmin('usuarios'); return; }
         if (b.dataset.acao === 'senha') { const s = prompt(`Senha provisória para ${usuario} (mínimo 8 caracteres). A pessoa terá que trocar no próximo acesso:`); if (!s) return; await api('PATCH', url, { senha: s }); m.textContent = `Senha de ${usuario} redefinida.`; m.className = 'msg ok'; }
         if (b.dataset.acao === 'ativo') { await api('PATCH', url, { ativo: b.textContent === 'Ativar' }); renderAdmin('usuarios'); }
         if (b.dataset.acao === 'excluir') { if (!confirm(`Excluir o usuário ${usuario}?`)) return; await api('DELETE', url); renderAdmin('usuarios'); }
@@ -509,14 +524,20 @@ async function renderAdmin(aba) {
   }
   if (aba === 'permissoes') {
     let dados; try { dados = await api('GET', '/admin/permissoes'); } catch (e) { corpo.innerHTML = `<p class="msg erro">${esc(e.message)}</p>`; return; }
-    const perfis = ['Treinamento', 'Supervisão', 'Gerência'];
+    const perfis = ['Treinamento', 'Supervisão', 'Gerência', 'Consulta'];
     const atual = p => (dados.perfis || {})[p] || dados.padrao[p];
     const linha = (tipo, [k, t]) => `<tr><td>${t}</td>${perfis.map(p => `<td class="cel-ck"><input type="checkbox" data-p="${p}" data-tipo="${tipo}" data-k="${k}"${atual(p)[tipo].includes(k) ? ' checked' : ''}></td>`).join('')}</tr>`;
-    corpo.innerHTML = `<div class="adm-bloco"><h3>O que cada perfil pode ver e fazer</h3>
-      <p class="dica">Vale no servidor: quem não tem a guia não recebe aqueles dados, e quem não tem o botão não consegue gravar. O Administrador sempre vê tudo.</p>
+    corpo.innerHTML = `<div class="adm-bloco"><h3>Perfis prontos</h3>
+      <div class="perfis-cards">${PERFIS.map(p => `<div><b>${p}</b><span>${esc(PERFIL_DESC[p])}</span></div>`).join('')}</div>
+      <p class="dica">Os perfis já vêm configurados e valem no servidor: quem não tem a guia não recebe aqueles dados, e quem não tem o botão não consegue gravar. Só mude abaixo se precisar de uma exceção.</p>
       <table class="tabela adm-tab perm-tab"><thead><tr><th>Guias</th>${perfis.map(p => `<th class="cel-ck">${p}</th>`).join('')}</tr></thead><tbody>${ITENS.abas.map(i => linha('abas', i)).join('')}</tbody>
       <thead><tr><th>Botões e ações</th>${perfis.map(p => `<th class="cel-ck">${p}</th>`).join('')}</tr></thead><tbody>${ITENS.botoes.map(i => linha('botoes', i)).join('')}</tbody></table>
-      <div class="adm-acoes"><button type="button" class="btn btn-pri" id="permSalvar">Salvar permissões</button><span class="msg" id="permMsg"></span></div></div>`;
+      <div class="adm-acoes"><button type="button" class="btn btn-pri" id="permSalvar">Salvar permissões</button><button type="button" class="btn btn-sec" id="permPadrao">Voltar ao padrão</button><span class="msg" id="permMsg"></span></div></div>`;
+    document.getElementById('permPadrao').onclick = async () => {
+      if (!confirm('Voltar todos os perfis para o padrão?')) return;
+      const m = document.getElementById('permMsg');
+      try { await api('PUT', '/admin/permissoes', { perfis: dados.padrao }); m.textContent = 'Perfis de volta ao padrão.'; m.className = 'msg ok'; renderAdmin('permissoes'); } catch (e) { m.textContent = e.message; m.className = 'msg erro'; }
+    };
     document.getElementById('permSalvar').onclick = async () => {
       const novo = {}; perfis.forEach(p => novo[p] = { abas: [], botoes: [] });
       corpo.querySelectorAll('input[data-p]').forEach(c => { if (c.checked) novo[c.dataset.p][c.dataset.tipo].push(c.dataset.k); });
@@ -563,10 +584,29 @@ async function importarAntigo(usuario, senha) {
 /* ---------------- API para os outros módulos ---------------- */
 window.NUVEM = {
   usuario: () => sessao && { ...sessao.usuario }, ehAdmin, pode, permissoes,
-  publicarAgora: () => enviar(), status: () => statusSinc, ativo: () => !modoLocal(), abrirAdmin, servidorDesatualizado: () => servidorDesatualizado
+  equipe: () => sessao && sessao.equipe || null, publicarAgora: () => enviar(), status: () => statusSinc, ativo: () => !modoLocal(), abrirAdmin, servidorDesatualizado: () => servidorDesatualizado
 };
 
+/* ---------------- menu lateral e tema ---------------- */
+function ligarCasca() {
+  const raiz = document.documentElement, topo = document.querySelector('.topo');
+  const altura = () => { if (topo) raiz.style.setProperty('--topo-h', topo.offsetHeight + 'px'); };
+  altura(); window.addEventListener('resize', altura); if (window.ResizeObserver && topo) new ResizeObserver(altura).observe(topo);
+  const menu = document.getElementById('btnMenu'), fundo = document.getElementById('lateralFundo');
+  const abrir = v => { document.body.classList.toggle('menu-aberto', v); if (menu) menu.setAttribute('aria-expanded', v ? 'true' : 'false'); };
+  if (menu) menu.onclick = () => abrir(!document.body.classList.contains('menu-aberto'));
+  if (fundo) fundo.onclick = () => abrir(false);
+  document.querySelectorAll('.lateral .aba').forEach(b => b.addEventListener('click', () => abrir(false)));
+  const rec = document.getElementById('btnRecolher');
+  if (rec) rec.onclick = () => { const r = !raiz.classList.contains('menu-recolhido'); raiz.classList.toggle('menu-recolhido', r); try { localStorage.setItem('inovacao_menu', r ? 'recolhido' : 'aberto'); } catch (e) { /* ok */ } };
+  const tema = document.getElementById('btnTema');
+  if (tema) tema.onclick = () => { const t = raiz.dataset.tema === 'escuro' ? 'claro' : 'escuro'; raiz.dataset.tema = t; try { localStorage.setItem('inovacao_tema', t); } catch (e) { /* ok */ } window.dispatchEvent(new Event('tema-alterado')); };
+  // segue o tema do computador enquanto a pessoa não escolher um
+  try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => { if (!localStorage.getItem('inovacao_tema')) raiz.dataset.tema = e.matches ? 'escuro' : 'claro'; }); } catch (e) { /* ok */ }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  ligarCasca();
   document.querySelectorAll('#admAbas button').forEach(b => b.onclick = () => renderAdmin(b.dataset.t));
   ligarTrocaSenha();
   retomarSessao().then(ok => { if (!ok) telaLogin(); }).catch(e => { console.error(e); telaLogin(); });
