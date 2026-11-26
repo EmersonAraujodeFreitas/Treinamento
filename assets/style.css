@@ -1056,3 +1056,29 @@ html.menu-recolhido .btn-recolher svg{transform:rotate(180deg)}
   html.menu-recolhido .lateral .aba{justify-content:flex-start;padding:9px 12px}
   html.menu-recolhido .lateral .contador{position:static;margin-left:auto;min-width:20px;padding:0 6px;font-size:11px}
 }
+
+/* ---------- ícones: retos em repouso, movimento curto e suave ---------- */
+/* as animações contínuas ficam paradas a maior parte do tempo e voltam sempre para a posição reta */
+@keyframes ic-float{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-1.6px)}}
+@keyframes ic-tilt{0%,70%,100%{transform:rotate(0)}78%{transform:rotate(-6deg)}86%{transform:rotate(5deg)}93%{transform:rotate(-2deg)}}
+@keyframes ic-wave{0%,70%,100%{transform:none}80%{transform:scaleX(.9)}90%{transform:scaleX(1.03)}}
+@keyframes ic-dd{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(1.6px)}}
+@keyframes ic-du{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-1.6px)}}
+@keyframes ic-bal{0%,60%,100%{transform:rotate(0)}20%{transform:rotate(-7deg)}40%{transform:rotate(7deg)}}
+@keyframes ic-launch{0%,60%,100%{transform:translate(0,0)}30%{transform:translate(1.5px,-1.5px)}}
+@keyframes ic-lapis{0%,60%,100%{transform:none}20%{transform:translate(-1.2px,.8px) rotate(-4deg)}40%{transform:translate(1.2px,-.4px) rotate(3deg)}}
+@keyframes ic-pulse{0%,60%,100%{transform:scale(1)}30%{transform:scale(1.1)}}
+.a-wave .onda{transform-origin:6px 8px}
+.ic svg{will-change:transform}
+/* destaque ao passar o mouse: o ícone "salta" e redesenha */
+@keyframes ic-pop{0%{transform:scale(1)}35%{transform:scale(1.22) rotate(-6deg)}65%{transform:scale(.95) rotate(3deg)}100%{transform:scale(1) rotate(0)}}
+.kpi:hover .kpi-ic .ic svg,.pn-atalho:hover .ic svg,.cartao:hover>.cab-card .icb .ic svg,.lateral .aba:hover .ic svg,.qr:hover .qr-ic .ic svg,.btn:hover .ic svg{animation:ic-pop .55s cubic-bezier(.3,1.4,.5,1)}
+.kpi:hover .kpi-ic .ic svg *,.pn-atalho:hover .ic svg *,.qr:hover .qr-ic .ic svg *{animation:ic-desenha .7s ease forwards;stroke-dashoffset:100}
+.kpi-ic,.pn-at-ic,.qr-ic,.icb{transition:transform .25s ease,box-shadow .25s ease}
+.kpi:hover .kpi-ic,.pn-atalho:hover .pn-at-ic,.qr:hover .qr-ic{transform:translateY(-2px);box-shadow:0 6px 14px color-mix(in srgb,var(--c,var(--marca)) 28%,transparent)}
+/* ícone sempre no centro da caixinha */
+.kpi-ic .ic,.qr-ic .ic,.pn-at-ic .ic,.icb .ic,.pn-ic .ic,.bs-ic .ic,.cmp-ic .ic{display:block;vertical-align:0;margin:0}
+.kpi-ic,.qr-ic,.pn-at-ic,.icb,.pn-ic,.bs-ic,.cmp-ic{line-height:0}
+@media (prefers-reduced-motion:reduce){.kpi:hover .kpi-ic .ic svg,.pn-atalho:hover .ic svg,.lateral .aba:hover .ic svg{animation:none!important}}
+.kpi-ic,.qr-ic,.pn-at-ic,.icb,.pn-ic,.bs-ic,.cmp-ic,.pn-perfil{display:grid!important;place-items:center!important}
+.pn-perfil{display:inline-flex!important}

@@ -65,11 +65,13 @@ const ANIM = {
   print: 'paper', download: 'drop', upload: 'lift', plus: 'pulse', percent: 'pulse', exam: 'scribble', headset: 'float', clock: 'tick',
   star: 'twinkle', edit: '', trash: '', rocket: 'launch', layers: 'float', search: 'pulse', calendar: 'pulse'
 };
+// ícones cujo desenho não fica no centro: a área visível é deslocada para centralizar
+const VB = { user: '0 .5 24 24', chart: '0 1 24 24', histogram: '0 .5 24 24', headset: '0 .75 24 24', star: '0 -.45 24 24', edit: '-.5 .5 24 24', layers: '0 -1.5 24 24', search: '.5 .5 24 24', sparkles: '1.6 -.2 24 24', flag: '0 .45 24 24' };
 function ic(nome, anim) {
   const corpo = IC[nome]; if (!corpo) return '';
   const a = anim === undefined ? ANIM[nome] || '' : anim;
   const svg = corpo.replace(/<(path|circle|rect|ellipse)\b/g, '<$1 pathLength="100"');
-  return `<span class="ic${a ? ' a-' + a : ''}" aria-hidden="true"><svg viewBox="0 0 24 24">${svg}</svg></span>`;
+  return `<span class="ic${a ? ' a-' + a : ''}" aria-hidden="true"><svg viewBox="${VB[nome] || '0 0 24 24'}">${svg}</svg></span>`;
 }
 function icones(raiz = document) {
   raiz.querySelectorAll('[data-ic]').forEach(el => {
