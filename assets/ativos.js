@@ -17,7 +17,7 @@ const SUP_PADRAO = ['ALINE DA CONCEIÇÃO SANTOS', 'ANA JULIA CRUZ LEITE', 'DEBO
 let supervisores = ler(KEY_SUP, null) || SUP_PADRAO.slice();
 const salvarSup = () => { supervisores = [...new Map(supervisores.filter(Boolean).map(n => [norm(n), n.trim().replace(/\s+/g, ' ')])).values()].sort(cmpTxt); gravar(KEY_SUP, supervisores); };
 const supReal = v => supervisores.find(n => norm(n) === norm(v));
-const KEY_QUADRO = 'inovacao_treinamento_quadro_v1';
+const KEY_QUADRO = 'inovacao_treinamento_quadro_v1', KEY_GESTAO = 'inovacao_treinamento_gestao_v1';
 let quadro = ler(KEY_QUADRO, { itens: [], arquivo: '', importadoEm: '' });
 quadro.itens.forEach(c => { if (c.bairro && !c.cidade) { const lc = A.acharBairro(c.bairro); c.cidade = lc.cidade; c.bairro = lc.bairro; } });
 // vigente = está no BD mais recente, não foi desligado e o supervisor está no quadro de gestão (BD ADM)
@@ -844,8 +844,15 @@ function lerGestao(abas) {
     const cab = aba.linhas[iCab].map(limpaCab), ix = n => cab.indexOf(n);
     for (const l of aba.linhas.slice(iCab + 1)) {
       if (!l) continue;
-      const nome = titulo(l[ix('nome')]).toUpperCase(); if (!nome || nome.split(' ').length < 2) continue;
-      out.push({ nome, cargo: titulo(l[ix('cargo')]).toUpperCase(), status: ix('status') >= 0 ? titulo(l[ix('status')]) : '' });
+      const v = n => { const i = ix(n); const x = i >= 0 ? l[i] : null; return x === null || x === undefined || String(x).trim() === '' || String(x).trim() === '-' ? null : x; };
+      const nome = titulo(v('nome')).toUpperCase(); if (!nome || nome.split(' ').length < 2) continue;
+      const adm = XLSXLeitor.dataExcel(v('admissao')), local = A.acharBairro(titulo(v('bairro'))), grupo = titulo(v('grupo'));
+      out.push({
+        nome, cargo: titulo(v('cargo')).toUpperCase(), status: /deslig/.test(norm(v('status'))) ? 'Desligado' : titulo(v('status')) || 'Ativo',
+        mat: String(v('matricula') ?? '').trim(), idOlos: String(v('id olos') ?? ''), login: String(v('login') ?? ''), superior: titulo(v('supervisor')).toUpperCase(), gerente: titulo(v('gerente')),
+        grupo, ies: iesDe(v('operacao')), escala: String(v('escala') ?? ''), turno: titulo(v('turno')), nascimento: XLSXLeitor.dataExcel(v('data de nascimento')),
+        bairro: local.bairro, cidade: local.cidade, admissao: adm, tempoCasa: tempoDeCasa(adm)
+      });
     }
   }
   return out;
@@ -931,6 +938,8 @@ async function importarBD(arquivo) {
     : { ...quadro, bds };
   reconstruirHistorico();
   gravar(KEY_QUADRO, quadro);
+  // quadro de gestão completo (BD ADM) fica num conjunto separado: só Gerência/Coordenação recebe
+  if (ehAtual && gestao.length) gravar(KEY_GESTAO, { itens: gestao, arquivo: arquivo.name, periodo, importadoEm: bds[k].em });
   // a lista de supervisores passa a ser a do BD atual: quem não supervisiona mais ninguém sai da lista
   const antes = new Set(supervisores.map(norm));
   const oficiais = (quadro.gestao || []).filter(g => /supervis/i.test(g.cargo) && !/deslig/i.test(g.status)).map(g => g.nome);
@@ -1066,6 +1075,51 @@ function renderSaidas() {
 }
 // supervisores com equipe ativa no BD atual (null quando ainda não há BD importado)
 A.supAtuais = () => { const of = (quadro.gestao || []).filter(g => /supervis/i.test(g.cargo) && !/deslig/i.test(g.status)).map(g => norm(g.nome)); const s = new Set(of.length ? of : quadro.itens.filter(c => c.status !== 'Desligado' && c.supervisor && !c.supForaQuadro).map(c => norm(c.supervisor))); return s.size ? s : null; };
+/* ---------------- quadro de gestão (BD ADM): gerentes, coordenadores, supervisores, analistas ---------------- */
+const ORDEM_CARGO = ['GERENTE', 'COORDENADOR', 'SUPERVISOR', 'ANALISTA', 'ASSISTENTE'];
+const GST = { cargo: '', status: '', q: '' };
+function renderGestao() {
+  const raiz = F('atGestaoRaiz'); if (!raiz) return;
+  const g = ler(KEY_GESTAO, null);
+  if (!g || !(g.itens || []).length) { raiz.innerHTML = `<div class="cab-pagina"><div><h1>Quadro de gestão</h1><p class="sub">Gerentes, coordenadores, supervisores, analistas e assistentes (aba BD ADM)</p></div></div><div class="vazio"><b>Nenhum quadro de gestão importado ainda.</b><p>Ele vem da aba BD ADM ao importar o BD da operação em Colaboradores ativos → Base de dados (BD).</p></div>`; return; }
+  const base = g.itens;
+  const cargoDe = c => ORDEM_CARGO.find(x => c.cargo.startsWith(x)) || c.cargo || 'OUTROS';
+  const vig = base.filter(c => c.status !== 'Desligado');
+  const cargos = [...new Set(base.map(cargoDe))].sort((a, b) => (ORDEM_CARGO.indexOf(a) + 1 || 99) - (ORDEM_CARGO.indexOf(b) + 1 || 99));
+  const ativ = vig.filter(c => /^ativ/.test(norm(c.status))).length;
+  const q = norm(GST.q);
+  const rows = base.filter(c => (GST.status === '__todos' ? true : GST.status === '__deslig' ? c.status === 'Desligado' : GST.status ? c.status === GST.status : c.status !== 'Desligado') && (!GST.cargo || cargoDe(c) === GST.cargo) && (!q || norm([c.nome, c.mat, c.login, c.cargo, c.superior, c.grupo].join(' ')).includes(q)))
+    .sort((a, b) => (ORDEM_CARGO.indexOf(cargoDe(a)) + 1 || 99) - (ORDEM_CARGO.indexOf(cargoDe(b)) + 1 || 99) || cmpTxt(a.nome, b.nome));
+  const sts = [...new Set(vig.map(c => c.status))].sort(cmpTxt), nDesl = base.length - vig.length;
+  const equipe = n => quadro.itens.filter(c => c.status !== 'Desligado' && norm(c.supervisor) === norm(n)).length;
+  const tag = x => `<span class="tag ${/^ativ/.test(norm(x)) ? 'bom' : x === 'Desligado' ? 'ruim' : 'alerta'}">${esc(x)}</span>`;
+  const ICS = { GERENTE: 'award', COORDENADOR: 'target', SUPERVISOR: 'headset', ANALISTA: 'chart', ASSISTENTE: 'clipboard' };
+  raiz.innerHTML = `
+  <div class="cab-pagina"><div><h1>Quadro de gestão</h1><p class="sub">BD de ${rotuloPeriodo(g.periodo)} · ${esc(g.arquivo || '')} · aba BD ADM · visível só para gerência e coordenação</p></div></div>
+  <article class="cartao">
+    <div class="quadro-resumo">${[['users', 'Headcount', vig.length, `${ativ} em atividade`], ...cargos.filter(c => vig.some(x => cargoDe(x) === c)).map(c => [ICS[c] || 'user', c.charAt(0) + c.slice(1).toLowerCase(), vig.filter(x => cargoDe(x) === c).length, '']), ['clock', 'Férias / afastados', vig.length - ativ, 'seguem no headcount']]
+      .map(([ic, t, v, sub]) => `<div class="qr"><span class="qr-ic">${G.ic(ic, '')}</span><div><small>${esc(t)}</small><b>${v}</b>${sub ? `<em>${sub}</em>` : ''}</div></div>`).join('')}</div>
+    <header class="cab-card cab-tabela"><span class="icb">${G.ic('users')}</span><div><h2>Gestão da operação</h2><p>${rows.length} pessoa(s) na lista</p></div>
+      <div class="cab-acoes">
+        <select id="gstCargo"><option value="">Todos os cargos</option>${cargos.map(c => `<option value="${esc(c)}"${c === GST.cargo ? ' selected' : ''}>${esc(c.charAt(0) + c.slice(1).toLowerCase())}</option>`).join('')}</select>
+        <select id="gstStatus"><option value="">Vigentes (sem desligados)</option>${sts.map(x => `<option${x === GST.status ? ' selected' : ''}>${esc(x)}</option>`).join('')}${nDesl ? `<option value="__deslig"${GST.status === '__deslig' ? ' selected' : ''}>Desligados (${nDesl})</option>` : ''}<option value="__todos"${GST.status === '__todos' ? ' selected' : ''}>Todos</option></select>
+        <input type="search" id="gstBusca" placeholder="Buscar nome, matrícula, login…" value="${esc(GST.q)}">
+        <button type="button" class="btn btn-sec" id="gstExp" data-perm="exportar">${G.ic('download')}Exportar</button>
+      </div></header>
+    <div class="tabela-wrap"><table class="tabela"><thead><tr><th>Colaborador</th><th>Cargo</th><th>Matrícula</th><th>Login</th><th>Superior</th><th>Grupo</th><th>IES</th><th>Status</th><th>Turno</th><th>Escala</th><th>Tempo de casa</th><th class="dir">Equipe no BD</th></tr></thead><tbody>
+    ${rows.map(c => `<tr><td><b>${esc(c.nome)}</b></td><td><span class="tag neutro">${esc(c.cargo)}</span></td><td>${esc(c.mat)}</td><td>${esc(c.login)}</td><td>${esc(c.superior)}</td><td>${esc(c.grupo)}</td><td>${esc(c.ies || '—')}</td><td>${tag(c.status)}</td><td>${esc(c.turno)}</td><td>${esc(c.escala)}</td><td>${esc(c.tempoCasa || tempoDeCasa(c.admissao))}</td><td class="dir">${cargoDe(c) === 'SUPERVISOR' ? equipe(c.nome) : '<span class="dica">—</span>'}</td></tr>`).join('') || '<tr><td colspan="12" class="dica">Ninguém encontrado.</td></tr>'}
+    </tbody></table></div>
+  </article>`;
+  G.icones(raiz);
+  F('gstCargo').onchange = e => { GST.cargo = e.target.value; renderGestao(); };
+  F('gstStatus').onchange = e => { GST.status = e.target.value; renderGestao(); };
+  F('gstBusca').oninput = e => { GST.q = e.target.value; const pos = e.target.selectionStart; renderGestao(); const b = F('gstBusca'); b.focus(); b.setSelectionRange(pos, pos); };
+  F('gstExp').onclick = () => {
+    const cab = ['Colaborador', 'Cargo', 'Matrícula', 'ID Olos', 'Login', 'Superior', 'Gerente', 'Grupo', 'IES', 'Status', 'Turno', 'Escala', 'Admissão', 'Tempo de casa', 'Equipe no BD'];
+    const lin = rows.map(c => [c.nome, c.cargo, c.mat, c.idOlos, c.login, c.superior, c.gerente, c.grupo, c.ies, c.status, c.turno, c.escala, dataBR(c.admissao), c.tempoCasa || tempoDeCasa(c.admissao), cargoDe(c) === 'SUPERVISOR' ? equipe(c.nome) : '']);
+    A.baixar(`quadro-de-gestao-${hoje()}.csv`, '﻿' + [cab, ...lin].map(x => x.map(A.csvCel).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
+  };
+}
 const QSEL = new Set();
 F('atTQuadro').addEventListener('change', e => {
   if (e.target.id === 'atQuadroTodos') { const q = norm(F('atBuscaQuadro').value), st = F('atQuadroStatus').value;
@@ -1236,10 +1290,11 @@ window.addEventListener('dados-atualizados', () => {
   F('atContBase').textContent = regs.length; rotuloExemplo(); datalists();
   if (F('aba-at-dashboard').classList.contains('ativo')) render();
   if (F('aba-at-registros').classList.contains('ativo')) renderBase();
+  if (F('aba-at-gestao') && F('aba-at-gestao').classList.contains('ativo')) renderGestao();
   if (F('aba-at-base').classList.contains('ativo')) { renderQuadro(); renderComparacao(); renderSaidas(); }
 });
 document.addEventListener('nuvem-status', () => { if (F('aba-at-base').classList.contains('ativo')) renderCompart(); });
-document.addEventListener('aba-aberta', e => { if (e.detail === 'at-dashboard') render(); if (e.detail === 'at-base') { renderQuadro(); renderComparacao(); renderSaidas(); } if (e.detail === 'at-registros') renderBase(); });
+document.addEventListener('aba-aberta', e => { if (e.detail === 'at-gestao') renderGestao(); if (e.detail === 'at-dashboard') render(); if (e.detail === 'at-base') { renderQuadro(); renderComparacao(); renderSaidas(); } if (e.detail === 'at-registros') renderBase(); });
 let rz; let larg = innerWidth;
 window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (Math.abs(innerWidth - larg) > 40 && F('aba-at-dashboard').classList.contains('ativo')) { larg = innerWidth; render(); } }, 250); });
 G.icones(document);

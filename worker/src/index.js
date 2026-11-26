@@ -12,11 +12,11 @@
    ========================================================= */
 
 const DATASETS_LISTA = ['formacao', 'ativos', 'analises', 'ocorrencias'];
-const VALORES = ['quadro', 'supervisores', 'bairros', 'meta'];
+const VALORES = ['quadro', 'gestao', 'supervisores', 'bairros', 'meta'];
 const PERFIS = ['Treinamento', 'Supervisão', 'Gerência', 'Consulta', 'Administrador'];
-const TODAS_ABAS = ['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar', 'painel'];
+const TODAS_ABAS = ['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar', 'painel', 'at-gestao'];
 const TODOS_BOTOES = ['editar', 'excluir', 'exportar', 'imprimir', 'backup', 'importarBD', 'supervisores', 'exemplo', 'apagar', 'ocorrencias'];
-const ITENS_NOVOS = ['buscar', 'ocorrencias', 'painel']; // perfis salvos antes destes itens recebem o padrão
+const ITENS_NOVOS = ['buscar', 'ocorrencias', 'painel', 'at-gestao']; // perfis salvos antes destes itens recebem o padrão
 // perfis prontos: o administrador só escolhe o perfil ao criar o usuário
 const PERFIS_VERSAO = 2; // perfis salvos em versão anterior voltam para este padrão
 const PERM_PADRAO = {
@@ -25,7 +25,7 @@ const PERM_PADRAO = {
   // supervisão: só a própria equipe (vínculo automático pelo nome no BD ADM)
   'Supervisão': { abas: ['painel', 'buscar', 'analise-sup', 'at-cadastro', 'at-registros', 'at-dashboard'], botoes: ['editar', 'exportar', 'imprimir', 'ocorrencias'] },
   // gerência: vê tudo, sem alterar
-  'Gerência': { abas: ['painel', 'buscar', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-registros', 'at-dashboard', 'at-base'], botoes: ['exportar', 'imprimir'] },
+  'Gerência': { abas: ['painel', 'buscar', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-registros', 'at-dashboard', 'at-base', 'at-gestao'], botoes: ['exportar', 'imprimir'] },
   // consulta: só indicadores, sem dados sensíveis
   'Consulta': { abas: ['painel', 'dashboard', 'at-dashboard'], botoes: ['imprimir'] }
 };
@@ -104,8 +104,8 @@ async function permissoesDe(env, perfil) {
 function acessoDe(perfil, perm) {
   const tem = a => perm.abas.includes(a), bt = b => perm.botoes.includes(b);
   if (perfil === 'Administrador') {
-    return { ler: { formacao: true, ativos: true, quadro: true, supervisores: true, bairros: true, meta: true, analises: ['treinamento', 'supervisao'], ocorrencias: true },
-      escrever: { formacao: true, ativos: true, quadro: true, supervisores: true, bairros: true, meta: true, analises: ['treinamento', 'supervisao'], ocorrencias: true }, editar: true, excluir: true };
+    return { ler: { formacao: true, ativos: true, quadro: true, gestao: true, supervisores: true, bairros: true, meta: true, analises: ['treinamento', 'supervisao'], ocorrencias: true },
+      escrever: { formacao: true, ativos: true, quadro: true, gestao: true, supervisores: true, bairros: true, meta: true, analises: ['treinamento', 'supervisao'], ocorrencias: true }, editar: true, excluir: true };
   }
   const anLer = [], anEsc = [];
   if (tem('dashboard')) anLer.push('treinamento', 'supervisao');
@@ -115,13 +115,13 @@ function acessoDe(perfil, perm) {
   return {
     ler: {
       formacao: ['cadastro', 'dashboard', 'base', 'analise-trein', 'analise-sup'].some(tem),
-      ativos, quadro: tem('at-cadastro') || tem('at-base') || tem('buscar'), supervisores: ativos, bairros: true, meta: true, analises: [...new Set(anLer)],
+      ativos, quadro: tem('at-cadastro') || tem('at-base') || tem('buscar'), gestao: tem('at-gestao'), supervisores: ativos, bairros: true, meta: true, analises: [...new Set(anLer)],
       ocorrencias: tem('buscar')
     },
     escrever: {
       formacao: tem('cadastro') || (tem('base') && (bt('editar') || bt('excluir') || bt('apagar') || bt('exemplo') || bt('backup'))),
       ativos: tem('at-cadastro') || (tem('at-registros') && (bt('editar') || bt('excluir') || bt('apagar') || bt('exemplo') || bt('backup'))),
-      quadro: bt('importarBD'), supervisores: bt('supervisores') || tem('at-cadastro'), bairros: tem('cadastro') || tem('at-cadastro'), meta: tem('dashboard'),
+      quadro: bt('importarBD'), gestao: bt('importarBD'), supervisores: bt('supervisores') || tem('at-cadastro'), bairros: tem('cadastro') || tem('at-cadastro'), meta: tem('dashboard'),
       analises: [...new Set(anEsc)],
       ocorrencias: tem('buscar') && bt('ocorrencias')
     },
@@ -354,7 +354,7 @@ async function rotaAdmin(env, u, req, partes) {
 
 /* ---------------- diagnóstico (não mostra nenhum valor secreto) ---------------- */
 async function diagnostico(env) {
-  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-26-v7', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
+  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-26-v8', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
   if (d.banco_ligado) {
     try { await garantirTabelas(env); } catch (e) { d.erro_criar_tabelas = String(e.message || e).slice(0, 200); }
     for (const t of ['usuarios', 'registros', 'valores', 'tentativas', 'log']) {

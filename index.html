@@ -9,8 +9,8 @@
 <link rel="apple-touch-icon" href="assets/favicon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap">
 <script>try{var t=localStorage.getItem('inovacao_tema');if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'escuro':'claro';document.documentElement.dataset.tema=t;if(localStorage.getItem('inovacao_menu')==='recolhido')document.documentElement.classList.add('menu-recolhido');}catch(e){document.documentElement.dataset.tema='claro';}</script>
-<link rel="stylesheet" href="assets/style.css?v=20261126-2000">
-<script src="assets/dados-bahia.js?v=20261126-2000"></script>
+<link rel="stylesheet" href="assets/style.css?v=20261126-2130">
+<script src="assets/dados-bahia.js?v=20261126-2130"></script>
 </head>
 <body class="bloqueado carregando">
 
@@ -85,6 +85,7 @@
       <button class="aba" data-aba="at-registros"><i data-ic="clipboard"></i><span class="aba-txt">Registros</span><span class="contador" id="atContBase">0</span></button>
       <button class="aba" data-aba="at-dashboard"><i data-ic="chart"></i><span class="aba-txt">Dashboard</span></button>
       <button class="aba" data-aba="at-base"><i data-ic="database"></i><span class="aba-txt">Base de dados (BD)</span></button>
+      <button class="aba" data-aba="at-gestao"><i data-ic="award"></i><span class="aba-txt">Quadro de gestão</span></button>
     </nav>
   </div>
   <button type="button" class="btn-recolher" id="btnRecolher" title="Recolher ou abrir o menu"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg><span>Recolher menu</span></button>
@@ -186,6 +187,8 @@
     </div>
   </form>
 </section>
+
+<section id="aba-at-gestao" class="painel"><div id="atGestaoRaiz"></div></section>
 
 <!-- ===================== BUSCAR (ficha do consultor) ===================== -->
 <section id="aba-painel" class="painel"><div id="painelRaiz"></div></section>
@@ -671,7 +674,7 @@
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="tip" class="tip" hidden></div>
 
-<script src="assets/config.js?v=20261126-2000"></script>
-<script src="assets/nuvem.js?v=20261126-2000"></script>
+<script src="assets/config.js?v=20261126-2130"></script>
+<script src="assets/nuvem.js?v=20261126-2130"></script>
 </body>
 </html>

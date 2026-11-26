@@ -71,13 +71,11 @@ function pendencias(D) {
   const treinados = new Set(D.regs.filter(r => r.presenca === 'Presente').map(r => chaveP(r.matricula, r.nome)));
   const nomesTrein = new Set(D.regs.filter(r => r.presenca === 'Presente').map(r => norm(r.nome)));
   const nunca = D.ativosBD.filter(c => c.status === 'Ativo' && c.admissao && c.admissao < desde(90) && !treinados.has(chaveP(c.mat, c.nome)) && !nomesTrein.has(norm(c.nome)));
-  add('baixa', 'users', 'Consultores com mais de 90 dias de casa sem reciclagem', 'Planejar reciclagem ou alinhamento.', 'at-base',
-    nunca.map(c => pessoa(c.nome, `${c.supervisor || ''} · admissão ${dataBR(c.admissao)}`)));
+
 
   // consultores com supervisor que não está no quadro de gestão (BD ADM)
   const semSup = (D.quadro.itens || []).filter(c => c.supForaQuadro && c.status !== 'Desligado');
-  add('media', 'users', 'Consultores com hierarquia desatualizada no BD', 'O supervisor na planilha não está no quadro de gestão (BD ADM). Eles ficam fora do quadro vigente e dos indicadores até o BD ser corrigido.', 'at-base',
-    semSup.map(c => pessoa(c.nome, `na planilha: ${c.supervisor} · ${c.grupo || ''}`)));
+
   // ocorrências
   const oc30 = D.oc.filter(o => o.data >= desde(30));
   add('alta', 'scale', 'Medidas disciplinares nos últimos 30 dias', 'Acompanhar com o supervisor e alinhar plano de desenvolvimento.', 'buscar',

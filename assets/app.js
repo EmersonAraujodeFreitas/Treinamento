@@ -837,7 +837,7 @@ document.addEventListener('click', () => setTimeout(obs, 0));
 window.APP = { $, $$, norm, num, media, fmt, pct, esc, uid, hoje, dataBR, cmpTxt, toast, baixar, ler, gravar, autocomplete, abrirAba, signoDe,
   MUN, MUN_NORM, regiaoDe, bairrosDaCidade, aprenderBairro, acharBairro, nomeProprio, csvCel, parseCSV, dataISO, formacao: () => registros, formacaoFiltrada: () => aplicaFiltros(vista().map(enriquecer)), salvarFormacao: r => { const i = registros.findIndex(x => x.id === r.id); if (i >= 0) registros[i] = r; salvarRegistros(); }, notaCalculada, efetivo, mapaSup, vista, COMPORT, idadeDe, diasUteis, meta: () => meta(), regiaoDe };
 const inicial = (location.hash || '').slice(1);
-window.addEventListener('load-app', () => { if (['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar', 'painel'].includes(inicial)) abrirAba(inicial); });
+window.addEventListener('load-app', () => { if (['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'at-gestao', 'buscar', 'painel'].includes(inicial)) abrirAba(inicial); });
 /* atualização vinda de outro usuário (sincronização) */
 window.addEventListener('dados-atualizados', () => {
   registros = ler(KEY, []); bairrosAprendidos = ler(KEY_B, {}); F('meta').value = ler(KEY_META, 7);

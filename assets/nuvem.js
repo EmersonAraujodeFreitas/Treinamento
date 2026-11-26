@@ -13,22 +13,22 @@ const API = String(window.TREINAMENTO_API || localStorage.getItem('inovacao_api_
 const VERSAO_APP = document.currentScript ? (document.currentScript.src.split('?v=')[1] || '') : '';
 const DS = {
   formacao: 'inovacao_treinamento_registros_v1', ativos: 'inovacao_treinamento_ativos_v1', analises: 'inovacao_treinamento_analises_v1', ocorrencias: 'inovacao_treinamento_ocorrencias_v1',
-  quadro: 'inovacao_treinamento_quadro_v1', supervisores: 'inovacao_treinamento_supervisores_v1', bairros: 'inovacao_treinamento_bairros_v1', meta: 'inovacao_treinamento_meta_v1'
+  quadro: 'inovacao_treinamento_quadro_v1', gestao: 'inovacao_treinamento_gestao_v1', supervisores: 'inovacao_treinamento_supervisores_v1', bairros: 'inovacao_treinamento_bairros_v1', meta: 'inovacao_treinamento_meta_v1'
 };
-const LISTAS = ['formacao', 'ativos', 'analises', 'ocorrencias'], VALORES = ['quadro', 'supervisores', 'bairros', 'meta'];
+const LISTAS = ['formacao', 'ativos', 'analises', 'ocorrencias'], VALORES = ['quadro', 'gestao', 'supervisores', 'bairros', 'meta'];
 const CHAVE_DS = Object.fromEntries(Object.entries(DS).map(([k, v]) => [v, k]));
 const K_SESSAO = 'inovacao_sessao_v2', K_PEND = 'inovacao_pendentes_v2', K_MIGRADO = 'inovacao_migrado_v2';
 const PERFIS = ['Treinamento', 'Supervisão', 'Gerência', 'Consulta', 'Administrador'];
 const PERFIL_DESC = {
   'Treinamento': 'Formação inicial completa (cadastro, análise do treinamento, base), reciclagens dos ativos e ocorrências.',
   'Supervisão': 'Só a própria equipe: painel, ficha dos consultores, ocorrências, análise da experiência e treinamentos da equipe. A equipe é ligada sozinha pelo nome completo no BD ADM.',
-  'Gerência': 'Vê tudo (todas as equipes e indicadores), sem alterar dados.',
+  'Gerência': 'Gerentes e coordenadores: veem tudo (todas as equipes, indicadores e o quadro de gestão do BD ADM), sem alterar dados.',
   'Consulta': 'Só indicadores: painel e dashboards, sem dados sensíveis.',
   'Administrador': 'Tudo, inclusive usuários, importação do BD e publicação.'
 };
 const ITENS = {
   abas: [['cadastro', 'Formação · Cadastro de formação'], ['analise-trein', 'Formação · Análise treinamento'], ['analise-sup', 'Formação · Análise supervisão'], ['dashboard', 'Formação · Dashboard'], ['base', 'Formação · Base de dados'],
-    ['at-cadastro', 'Ativos · Registrar treinamento'], ['at-registros', 'Ativos · Registros'], ['at-dashboard', 'Ativos · Dashboard'], ['at-base', 'Ativos · Base de dados (BD da operação)'], ['painel', 'Gestão · Painel da operação (pendências e indicadores)'], ['buscar', 'Gestão · Buscar consultor (atestados, faltas, medidas)']],
+    ['at-cadastro', 'Ativos · Registrar treinamento'], ['at-registros', 'Ativos · Registros'], ['at-dashboard', 'Ativos · Dashboard'], ['at-base', 'Ativos · Base de dados (BD da operação)'], ['at-gestao', 'Ativos · Quadro de gestão (BD ADM)'], ['painel', 'Gestão · Painel da operação (pendências e indicadores)'], ['buscar', 'Gestão · Buscar consultor (atestados, faltas, medidas)']],
   botoes: [['editar', 'Editar registros e análises'], ['excluir', 'Excluir registros'], ['exportar', 'Exportar planilhas (CSV)'], ['imprimir', 'Imprimir / PDF'], ['backup', 'Baixar e importar backup'],
     ['importarBD', 'Importar BD da operação'], ['supervisores', 'Gerenciar supervisores'], ['exemplo', 'Dados de exemplo'], ['apagar', 'Apagar tudo'], ['ocorrencias', 'Lançar ocorrências (atestado, falta, atraso, feedback, medida disciplinar)']]
 };
@@ -205,7 +205,7 @@ function aplicarPermissoes() {
   if (!['painel', 'buscar'].some(a => p.abas.includes(a))) css += '.grupo[data-area="gestao"],.area[data-area="gestao"]{display:none!important}';
   if (!p.botoes.includes('editar')) css += '.btn-icone[data-edit],.btn-icone[data-ids],#buscaEdit,#atBuscaEdit,.regs-lista [data-edit],[data-treinar]{display:none!important}td.lk{pointer-events:none;color:inherit!important;font-weight:600}';
   if (!['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base'].some(a => p.abas.includes(a))) css += '.grupo[data-area="formacao"],.area[data-area="formacao"]{display:none!important}';
-  if (!['at-cadastro', 'at-registros', 'at-dashboard', 'at-base'].some(a => p.abas.includes(a))) css += '.grupo[data-area="ativos"],.area[data-area="ativos"]{display:none!important}';
+  if (!['at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'at-gestao'].some(a => p.abas.includes(a))) css += '.grupo[data-area="ativos"],.area[data-area="ativos"]{display:none!important}';
   let st = document.getElementById('estiloPermissoes');
   if (!st) { st = document.createElement('style'); st.id = 'estiloPermissoes'; document.head.appendChild(st); }
   st.textContent = css;
