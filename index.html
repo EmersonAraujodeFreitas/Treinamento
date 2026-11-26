@@ -8,10 +8,20 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/favicon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap">
-<link rel="stylesheet" href="assets/style.css?v=20261126-1650">
-<script src="assets/dados-bahia.js?v=20261126-1650"></script>
+<link rel="stylesheet" href="assets/style.css?v=20261126-1720">
+<script src="assets/dados-bahia.js?v=20261126-1720"></script>
 </head>
-<body class="bloqueado">
+<body class="bloqueado carregando">
+
+<div class="carregamento" id="carregamento" role="status" aria-live="polite">
+  <div class="carr-card">
+    <div class="carr-logo"><video autoplay muted loop playsinline poster="assets/logo-inovacao-poster.png" aria-hidden="true"><source src="assets/logo-inovacao.webm" type="video/webm"><source src="assets/logo-inovacao.mp4" type="video/mp4"></video><i class="carr-anel"></i></div>
+    <span class="logo-nome">INOVAÇÃO CASA</span>
+    <h1>Treinamento</h1>
+    <div class="carr-barra"><i id="carrBarra"></i></div>
+    <p id="carrTexto">Conferindo seu acesso…</p>
+  </div>
+</div>
 
 <div class="login" id="login">
   <form class="login-card" id="loginForm" autocomplete="on">
@@ -22,7 +32,7 @@
     <p class="sub">Entre com seu usuário e senha</p>
     <label class="campo"><span>Usuário</span><input id="loginUsuario" autocomplete="username" autocapitalize="characters" required></label>
     <label class="campo"><span>Senha</span><input id="loginSenha" type="password" autocomplete="current-password" required></label>
-    <label class="chk"><input type="checkbox" id="loginManter">Manter conectado neste computador</label>
+    <p class="dica login-dica">Você continua conectado ao recarregar a página. Depois de 2 horas sem uso, o site desconecta sozinho.</p>
     <button class="btn btn-pri" id="loginBtn" type="submit"><span>Entrar</span></button>
     <p class="msg erro" id="loginMsg" role="alert"></p>
   </form>
@@ -652,7 +662,7 @@
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="tip" class="tip" hidden></div>
 
-<script src="assets/config.js?v=20261126-1650"></script>
-<script src="assets/nuvem.js?v=20261126-1650"></script>
+<script src="assets/config.js?v=20261126-1720"></script>
+<script src="assets/nuvem.js?v=20261126-1720"></script>
 </body>
 </html>

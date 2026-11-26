@@ -25,7 +25,7 @@ const PERM_PADRAO = {
 const ADMIN_INICIAL = { usuario: 'EMERSON', nome: 'Emerson', senha: '12345678' };
 const ITERACOES = 10000; // a PIMENTA (segredo do servidor) protege as senhas mesmo se o banco vazar
 const MAX_LOTE = 30; // registros por envio (limite de consultas do plano gratuito)
-const SESSAO_HORAS = 12, SESSAO_MANTER_DIAS = 30;
+const SESSAO_HORAS = 3; // o site renova a sessão enquanto há uso e desconecta após 2 horas sem uso
 
 /* ---------------- utilidades ---------------- */
 const agora = () => new Date().toISOString();
@@ -123,7 +123,7 @@ function acessoDe(perfil, perm) {
 
 /* ---------------- sessão ---------------- */
 async function criarSessao(env, u, manter) {
-  const exp = Date.now() + (manter ? SESSAO_MANTER_DIAS * 864e5 : SESSAO_HORAS * 36e5);
+  const exp = Date.now() + SESSAO_HORAS * 36e5;
   const corpo = b64u(enc.encode(JSON.stringify({ u: u.usuario, s: u.sessao, exp })));
   return corpo + '.' + await hmac(env, corpo);
 }
@@ -300,7 +300,7 @@ async function rotaAdmin(env, u, req, partes) {
 
 /* ---------------- diagnóstico (não mostra nenhum valor secreto) ---------------- */
 async function diagnostico(env) {
-  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-25-v5', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
+  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-26-v6', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
   if (d.banco_ligado) {
     try { await garantirTabelas(env); } catch (e) { d.erro_criar_tabelas = String(e.message || e).slice(0, 200); }
     for (const t of ['usuarios', 'registros', 'valores', 'tentativas', 'log']) {
@@ -342,6 +342,7 @@ export default {
       const u = await autenticar(env, req);
       if (u.trocar_senha && rota !== 'senha') throw new Erro(403, 'Troque a senha para continuar.');
       if (rota === 'senha' && req.method === 'POST') return resposta(env, req, await rotaTrocarSenha(env, u, req));
+      if (rota === 'renovar' && req.method === 'POST') return resposta(env, req, { token: await criarSessao(env, u) });
       if (rota === 'versao' && req.method === 'GET') return resposta(env, req, { versao: await versao(env) });
       if (rota === 'estado' && req.method === 'GET') return resposta(env, req, await rotaEstado(env, u));
       if (rota === 'sincronizar' && req.method === 'POST') return resposta(env, req, await rotaSincronizar(env, u, req));

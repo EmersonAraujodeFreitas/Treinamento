@@ -211,9 +211,50 @@ function aplicarPermissoes() {
 
 /* ---------------- sessão ---------------- */
 function salvarSessao() {
-  const txt = JSON.stringify(sessao);
-  sessionStorage.setItem(K_SESSAO, txt);
-  if (sessao.manter) setOrig.call(localStorage, K_SESSAO, txt); else localStorage.removeItem(K_SESSAO);
+  // fica guardada neste navegador (recarregar não pede login); a inatividade de 2 horas encerra
+  setOrig.call(localStorage, K_SESSAO, JSON.stringify(sessao));
+}
+
+/* ---------------- inatividade: 2 horas sem uso desconecta ---------------- */
+const INATIVO_MS = 2 * 36e5, AVISO_MS = 2 * 6e4, K_ATIV = 'inovacao_ultima_atividade';
+const ultimaAtividade = () => +(localStorage.getItem(K_ATIV) || 0);
+let ultimoRegistro = 0;
+function registrarAtividade() {
+  const agora = Date.now(); if (agora - ultimoRegistro < 15000) return; // grava no máximo a cada 15 s
+  ultimoRegistro = agora; setOrig.call(localStorage, K_ATIV, String(agora));
+  const av = document.getElementById('avisoInativo'); if (av) av.remove();
+}
+function vigiarInatividade() {
+  ['pointerdown', 'keydown', 'wheel', 'touchstart', 'mousemove', 'scroll'].forEach(ev => window.addEventListener(ev, registrarAtividade, { passive: true, capture: true }));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) verificarInatividade(); });
+  ultimoRegistro = 0; registrarAtividade();
+  setInterval(verificarInatividade, 20000);
+  setInterval(renovarSessao, 15 * 6e4);
+}
+function verificarInatividade() {
+  if (!sessao) return;
+  const parado = Date.now() - ultimaAtividade();
+  if (parado >= INATIVO_MS) { encerrar('Você foi desconectado por inatividade (2 horas sem uso).'); return; }
+  if (parado >= INATIVO_MS - AVISO_MS && !document.getElementById('avisoInativo')) {
+    document.body.insertAdjacentHTML('beforeend', `<div class="aviso-inativo" id="avisoInativo" role="alertdialog"><b>Você ainda está aí?</b><span>Por inatividade, o site vai desconectar em menos de 2 minutos.</span><button type="button" class="btn btn-pri" id="avisoInativoOk">Continuar conectado</button></div>`);
+    document.getElementById('avisoInativoOk').onclick = () => { ultimoRegistro = 0; registrarAtividade(); renovarSessao(true); };
+  }
+}
+// enquanto a pessoa usa o site, troca o token por um novo (o servidor só aceita tokens de até 3 horas)
+async function renovarSessao(forcar) {
+  if (!sessao || !sessao.token || modoLocal()) return;
+  if (!forcar && Date.now() - ultimaAtividade() > 20 * 6e4) return;
+  try { const r = await api('POST', '/renovar'); if (r && r.token) { sessao.token = r.token; salvarSessao(); } } catch (e) { /* servidor antigo sem /renovar: segue com o token atual */ }
+}
+
+/* ---------------- tela de carregamento ---------------- */
+function carregando(txt, pctBarra) {
+  const t = document.getElementById('carrTexto'), b = document.getElementById('carrBarra');
+  if (t && txt) t.textContent = txt; if (b && pctBarra !== undefined) b.style.width = pctBarra + '%';
+}
+function fimCarregamento() {
+  const el = document.getElementById('carregamento'); carregando(null, 100);
+  setTimeout(() => { document.body.classList.remove('carregando'); if (el) el.classList.add('saindo'); setTimeout(() => el && el.remove(), 450); }, 180);
 }
 function limparDadosLocais() {
   Object.values(DS).forEach(k => localStorage.removeItem(k));
@@ -221,12 +262,12 @@ function limparDadosLocais() {
 }
 function sair() {
   if (contarPendentes() && !modoLocal() && !confirm('Ainda há alterações não enviadas ao servidor. Sair mesmo assim? Elas serão perdidas.')) return;
-  sessionStorage.removeItem(K_SESSAO); localStorage.removeItem(K_SESSAO);
+  sessionStorage.removeItem(K_SESSAO); localStorage.removeItem(K_SESSAO); localStorage.removeItem(K_ATIV);
   if (!modoLocal()) limparDadosLocais(); // nada fica guardado no computador depois de sair
   location.reload();
 }
 function encerrar(msg) {
-  sessionStorage.removeItem(K_SESSAO); localStorage.removeItem(K_SESSAO);
+  sessionStorage.removeItem(K_SESSAO); localStorage.removeItem(K_SESSAO); localStorage.removeItem(K_ATIV);
   if (!modoLocal()) limparDadosLocais();
   sessionStorage.setItem('inovacao_msg_login', msg || '');
   location.reload();
@@ -239,6 +280,7 @@ function carregarApp() {
     let i = 0;
     const prox = () => {
       if (i >= SCRIPTS.length) return res();
+      carregando('Montando o site…', 45 + Math.round(i / SCRIPTS.length * 50));
       const s = document.createElement('script'); s.src = SCRIPTS[i++] + (VERSAO_APP ? '?v=' + VERSAO_APP : ''); s.onload = prox; s.onerror = prox; document.body.appendChild(s);
     };
     prox();
@@ -255,6 +297,8 @@ async function iniciar() {
   aplicarPermissoes();
   setStatus(modoLocal() ? 'local' : contarPendentes() ? 'pendente' : 'ok');
   if (!modoLocal()) { iniciarAtualizacaoAoVivo(); if (contarPendentes()) enviar(); }
+  vigiarInatividade();
+  fimCarregamento();
 }
 const iconeEngrenagem = '<svg viewBox="0 0 24 24" class="ico-topo"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
 const iconeSair = '<svg viewBox="0 0 24 24" class="ico-topo"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>';
@@ -277,6 +321,7 @@ function atualizarTopo() {
 
 /* ---------------- login ---------------- */
 function telaLogin() {
+  fimCarregamento();
   const f = document.getElementById('loginForm'), msg = document.getElementById('loginMsg'), btn = document.getElementById('loginBtn');
   const aviso = sessionStorage.getItem('inovacao_msg_login'); if (aviso) { msg.textContent = aviso; sessionStorage.removeItem('inovacao_msg_login'); }
   if (modoLocal()) {
@@ -286,7 +331,7 @@ function telaLogin() {
   }
   f.addEventListener('submit', async e => {
     e.preventDefault(); msg.textContent = ''; btn.disabled = true; btn.firstChild.textContent = 'Entrando…';
-    const usuario = document.getElementById('loginUsuario').value, senha = document.getElementById('loginSenha').value, manter = document.getElementById('loginManter').checked;
+    const usuario = document.getElementById('loginUsuario').value, senha = document.getElementById('loginSenha').value, manter = true;
     try {
       if (modoLocal()) {
         if (normU(usuario) !== 'EMERSON' || senha !== '12345678') throw new Error('Usuário ou senha incorretos.');
@@ -299,6 +344,7 @@ function telaLogin() {
       if (anterior && anterior !== r.usuario.usuario) limparDadosLocais();
       gravarJ('inovacao_ultimo_usuario', r.usuario.usuario);
       sessao = { token: r.token, usuario: r.usuario, permissoes: r.permissoes, manter };
+      setOrig.call(localStorage, K_ATIV, String(Date.now()));
       salvarSessao();
       if (r.usuario.trocarSenha) { abrirTrocaSenha(true, senha); return; }
       await entrarNoSite();
@@ -320,13 +366,22 @@ async function entrarNoSite() {
   await iniciar();
 }
 async function retomarSessao() {
-  const s = JSON.parse(sessionStorage.getItem(K_SESSAO) || localStorage.getItem(K_SESSAO) || 'null');
+  const s = JSON.parse(localStorage.getItem(K_SESSAO) || sessionStorage.getItem(K_SESSAO) || 'null');
   if (!s) return false;
+  // passou 2 horas sem uso desde a última vez: não retoma
+  const ult = ultimaAtividade();
+  if (ult && Date.now() - ult >= INATIVO_MS) {
+    localStorage.removeItem(K_SESSAO); sessionStorage.removeItem(K_SESSAO); localStorage.removeItem(K_ATIV);
+    if (!modoLocal()) limparDadosLocais();
+    sessionStorage.setItem('inovacao_msg_login', 'Você foi desconectado por inatividade (2 horas sem uso).');
+    return false;
+  }
   sessao = s;
+  carregando(`Olá, ${(s.usuario && (s.usuario.nome || s.usuario.usuario) || '').split(' ')[0]}! Carregando seus dados…`, 20);
   if (modoLocal()) { if (s.token) return false; await iniciar(); return true; }
-  try { aplicarEstado(await api('GET', '/estado')); }
+  try { aplicarEstado(await api('GET', '/estado')); carregando('Dados recebidos', 45); renovarSessao(true); }
   catch (e) {
-    if (e.status === 403) { abrirTrocaSenha(true); return true; }
+    if (e.status === 403) { fimCarregamento(); abrirTrocaSenha(true); return true; }
     if (!e.rede) return false;
     toastN('Sem conexão com o servidor: mostrando os últimos dados deste computador.');
   }

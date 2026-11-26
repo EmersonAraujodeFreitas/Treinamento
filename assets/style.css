@@ -902,3 +902,25 @@ button.quem:hover{background:rgba(255,255,255,.08)}
 @media (min-width:981px) and (max-width:1180px){.area>.ic{display:none}}
 .cmp-atual td{background:var(--bom-bg)}
 #atQuadroCard .cab-acoes{flex-wrap:wrap;justify-content:flex-end}#atQuadroStatus{max-width:330px}#atQuadroAviso .aviso-bd{margin:0 0 12px}
+
+/* ---------- tela de carregamento ---------- */
+body.carregando .login{visibility:hidden}
+.carregamento{position:fixed;inset:0;z-index:300;display:grid;place-items:center;padding:20px;background:radial-gradient(1200px 600px at 20% -10%,#164a80 0%,transparent 60%),radial-gradient(900px 500px at 110% 110%,#3a2a6b 0%,transparent 55%),#0d2947;transition:opacity .45s ease,visibility .45s}
+.carregamento.saindo{opacity:0;visibility:hidden}
+.carr-card{display:flex;flex-direction:column;align-items:center;gap:10px;color:#fff;text-align:center;animation:surge .5s ease}
+.carr-logo{position:relative;width:132px;height:132px;display:grid;place-items:center}
+.carr-logo video{width:104px;height:98px;object-fit:cover;border-radius:22px;background:#0d2947;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+.carr-anel{position:absolute;inset:0;border-radius:50%;border:3px solid rgba(255,255,255,.08);border-top-color:#f5c542;border-right-color:#4aa3ff;animation:carrGira 1.1s linear infinite}
+.carr-card .logo-nome{letter-spacing:4px;font-size:12px;font-weight:800;color:#f5c542;margin-top:6px}
+.carr-card h1{margin:0;font-size:26px;font-family:'Archivo Black',system-ui,sans-serif;letter-spacing:.5px}
+.carr-barra{width:240px;height:6px;border-radius:6px;background:rgba(255,255,255,.12);overflow:hidden;margin-top:8px}
+.carr-barra i{display:block;height:100%;width:8%;border-radius:6px;background:linear-gradient(90deg,#4aa3ff,#f5c542);transition:width .35s ease;position:relative}
+.carr-barra i::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);animation:carrBrilho 1.2s ease-in-out infinite}
+.carr-card p{margin:2px 0 0;font-size:13.5px;color:rgba(255,255,255,.75);min-height:1.3em}
+@keyframes carrGira{to{transform:rotate(360deg)}}
+@keyframes carrBrilho{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+@media (prefers-reduced-motion:reduce){.carr-anel,.carr-barra i::after{animation:none}}
+.login-dica{font-size:12px;color:var(--tinta-3);margin:0}
+/* aviso de inatividade */
+.aviso-inativo{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:400;background:#0d2947;color:#fff;border-radius:14px;padding:14px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;box-shadow:0 20px 50px rgba(0,0,0,.35);max-width:calc(100vw - 32px);animation:surge .3s ease}
+.aviso-inativo b{color:#f5c542}.aviso-inativo span{font-size:13px;color:rgba(255,255,255,.85)}
