@@ -65,6 +65,8 @@ async function api(metodo, caminho, corpo) {
 }
 
 /* ---------------- alterações locais → pendentes ---------------- */
+let carimbo = 0;
+const marca = v => typeof v === 'string' ? v : JSON.stringify(v); // pendentes antigos guardavam o registro inteiro
 function pendentes() { return lerJ(K_PEND, { listas: {}, valores: {} }); }
 Storage.prototype.setItem = function (k, v) {
   const ds = this === localStorage ? CHAVE_DS[k] : null;
@@ -78,10 +80,11 @@ Storage.prototype.setItem = function (k, v) {
     const mv = new Map(velho.filter(r => r && r.id).map(r => [r.id, JSON.stringify(r)]));
     const l = p.listas[ds] = p.listas[ds] || { salvar: {}, apagar: {} };
     const idsNovos = new Set();
-    novo.forEach(r => { if (!r || !r.id) return; idsNovos.add(r.id); const t = JSON.stringify(r); if (mv.get(r.id) !== t) { l.salvar[r.id] = r; delete l.apagar[r.id]; } });
+    // o pendente guarda só um carimbo; o registro é lido do navegador na hora de enviar (não duplica o espaço usado)
+    novo.forEach(r => { if (!r || !r.id) return; idsNovos.add(r.id); const t = JSON.stringify(r); if (mv.get(r.id) !== t) { l.salvar[r.id] = ++carimbo + '-' + Date.now(); delete l.apagar[r.id]; } });
     mv.forEach((_, id) => { if (!idsNovos.has(id)) { l.apagar[id] = true; delete l.salvar[id]; } });
   } else {
-    try { p.valores[ds] = JSON.parse(v); } catch (e) { return; }
+    p.valores[ds] = ++carimbo + '-' + Date.now();
   }
   gravarJ(K_PEND, p);
   agendarEnvio();
@@ -108,21 +111,29 @@ async function enviar() {
   try {
     let primeiro = true;
     while (contarPendentes(p)) {
-      const lote = { listas: {}, valores: {} }; let n = 0;
-      if (primeiro) { lote.valores = p.valores || {}; }
+      const lote = { listas: {}, valores: {} }, marcas = { listas: {}, valores: {} }; let n = 0;
+      if (primeiro) { for (const [ds, mv] of Object.entries(p.valores || {})) { let v = null; try { v = typeof mv === 'string' ? JSON.parse(localStorage.getItem(DS[ds]) ?? 'null') : mv; } catch (e) { continue; } lote.valores[ds] = v; marcas.valores[ds] = marca(mv); } }
       for (const ds of LISTAS) {
         const l = (p.listas || {})[ds]; if (!l) continue;
-        for (const [id, rec] of Object.entries(l.salvar || {})) { if (n >= MAX_LOTE) break; (lote.listas[ds] = lote.listas[ds] || { salvar: [], apagar: [] }).salvar.push(rec); n++; }
+        let atual = null;
+        for (const [id, mk] of Object.entries(l.salvar || {})) {
+          if (n >= MAX_LOTE) break;
+          if (typeof mk === 'string' && !atual) { try { atual = new Map((JSON.parse(localStorage.getItem(DS[ds]) || '[]') || []).filter(r => r && r.id).map(r => [r.id, r])); } catch (e) { atual = new Map(); } }
+          const rec = typeof mk === 'string' ? atual.get(id) : mk;
+          if (!rec) { delete l.salvar[id]; continue; }
+          (lote.listas[ds] = lote.listas[ds] || { salvar: [], apagar: [] }).salvar.push(rec); (marcas.listas[ds] = marcas.listas[ds] || {})[id] = marca(mk); n++;
+        }
+        gravarJ(K_PEND, p);
         for (const id of Object.keys(l.apagar || {})) { if (n >= MAX_LOTE) break; (lote.listas[ds] = lote.listas[ds] || { salvar: [], apagar: [] }).apagar.push(id); n++; }
       }
       const r = await api('POST', '/sincronizar', lote);
       (r.recusados || []).forEach(x => recusados.push(x));
       // tira do pendente o que foi enviado (mesmo se recusado: o servidor manda a versão correta depois)
       p = pendentes();
-      if (primeiro) { Object.keys(lote.valores).forEach(k => { if (JSON.stringify(p.valores[k]) === JSON.stringify(lote.valores[k])) delete p.valores[k]; }); }
+      if (primeiro) { Object.keys(lote.valores).forEach(k => { if (p.valores[k] !== undefined && marca(p.valores[k]) === marcas.valores[k]) delete p.valores[k]; }); }
       for (const [ds, l] of Object.entries(lote.listas)) {
         const pl = p.listas[ds]; if (!pl) continue;
-        l.salvar.forEach(rec => { if (pl.salvar[rec.id] && JSON.stringify(pl.salvar[rec.id]) === JSON.stringify(rec)) delete pl.salvar[rec.id]; });
+        l.salvar.forEach(rec => { if (pl.salvar[rec.id] !== undefined && marca(pl.salvar[rec.id]) === (marcas.listas[ds] || {})[rec.id]) delete pl.salvar[rec.id]; });
         l.apagar.forEach(id => delete pl.apagar[id]);
       }
       gravarJ(K_PEND, p);
@@ -148,7 +159,8 @@ function aplicarEstado(est) {
       if (servidor === null || servidor === undefined) { setOrig.call(localStorage, DS[ds], '[]'); delete p.listas[ds]; continue; }
       const mapa = new Map(servidor.map(r => [r.id, r]));
       const l = p.listas[ds] || { salvar: {}, apagar: {} };
-      Object.values(l.salvar || {}).forEach(r => mapa.set(r.id, r));
+      const ids = Object.keys(l.salvar || {});
+      if (ids.length) { let local = new Map(); try { local = new Map((JSON.parse(localStorage.getItem(DS[ds]) || '[]') || []).filter(r => r && r.id).map(r => [r.id, r])); } catch (e) { /* segue */ } ids.forEach(id => { const mk = l.salvar[id]; const r = typeof mk === 'string' ? local.get(id) : mk; if (r) mapa.set(id, r); }); }
       Object.keys(l.apagar || {}).forEach(id => mapa.delete(id));
       setOrig.call(localStorage, DS[ds], JSON.stringify([...mapa.values()]));
     }

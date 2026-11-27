@@ -51,9 +51,10 @@ A.identificarConsultor = v => identificar(v, indiceCache());
 A.indiceConsultores = indiceCache; A.identificarCom = identificar;
 
 /* ---------------- leitura de arquivos ---------------- */
-async function lerArquivo(f) {
+async function lerArquivo(f, progresso) {
   if (/\.csv$|\.txt$/i.test(f.name)) return [{ nome: f.name, linhas: A.parseCSV(await f.text()) }];
-  return XLSXLeitor.lerPlanilha(await f.arrayBuffer());
+  // se uma aba for o relatório de indicadores, lê só ela
+  return XLSXLeitor.lerPlanilha(await f.arrayBuffer(), { progresso, escolher: previas => { const d = acharConsolidado(previas); return d ? [previas[d.ia].nome] : previas.map(a => a.nome); } });
 }
 function cabecalhoDe(linhas) {
   for (let i = 0; i < Math.min(30, linhas.length); i++) {
@@ -574,7 +575,7 @@ function passo1() {
     if (!file) { msg.textContent = 'Escolha o arquivo.'; msg.className = 'msg erro'; return; }
     msg.textContent = 'Lendo o arquivo…'; msg.className = 'msg';
     try {
-      const abas = await lerArquivo(file), mesNome = mesDoArquivo(file.name);
+      const abas = await lerArquivo(file, XLSXLeitor.barra(msg)), mesNome = mesDoArquivo(file.name);
       arq = { fonte, mes: mesNome || document.getElementById('dsMes').value || hoje().slice(0, 7), mesDoNome: !!mesNome, nome: file.name, abas: abas.filter(a => a.linhas && a.linhas.length > 1) };
       if (!arq.abas.length) throw new Error('O arquivo não tem linhas.');
       const det = acharConsolidado(arq.abas);

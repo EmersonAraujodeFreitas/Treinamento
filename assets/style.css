@@ -1328,3 +1328,6 @@ html.menu-recolhido .btn-recolher svg{transform:rotate(180deg)}
 .pn-pi b{font-size:22px;color:var(--titulo,var(--marca-escura))}
 @media (max-width:1100px){.db-hero{grid-template-columns:1fr}}
 .db-aviso{display:flex;gap:10px;align-items:flex-start;margin-bottom:14px}
+.xl-prog{display:inline-block;width:140px;height:8px;border-radius:6px;background:var(--sup-3);overflow:hidden;vertical-align:middle;margin-right:8px}
+.xl-prog i{display:block;height:100%;background:linear-gradient(90deg,var(--marca),#2a78d6);border-radius:6px;transition:width .2s}
+.mi-meses{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;border:1px solid var(--borda);border-radius:10px;padding:10px 12px;margin:8px 0}.mi-meses b{width:100%;font-size:12.5px}.mi-meses small{color:var(--tinta-3)}

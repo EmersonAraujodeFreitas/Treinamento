@@ -259,7 +259,7 @@ const P_CANAL = ['canal', 'tipo de atendimento', 'midia'];
 const P_AT = ['protocolo', 'id da ligacao', 'id ligacao', 'ligacao', 'id atendimento', 'atendimento', 'negocio', 'link', 'telefone'];
 const P_SUP = ['supervisor', 'supervisora', 'lider'];
 const P_POS = ['pontos positivos', 'positivo', 'pontos fortes'];
-const P_MEL = ['pontos de melhoria', 'melhoria', 'oportunidade', 'observacao', 'observacoes', 'comentario', 'comentarios', 'feedback'];
+const P_MEL = ['pontos de melhoria', 'ponto de melhoria', 'melhorias', 'oportunidade de melhoria']; // comentários longos não entram por padrão (pesam muito)
 const hashTxt = t => { let h = 2166136261; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
 const dataISO = v => { if (v === null || v === undefined || v === '') return ''; const d = XLSXLeitor.dataExcel(typeof v === 'number' ? Math.floor(v) : v); return d || ''; };
 const txtCel = v => v === null || v === undefined ? '' : typeof v === 'number' ? String(Math.round(v * 10000) / 10000).replace('.', ',') : String(v).trim();
@@ -280,10 +280,11 @@ function abrirImportMon() {
     msg.textContent = 'Lendo o arquivo… (bases grandes levam alguns segundos)'; msg.className = 'msg';
     await new Promise(r => setTimeout(r, 40));
     try {
-      const abas = (/\.csv$|\.txt$/i.test(file.name) ? [{ nome: file.name, linhas: A.parseCSV(await file.text()) }] : await XLSXLeitor.lerPlanilha(await file.arrayBuffer())).filter(a => a.linhas && a.linhas.filter(Boolean).length > 1);
+      // aba mais provável: a que tem coluna de consultor/nota (só ela é lida inteira)
+      const pont = a => { const i = cabDe(a.linhas); const c = (a.linhas[i] || []).map(x => norm(String(x ?? ''))); return [P_CONS, P_NOTA, P_DATA, P_AVAL].filter(p => c.some(x => p.some(q => x === q || x.includes(q)))).length * 1000 + a.linhas.filter(Boolean).length; };
+      const prog = XLSXLeitor.barra(msg);
+      const abas = (/\.csv$|\.txt$/i.test(file.name) ? [{ nome: file.name, linhas: A.parseCSV(await file.text()) }] : await XLSXLeitor.lerPlanilha(await file.arrayBuffer(), { progresso: prog, escolher: previas => { const boas = previas.filter(a => a.linhas.filter(Boolean).length > 1).sort((a, b) => pont(b) - pont(a)); return boas.length ? [boas[0].nome] : previas.map(a => a.nome); } })).filter(a => a.linhas && a.linhas.filter(Boolean).length > 1);
       if (!abas.length) throw new Error('O arquivo não tem linhas.');
-      // aba mais provável: a que tem coluna de consultor/nota
-      const pont = a => { const i = cabDe(a.linhas); const c = (a.linhas[i] || []).map(x => norm(String(x ?? ''))); return [P_CONS, P_NOTA, P_DATA, P_AVAL].filter(p => c.some(x => p.some(q => x === q || x.includes(q)))).length * 1000 + a.linhas.length; };
       abas.sort((a, b) => pont(b) - pont(a));
       mapear({ nome: file.name, abas, mes: document.getElementById('miMes').value || hoje().slice(0, 7) }, 0);
     } catch (e) { msg.textContent = 'Não consegui ler: ' + e.message; msg.className = 'msg erro'; }
@@ -360,7 +361,7 @@ function processarMon(arq, aba, iCab, cab, m) {
     if (m.nota >= 0) { const raw = l[m.nota]; const n = typeof raw === 'number' ? raw : A.num(String(raw ?? '').replace('%', '')); if (n !== null && isFinite(n)) nota = Math.round(n * escala * 10) / 10; }
     const nome = c ? c.nome : nomeTxt.toUpperCase();
     if (!c) fora.add(nome || matTxt);
-    regs.push([data, nome, (c && c.mat) || matTxt, (m.sup >= 0 && cel(l, m.sup).toUpperCase()) || (c && c.supervisor) || '', cel(l, m.aval), cel(l, m.canal), cel(l, m.at).slice(0, 60), nota, cel(l, m.pos).slice(0, 200), cel(l, m.mel).slice(0, 200),
+    regs.push([data, nome, (c && c.mat) || matTxt, (m.sup >= 0 && cel(l, m.sup).toUpperCase()) || (c && c.supervisor) || '', cel(l, m.aval), cel(l, m.canal), cel(l, m.at).slice(0, 60), nota, cel(l, m.pos).slice(0, 150), cel(l, m.mel).slice(0, 150),
       ...cls.crit.map(([, i]) => { const v = confDe(l[i]); return v === undefined ? null : v; }),
       ...cls.num.map(([, i]) => { const v = typeof l[i] === 'number' ? l[i] : A.num(String(l[i] ?? '').replace('%', '')); return v === null || !isFinite(v) ? null : Math.round(v * 10000) / 10000; }),
       ...cls.cat.map(([, i]) => cel(l, i).slice(0, 60) || null)]);
@@ -368,15 +369,22 @@ function processarMon(arq, aba, iCab, cab, m) {
   return { regs, fora: [...fora], semData, escala, cls };
 }
 /* grava em lotes por mês (um registro por mês, com as linhas compactadas) */
-function montarLotes(arq, r) {
+function montarLotes(arq, r, mesesSel) {
   const chaveArq = hashTxt(norm(arq.nome.replace(/\.[a-z0-9]+$/i, '')));
-  const porMes = {}; r.regs.forEach(x => (porMes[x[0].slice(0, 7)] = porMes[x[0].slice(0, 7)] || []).push(x));
-  const lotes = [], agora = new Date().toISOString();
-  // pacotes de até ~150 KB (o servidor recusa registros acima de 200 KB)
+  const porMes = {}; r.regs.forEach(x => { const m = x[0].slice(0, 7); if (!mesesSel || mesesSel.includes(m)) (porMes[m] = porMes[m] || []).push(x); });
+  const lotes = [], agora = new Date().toISOString(), nc = r.cls.crit.length, nn = r.cls.num.length;
+  // compacto: dia do mês e textos repetidos (nome, matrícula, supervisor, avaliador, canal, categorias) viram índice num dicionário
+  const ehDic = k => (k >= 1 && k <= 5) || k >= FIXAS + nc + nn;
   Object.entries(porMes).forEach(([mes, xs]) => {
-    let parte = 1, atual = [], tam = 0;
-    const fecha = () => { if (!atual.length) return; lotes.push({ id: `monlote-${chaveArq}-${mes}-${parte}`, tipo: 'lote', arquivo: arq.nome, chaveArq, mes, parte, importadoEm: agora, atualizadoEm: agora, crit: r.cls.crit.map(c => c[0]), num: r.cls.num.map(c => c[0]), cat: r.cls.cat.map(c => c[0]), linhas: atual }); parte++; atual = []; tam = 0; };
-    xs.forEach(x => { const t = JSON.stringify(x).length + 1; if (tam + t > 150000) fecha(); atual.push(x); tam += t; });
+    let parte = 1, atual = [], tam = 0, dic = [], idx = new Map();
+    const cod = v => { if (v === null || v === undefined || v === '') return null; let i = idx.get(v); if (i === undefined) { i = dic.length; dic.push(v); idx.set(v, i); tam += String(v).length + 3; } return i; };
+    const fecha = () => { if (!atual.length) return; lotes.push({ id: `monlote-${chaveArq}-${mes}-${parte}`, tipo: 'lote', v: 2, arquivo: arq.nome, chaveArq, mes, parte, importadoEm: agora, atualizadoEm: agora, crit: r.cls.crit.map(c => c[0]), num: r.cls.num.map(c => c[0]), cat: r.cls.cat.map(c => c[0]), dic, linhas: atual }); parte++; atual = []; tam = 0; dic = []; idx = new Map(); };
+    xs.forEach(x => {
+      const l = x.map((v, k) => k === 0 ? +v.slice(8, 10) : ehDic(k) ? cod(v) : v === '' ? null : v);
+      while (l.length && l[l.length - 1] === null) l.pop();
+      const t = JSON.stringify(l).length + 1; if (tam + t > 140000) fecha();
+      atual.push(l); tam += t;
+    });
     fecha();
   });
   return { lotes, chaveArq, meses: Object.keys(porMes).sort() };
@@ -385,26 +393,36 @@ function conferir(arq, aba, iCab, cab, m) {
   const f = document.getElementById('monImpForm');
   f.querySelector('.dlg-rod .msg').textContent = 'Processando…';
   setTimeout(() => {
-    const r = processarMon(arq, aba, iCab, cab, m), { lotes, chaveArq, meses } = montarLotes(arq, r);
+    const r = processarMon(arq, aba, iCab, cab, m);
+    const contaMes = {}; r.regs.forEach(x => { const k = x[0].slice(0, 7); contaMes[k] = (contaMes[k] || 0) + 1; });
+    const todosMeses = Object.keys(contaMes).sort();
+    // base muito grande: sugere os 6 meses mais recentes (o navegador tem espaço limitado)
+    const padrao = r.regs.length > 25000 ? todosMeses.slice(-6) : todosMeses;
+    let { lotes, chaveArq, meses } = montarLotes(arq, r, padrao);
     const notas = r.regs.map(x => x[7]).filter(v => v !== null);
     const tam = JSON.stringify(lotes).length;
     f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('check')}</span><div><h2>Conferir antes de salvar</h2><p>${esc(arq.nome)} · ${meses.map(mesTxt).join(', ') || '—'}</p></div></header>
       <div class="an-chips"><span><small>Monitorias</small><b>${r.regs.length.toLocaleString('pt-BR')}</b></span><span><small>Nota média</small><b>${notas.length ? fmt(notas.reduce((a, b) => a + b, 0) / notas.length, 1) + '%' : '—'}</b></span><span><small>Critérios (Sim/Não)</small><b>${r.cls.crit.length}</b></span><span><small>Outros campos</small><b>${r.cls.num.length + r.cls.cat.length}</b></span><span><small>Fora do BD</small><b>${r.fora.length}</b></span></div>
       ${r.semData ? `<p class="aviso-fluxo">${r.semData} linha(s) sem data: ficam em ${mesTxt(arq.mes)}.</p>` : ''}
+      ${todosMeses.length > 1 ? `<div class="mi-meses"><b>Meses a importar</b>${todosMeses.map(k => `<label class="ck"><input type="checkbox" value="${k}"${padrao.includes(k) ? ' checked' : ''}> ${mesTxt(k)} <small>${contaMes[k].toLocaleString('pt-BR')}</small></label>`).join('')}${r.regs.length > 25000 ? '<small class="dica">Base grande: marcamos os 6 meses mais recentes para o site continuar leve.</small>' : ''}</div>` : ''}
       ${r.cls.crit.length ? `<p class="dica"><b>Critérios:</b> ${r.cls.crit.map(c => esc(c[0])).join(' · ')}</p>` : ''}
       ${r.cls.num.length + r.cls.cat.length ? `<p class="dica"><b>Também guardados:</b> ${r.cls.num.concat(r.cls.cat).map(c => esc(c[0])).join(' · ')}</p>` : ''}
       ${r.cls.fora.length ? `<p class="dica">Texto livre não guardado (deixa o site leve): ${r.cls.fora.slice(0, 10).map(esc).join(', ')}${r.cls.fora.length > 10 ? '…' : ''}</p>` : ''}
       ${r.fora.length ? `<details class="do-trein"><summary>${G.ic('alert', '')}Não estão no BD atual (${r.fora.length})</summary><ul class="aps-lidos">${r.fora.slice(0, 80).map(n => `<li>${esc(n)}</li>`).join('')}</ul></details>` : ''}
-      <p class="dica">Nota na escala ${r.escala === 100 ? '0 a 1 (convertida para %)' : r.escala === 10 ? '0 a 10 (convertida para %)' : '0 a 100'} · ${lotes.length} pacote(s) · ${fmt(tam / 1024, 0)} KB. Importar de novo um arquivo com o mesmo nome substitui os meses dele.</p>
+      <p class="dica">Nota na escala ${r.escala === 100 ? '0 a 1 (convertida para %)' : r.escala === 10 ? '0 a 10 (convertida para %)' : '0 a 100'} · <span id="miTam">${lotes.length} pacote(s) · ${fmt(tam / 1024, 0)} KB</span>. Importar de novo um arquivo com o mesmo nome substitui os meses dele.</p>
       <div class="dlg-rod"><small class="msg" id="miMsg"></small><span><button type="button" class="btn btn-sec" id="miVoltar2">Voltar</button> <button type="button" class="btn btn-pri" id="miSalvar"${r.regs.length ? '' : ' disabled'}>${G.ic('check')}Salvar ${r.regs.length.toLocaleString('pt-BR')} monitoria(s)</button></span></div>`;
     G.icones(f);
     document.getElementById('miVoltar2').onclick = () => mapear(arq, arq.abas.indexOf(aba));
+    const atualizarSel = () => { const sel = [...f.querySelectorAll('.mi-meses input:checked')].map(i => i.value); ({ lotes, chaveArq, meses } = montarLotes(arq, r, sel)); const n = meses.reduce((a, k) => a + contaMes[k], 0); document.getElementById('miTam').textContent = `${lotes.length} pacote(s) · ${fmt(JSON.stringify(lotes).length / 1024, 0)} KB`; document.getElementById('miSalvar').innerHTML = `${G.ic('check', '')}Salvar ${n.toLocaleString('pt-BR')} monitoria(s)`; document.getElementById('miSalvar').disabled = !n; };
+    f.querySelectorAll('.mi-meses input').forEach(i => i.onchange = atualizarSel);
+    if (todosMeses.length > 1) atualizarSel();
     document.getElementById('miSalvar').onclick = () => {
       lista = ler(KEY, []) || [];
       lista = lista.filter(x => !(x.tipo === 'lote' && x.chaveArq === chaveArq && meses.includes(x.mes)) && !(x.origem === 'importada' && x.arquivo === arq.nome)).concat(lotes);
-      try { salvar(); } catch (e) { const x = document.getElementById('miMsg'); x.textContent = 'O navegador ficou sem espaço para guardar esta base. Importe menos meses por arquivo.'; x.className = 'msg erro'; return; }
+      const novo = JSON.stringify(lista); let ok = true; try { localStorage.setItem(KEY, novo); } catch (e) { ok = false; }
+      if (!ok || (localStorage.getItem(KEY) || '').length !== novo.length) { const x = document.getElementById('miMsg'); x.textContent = 'O navegador ficou sem espaço para guardar tantas monitorias. Desmarque alguns meses e salve de novo.'; x.className = 'msg erro'; return; }
       dlgImp.close(); est.mes = meses[meses.length - 1] || est.mes; est.pag = 1; render();
-      toast(`${r.regs.length.toLocaleString('pt-BR')} monitoria(s) importada(s)`);
+      toast(`${meses.reduce((a, k) => a + contaMes[k], 0).toLocaleString('pt-BR')} monitoria(s) importada(s)`);
       if (window.NUVEM && NUVEM.ativo && NUVEM.ativo()) NUVEM.publicarAgora();
     };
   }, 30);
@@ -418,7 +436,9 @@ function todas() {
   raw.forEach(r => {
     if (r.tipo !== 'lote') { if (r && r.data) out.push(r); return; }
     const nc = (r.crit || []).length, nn = (r.num || []).length;
-    (r.linhas || []).forEach((l, i) => {
+    const dz = r.v === 2 ? (v => typeof v === 'number' ? r.dic[v] : v) : (v => v);
+    (r.linhas || []).forEach((l0, i) => {
+      const l = r.v === 2 ? l0.map((v, k) => k === 0 ? `${r.mes}-${String(v).padStart(2, '0')}` : (k >= 1 && k <= 5) || k >= FIXAS + nc + nn ? dz(v) : v) : l0;
       const crit = {}, campos = {};
       (r.crit || []).forEach((h, k) => { const v = l[FIXAS + k]; if (v !== null && v !== undefined) { crit[h] = v; campos[h] = v === 1 ? 'Sim' : v === 0 ? 'Não' : 'Parcial'; } });
       (r.num || []).forEach((h, k) => { const v = l[FIXAS + nc + k]; if (v !== null && v !== undefined) campos[h] = v; });
