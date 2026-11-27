@@ -1434,3 +1434,8 @@ html.menu-recolhido .btn-recolher svg{transform:rotate(180deg)}
 .db-top li{min-width:0}
 .db-top li em{flex:0 0 auto}
 @media (max-width:1300px){.db-top{grid-template-columns:minmax(0,1fr)}}
+.q-org{max-width:520px;margin:4px 0 14px}
+.q-mm-t{margin:14px 0 6px;padding:6px 12px;border-radius:8px;color:#fff;font-size:13px;letter-spacing:.5px;text-transform:uppercase}
+.q-mm-mon{background:#6a2c91}.q-mm-sup{background:#14325c}
+.mm-tab .mm-op{width:150px}.mm-final{font-size:14px}
+.mm-add{display:flex;gap:8px;align-items:center;margin:8px 0 4px;flex-wrap:wrap}.mm-add input{min-height:32px;width:200px}

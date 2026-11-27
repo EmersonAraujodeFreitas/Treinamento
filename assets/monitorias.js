@@ -79,7 +79,7 @@ const iniciais = n => String(n || '?').split(' ').filter(Boolean).map(p => p[0])
 const corNota = n => n === null || n === undefined ? '#8a96a8' : n >= 95 ? '#0f9d58' : n >= 85 ? '#1baf7a' : n >= 70 ? '#eda100' : '#d03b3b';
 
 /* ---------- metas (quantidade de monitorias por consultor no mês) ---------- */
-const DEF_METAS = { padraoSup: 2, padraoMon: 2, fator: {}, qtd: {}, red: {}, nota: META };
+const DEF_METAS = { padraoSup: 2, padraoMon: 2, fator: {}, qtd: {}, red: {}, meta: {}, op: {}, extra: [], nota: META };
 const metasMon = () => Object.assign({}, DEF_METAS, ((ler(KEY_DES, {}) || {}).metasMon) || {});
 function operacaoBD(c) {
   // operação do consultor no BD: Captação → Admissão, Permanência → Serviços; IES UVA/Unijorge
@@ -104,20 +104,22 @@ function montarMetas(P, doMes, todasMon) {
   const avalSup = doMes.filter(m => m._t === 'Supervisor');
   const linhasSup = Object.entries(sups).map(([s, eq]) => {
     const opsEq = {}; eq.forEach(c => { const o = opDeCons(c); if (o) opsEq[o] = (opsEq[o] || 0) + 1; });
-    const op = Object.entries(opsEq).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
-    const k = 'sup:' + norm(s), qtd = mt.qtd[k] ?? eq.length, red = mt.red[k] || 0;
-    const meta = Math.max(0, Math.round(qtd * fator(op, 'sup') - red));
+    const k = 'sup:' + norm(s);
+    const opAuto = Object.entries(opsEq).sort((a, b) => b[1] - a[1])[0]?.[0] || '', op = (mt.op || {})[k] || opAuto;
+    const qtd = mt.qtd[k] ?? eq.length, red = mt.red[k] || 0, fixa = (mt.meta || {})[k];
+    const calc = Math.round(qtd * fator(op, 'sup')), meta = Math.max(0, (fixa ?? calc) - red);
     const minhas = avalSup.filter(m => mesmoNome(m.avaliador || '', s));
     const daEquipe = doMes.filter(m => norm(m.supervisor) === norm(s) || eq.some(c => norm(c.nome) === norm(m.nome)));
-    return { tipo: 'sup', chave: k, nome: s, op, qtd, qtdAuto: eq.length, red, fator: fator(op, 'sup'), meta, feitas: minhas.length, fb: minhas.filter(m => m._fb).length, notaDada: media_(minhas.map(m => m.nota)), mediaEquipe: media_(daEquipe.map(m => m.nota)), equipe: daEquipe };
+    return { tipo: 'sup', chave: k, nome: s, op, opAuto, qtd, qtdAuto: eq.length, red, fator: fator(op, 'sup'), calc, fixa, meta, feitas: minhas.length, fb: minhas.filter(m => m._fb).length, notaDada: media_(minhas.map(m => m.nota)), mediaEquipe: media_(daEquipe.map(m => m.nota)), equipe: daEquipe };
   }).sort((a, b) => cmpTxt(a.nome, b.nome));
   // monitores: cada par monitor × operação que aparece na base
   const pares = {}; todasMon.filter(m => m._t === 'Monitor' && m.avaliador).forEach(m => { const o = P.opDe(m) || '—'; const k = norm(m.avaliador) + '|' + chaveOp(o); pares[k] = pares[k] || { nome: m.avaliador, op: o }; });
+  (mt.extra || []).forEach(x => { const k = norm(x.nome) + '|' + chaveOp(x.op); pares[k] = pares[k] || { nome: x.nome, op: x.op, manual: true }; });
   const linhasMon = Object.entries(pares).map(([k0, p]) => {
-    const k = 'mon:' + k0, auto = (ops[chaveOp(p.op)] || []).length, qtd = mt.qtd[k] ?? auto, red = mt.red[k] || 0;
-    const meta = Math.max(0, Math.round(qtd * fator(p.op, 'mon') - red));
+    const k = 'mon:' + k0, auto = (ops[chaveOp(p.op)] || []).length, qtd = mt.qtd[k] ?? auto, red = mt.red[k] || 0, fixa = (mt.meta || {})[k];
+    const calc = Math.round(qtd * fator(p.op, 'mon')), meta = Math.max(0, (fixa ?? calc) - red);
     const minhas = doMes.filter(m => m._t === 'Monitor' && norm(m.avaliador) === norm(p.nome) && chaveOp(P.opDe(m) || '—') === chaveOp(p.op));
-    return { tipo: 'mon', chave: k, nome: p.nome, op: p.op, qtd, qtdAuto: auto, red, fator: fator(p.op, 'mon'), meta, feitas: minhas.length, fb: minhas.filter(m => m._fb).length, notaDada: media_(minhas.map(m => m.nota)), minhas };
+    return { tipo: 'mon', chave: k, nome: p.nome, op: p.op, manual: !!p.manual, qtd, qtdAuto: auto, red, fator: fator(p.op, 'mon'), calc, fixa, meta, feitas: minhas.length, fb: minhas.filter(m => m._fb).length, notaDada: media_(minhas.map(m => m.nota)), minhas };
   }).sort((a, b) => cmpTxt(a.nome, b.nome) || cmpTxt(a.op, b.op));
   return { mt, linhasSup, linhasMon, opsNome, fator };
 }
@@ -139,6 +141,12 @@ function halter(cats, a, b, nomes, cores) {
     ${cats.map((c, i) => { const va = a[i], vb = b[i]; const l = Math.min(x(va ?? vb), x(vb ?? va)), r = Math.max(x(va ?? vb), x(vb ?? va)); return `<div class="q-h-l"><span class="q-h-rot">${esc(c)}</span><div class="q-h-trilho"><i class="q-h-ligacao" style="left:${l}%;width:${r - l}%"></i>
       ${va !== null ? `<b class="q-h-pt" style="left:${x(va)}%;--c:${cores[0]}" data-tip="${esc(nomes[0])}: ${fmt(va, 2)}%"><em>${fmt(va, 1)}</em></b>` : ''}${vb !== null ? `<b class="q-h-pt" style="left:${x(vb)}%;--c:${cores[1]}" data-tip="${esc(nomes[1])}: ${fmt(vb, 2)}%"><em>${fmt(vb, 1)}</em></b>` : ''}</div></div>`; }).join('')}
     <div class="g-leg"><span><i style="background:${cores[0]}"></i>${esc(nomes[0])}</span><span><i style="background:${cores[1]}"></i>${esc(nomes[1])}</span></div></div>`;
+}
+function porOrganizacao(linhas, tit) {
+  const o = {}; linhas.forEach(l => { const k = l.op || '—'; const x = o[k] = o[k] || { meta: 0, feitas: 0 }; x.meta += l.meta; x.feitas += l.feitas; });
+  const tm = Object.values(o).reduce((a, x) => a + x.meta, 0), tf = Object.values(o).reduce((a, x) => a + x.feitas, 0);
+  if (!Object.keys(o).length) return '';
+  return `<div class="q-org"><table class="tabela"><thead><tr><th>${esc(tit)}</th><th class="dir">Meta</th><th class="dir">Feitas</th><th class="dir">Ating.</th></tr></thead><tbody>${Object.entries(o).sort((a, b) => cmpTxt(a[0], b[0])).map(([k, x]) => `<tr><td>${esc(k)}</td><td class="dir">${x.meta}</td><td class="dir">${x.feitas}</td><td class="dir"><b style="color:${x.meta ? (x.feitas >= x.meta ? '#1baf7a' : '#d03b3b') : 'inherit'}">${x.meta ? fmt(x.feitas / x.meta * 100, 2) + '%' : '—'}</b></td></tr>`).join('')}<tr class="des-tot"><td><b>Total</b></td><td class="dir"><b>${tm}</b></td><td class="dir"><b>${tf}</b></td><td class="dir"><b>${tm ? fmt(tf / tm * 100, 2) + '%' : '—'}</b></td></tr></tbody></table></div>`;
 }
 function linhaMeta(l, ehSup) {
   const p = l.meta ? l.feitas / l.meta : null;
@@ -191,7 +199,7 @@ function dashboardMon(filtro, ant, mesesAsc, porMes) {
   const pessoa = (x, i, ruim) => `<li data-nome="${esc(x.nome)}"><span class="q-pos ${ruim ? 'r' : ''}">${i + 1}</span><span class="q-av" style="--c:${corNota(x.v)}">${esc(iniciais(x.nome))}</span><div><b>${esc(tituloNome(x.nome))}</b><small>${esc(tituloNome(x.sup))}${x.op ? ' · ' + esc(x.op) : ''}${x.resp ? ' · ' + esc(tituloNome(x.resp)) : ''}</small></div><em style="--c:${corNota(x.v)}">${fmt(x.v, 1)}%</em></li>`;
   const html = `
   <div class="q-topo"><span>${G.ic('clock', '')} Último lançamento: <b>${ultima ? dataBR(ultima) : '—'}</b>${impEm ? ` · base importada em ${new Date(impEm).toLocaleDateString('pt-BR')} ${new Date(impEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
-    <button type="button" class="q-eng" id="monMetas2" data-perm="importarDesempenho" title="Ajustar metas">${G.ic('target', '')} Metas</button></div>
+    </div>
   <section class="q-placar">
     ${trilha('Geral', filtro.length, metaSup + metaMon, '#f5c542', ritmo)}
     ${trilha('Supervisores', sup.length, metaSup, '#1baf7a', ritmo)}
@@ -209,9 +217,11 @@ function dashboardMon(filtro, ant, mesesAsc, porMes) {
     <h3 class="db-h3">Supervisor × monitor no mês</h3>${halter(ops, ops.map(o => media_(sup.filter(m => P.opDe(m) === o).map(m => m.nota))), ops.map(o => media_(mon.filter(m => P.opDe(m) === o).map(m => m.nota))), ['Supervisor', 'Monitor'], ['#1baf7a', '#b06ad9'])}</article>` : ''}
   <article class="cartao q-sec q-sec-sup"><header class="cab-card"><span class="icb">${G.ic('users')}</span><div><h2>Supervisores</h2><p>Monitorias feitas pelo supervisor · meta = consultores da equipe × monitorias por consultor${M.linhasSup.length ? '' : ' · sem equipes no BD'}</p></div></header>
     <div class="pn-grade"><div><h3 class="db-h3">Monitorias lançadas × feedback realizado</h3><div id="qSupFb"></div></div><div><h3 class="db-h3">Média da equipe (todas as monitorias dos consultores)</h3><div id="qSupEq"></div></div></div>
+    ${porOrganizacao(M.linhasSup, 'Organização')}
     <div class="tabela-wrap"><table class="tabela q-meta"><thead><tr><th>Supervisor</th><th class="dir">Consultores</th><th class="dir">Meta</th><th class="dir">Feitas</th><th>Entrega</th><th>Status</th><th class="dir">Feedback</th><th class="dir">Média equipe</th></tr></thead><tbody>${M.linhasSup.map(l => linhaMeta(l, true)).join('') || '<tr><td colspan="8" class="dica">Importe o BD para montar as equipes.</td></tr>'}</tbody></table></div></article>
   <article class="cartao q-sec q-sec-mon"><header class="cab-card"><span class="icb">${G.ic('headset')}</span><div><h2>Monitores</h2><p>Monitorias feitas pela qualidade · meta = consultores da operação × monitorias por consultor</p></div></header>
     <div class="pn-grade"><div><h3 class="db-h3">Monitorias lançadas × feedback realizado</h3><div id="qMonFb"></div></div><div><h3 class="db-h3">Nota dada pelos monitores a cada equipe</h3><div id="qMonEq"></div></div></div>
+    ${porOrganizacao(M.linhasMon, 'Organização')}
     <div class="tabela-wrap"><table class="tabela q-meta"><thead><tr><th>Monitor · operação</th><th class="dir">Consultores</th><th class="dir">Meta</th><th class="dir">Feitas</th><th>Entrega</th><th>Status</th><th class="dir">Feedback</th><th class="dir">Nota média</th></tr></thead><tbody>${M.linhasMon.map(l => linhaMeta(l, false)).join('') || '<tr><td colspan="8" class="dica">Nenhuma monitoria de monitor na base.</td></tr>'}</tbody></table></div></article>
   ${pecs.length || falhas.length || confs.length ? `<article class="cartao"><header class="cab-card"><span class="icb">${G.ic('alert')}</span><div><h2>PEC e ofensores</h2><p>${pecs.length ? 'Conformidade de cada PEC · ' : ''}falhas mais frequentes no mês · clique numa falha para ver quem errou</p></div></header>
     ${pecs.length ? `<div class="q-pecs">${pecs.sort((a, b) => b.v - a.v).map(p => `<div class="q-pec" style="--c:${corNota(p.v * 100)}"><span>${esc(p.k)}</span><div><i style="width:${Math.min(100, p.v * 100)}%"></i></div><b>${fmt(p.v * 100, 2)}%</b></div>`).join('')}</div>` : ''}
@@ -239,24 +249,46 @@ function dashboardMon(filtro, ant, mesesAsc, porMes) {
   return { html, depois, M };
 }
 function abrirMetasMon(M) {
-  if (!M) { render(); return; }
+  if (!M) { toast('Importe a base de qualidade para montar as metas'); return; }
   const D0 = ler(KEY_DES, {}) || {}, mt = Object.assign({}, DEF_METAS, D0.metasMon || {});
   if (!document.getElementById('dlgMetaMon')) document.body.insertAdjacentHTML('beforeend', `<dialog class="dlg dlg-grande" id="dlgMetaMon"><form method="dialog" class="dlg-in" id="mmForm"></form></dialog>`);
   const f = document.getElementById('mmForm'), opsK = Object.keys(M.opsNome).sort();
-  const linha = l => `<tr data-k="${esc(l.chave)}"><td><b>${esc(tituloNome(l.nome))}</b><small>${esc(l.op || '—')}</small></td><td><input type="number" min="0" class="mm-q" value="${mt.qtd[l.chave] ?? ''}" placeholder="${l.qtdAuto}"></td><td><input type="number" min="0" class="mm-r" value="${mt.red[l.chave] || ''}" placeholder="0"></td><td class="dir">${l.fator}×</td></tr>`;
-  f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('target')}</span><div><h2>Metas de monitoria</h2><p>Quantas monitorias cada consultor deve receber no mês. A meta de cada pessoa é calculada sozinha: consultores × monitorias por consultor − redução.</p></div></header>
-    <div class="grade g4"><label class="campo"><span>Padrão supervisor (por consultor)</span><input type="number" min="0" step="0.5" id="mmPs" value="${mt.padraoSup}"></label><label class="campo"><span>Padrão monitor (por consultor)</span><input type="number" min="0" step="0.5" id="mmPm" value="${mt.padraoMon}"></label><label class="campo"><span>Nota meta (%)</span><input type="number" min="0" max="100" id="mmNota" value="${mt.nota || META}"></label></div>
-    ${opsK.length ? `<h3 class="db-h3">Por operação (em branco = padrão)</h3><div class="tabela-wrap"><table class="tabela mm-tab"><thead><tr><th>Operação</th><th>Supervisor</th><th>Monitor</th></tr></thead><tbody>${opsK.map(k => { const fz = (mt.fator || {})[k] || {}; return `<tr data-op="${esc(k)}"><td>${esc(M.opsNome[k])}</td><td><input type="number" min="0" step="0.5" class="mm-fs" value="${fz.sup ?? ''}" placeholder="${mt.padraoSup}"></td><td><input type="number" min="0" step="0.5" class="mm-fm" value="${fz.mon ?? ''}" placeholder="${mt.padraoMon}"></td></tr>`; }).join('')}</tbody></table></div>` : ''}
-    <details class="mm-aj"><summary>Ajustar consultores e redução por pessoa (férias, afastamento…)</summary>
-      <div class="tabela-wrap"><table class="tabela mm-tab"><thead><tr><th>Pessoa</th><th>Consultores</th><th>Redução</th><th class="dir">Por consultor</th></tr></thead><tbody>${M.linhasSup.map(linha).join('')}${M.linhasMon.map(linha).join('')}</tbody></table></div>
-      <p class="dica">Consultores em branco = número calculado pelo BD (mostrado em cinza).</p></details>
-    <div class="dlg-rod"><small class="msg"></small><span><button class="btn btn-sec" value="cancelar" formnovalidate>Cancelar</button> <button type="button" class="btn btn-pri" id="mmOk">${G.ic('check')}Salvar</button></span></div>`;
+  const listaOps = `<datalist id="mmOps">${opsK.map(k => `<option value="${esc(M.opsNome[k])}">`).join('')}</datalist>`;
+  const linha = (l, sup) => `<tr data-k="${esc(l.chave)}"${l.manual ? ' data-manual="1"' : ''}><td><b>${esc(tituloNome(l.nome))}</b>${l.manual ? ' <button type="button" class="btn-icone mm-del" title="Remover">×</button>' : ''}</td>
+    <td>${sup ? `<input class="mm-op" list="mmOps" value="${esc((mt.op || {})[l.chave] || '')}" placeholder="${esc(l.opAuto || '—')}">` : esc(l.op)}</td>
+    <td><input type="number" min="0" class="mm-q" value="${mt.qtd[l.chave] ?? ''}" placeholder="${l.qtdAuto}"></td>
+    <td><input type="number" min="0" class="mm-m" value="${(mt.meta || {})[l.chave] ?? ''}" placeholder="${l.calc}"></td>
+    <td><input type="number" min="0" class="mm-r" value="${mt.red[l.chave] || ''}" placeholder="0"></td>
+    <td class="dir"><b class="mm-final">${l.meta}</b></td><td class="dir">${l.feitas}</td></tr>`;
+  const cab = t => `<thead><tr><th>${t}</th><th>Operação</th><th>Consultores</th><th>Meta do mês</th><th>Redução</th><th class="dir">Meta final</th><th class="dir">Feitas</th></tr></thead>`;
+  f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('target')}</span><div><h2>Metas de monitoria</h2><p>Digite a <b>meta do mês</b> de cada pessoa. Em branco, o site calcula: consultores × monitorias por consultor (valor em cinza). A redução desconta férias, afastamento ou folga.</p></div></header>
+    ${listaOps}
+    <h3 class="q-mm-t q-mm-mon">Meta monitores</h3>
+    <div class="tabela-wrap"><table class="tabela mm-tab" id="mmMon">${cab('Monitor')}<tbody>${M.linhasMon.map(l => linha(l, false)).join('')}</tbody></table></div>
+    <div class="mm-add"><input id="mmNovoNome" placeholder="Nome do monitor"><input id="mmNovoOp" list="mmOps" placeholder="Operação"><button type="button" class="btn btn-sec btn-mini" id="mmAdd">${G.ic('plus', '')}Adicionar monitor</button></div>
+    <h3 class="q-mm-t q-mm-sup">Meta supervisores</h3>
+    <div class="tabela-wrap"><table class="tabela mm-tab" id="mmSup">${cab('Supervisor')}<tbody>${M.linhasSup.map(l => linha(l, true)).join('')}</tbody></table></div>
+    <details class="mm-aj"><summary>Cálculo automático (monitorias por consultor) e nota meta</summary>
+      <div class="grade g4"><label class="campo"><span>Supervisor: por consultor</span><input type="number" min="0" step="0.5" id="mmPs" value="${mt.padraoSup}"></label><label class="campo"><span>Monitor: por consultor</span><input type="number" min="0" step="0.5" id="mmPm" value="${mt.padraoMon}"></label><label class="campo"><span>Nota meta (%)</span><input type="number" min="0" max="100" id="mmNota" value="${mt.nota || META}"></label></div>
+      ${opsK.length ? `<div class="tabela-wrap"><table class="tabela mm-tab"><thead><tr><th>Operação</th><th>Supervisor por consultor</th><th>Monitor por consultor</th></tr></thead><tbody>${opsK.map(k => { const fz = (mt.fator || {})[k] || {}; return `<tr data-op="${esc(k)}"><td>${esc(M.opsNome[k])}</td><td><input type="number" min="0" step="0.5" class="mm-fs" value="${fz.sup ?? ''}" placeholder="${mt.padraoSup}"></td><td><input type="number" min="0" step="0.5" class="mm-fm" value="${fz.mon ?? ''}" placeholder="${mt.padraoMon}"></td></tr>`; }).join('')}</tbody></table></div>` : ''}</details>
+    <div class="dlg-rod"><small class="msg"></small><span><button class="btn btn-sec" value="cancelar" formnovalidate>Cancelar</button> <button type="button" class="btn btn-pri" id="mmOk">${G.ic('check')}Salvar metas</button></span></div>`;
   G.icones(f); document.getElementById('dlgMetaMon').showModal();
+  // meta final ao vivo
+  f.querySelectorAll('tr[data-k]').forEach(tr => { const at = () => { const q = tr.querySelector('.mm-m'), r = tr.querySelector('.mm-r'); const base = q.value.trim() === '' ? +q.placeholder || 0 : +q.value; tr.querySelector('.mm-final').textContent = Math.max(0, base - (+r.value || 0)); }; tr.querySelectorAll('input').forEach(i => i.oninput = at); });
+  const extras = [...(mt.extra || [])];
+  f.querySelectorAll('.mm-del').forEach(bt => bt.onclick = () => { const tr = bt.closest('tr'); const k = tr.dataset.k.slice(4); const i = extras.findIndex(x => norm(x.nome) + '|' + chaveOp(x.op) === k); if (i >= 0) extras.splice(i, 1); tr.remove(); });
+  document.getElementById('mmAdd').onclick = () => {
+    const nome = document.getElementById('mmNovoNome').value.trim(), op = document.getElementById('mmNovoOp').value.trim();
+    if (!nome || !op) { f.querySelector('.msg').textContent = 'Informe o nome do monitor e a operação.'; f.querySelector('.msg').className = 'msg erro'; return; }
+    extras.push({ nome, op }); const k = 'mon:' + norm(nome) + '|' + chaveOp(op);
+    document.querySelector('#mmMon tbody').insertAdjacentHTML('beforeend', `<tr data-k="${esc(k)}" data-manual="1"><td><b>${esc(tituloNome(nome))}</b></td><td>${esc(op)}</td><td><input type="number" min="0" class="mm-q" placeholder="0"></td><td><input type="number" min="0" class="mm-m" placeholder="0"></td><td><input type="number" min="0" class="mm-r" placeholder="0"></td><td class="dir"><b class="mm-final">0</b></td><td class="dir">0</td></tr>`);
+    document.getElementById('mmNovoNome').value = ''; document.getElementById('mmNovoOp').value = '';
+  };
   document.getElementById('mmOk').onclick = () => {
-    const n = (el, d) => { const v = el.value.trim(); return v === '' ? d : +v; };
-    const novo = { padraoSup: n(document.getElementById('mmPs'), 2), padraoMon: n(document.getElementById('mmPm'), 2), nota: n(document.getElementById('mmNota'), META), fator: {}, qtd: {}, red: {} };
-    f.querySelectorAll('tr[data-op]').forEach(tr => { const s = n(tr.querySelector('.mm-fs'), null), m = n(tr.querySelector('.mm-fm'), null); if (s !== null || m !== null) novo.fator[tr.dataset.op] = { ...(s !== null ? { sup: s } : {}), ...(m !== null ? { mon: m } : {}) }; });
-    f.querySelectorAll('tr[data-k]').forEach(tr => { const q = n(tr.querySelector('.mm-q'), null), r = n(tr.querySelector('.mm-r'), 0); if (q !== null) novo.qtd[tr.dataset.k] = q; if (r) novo.red[tr.dataset.k] = r; });
+    const n = (el, d) => { if (!el) return d; const v = el.value.trim(); return v === '' ? d : +v; };
+    const novo = { padraoSup: n(document.getElementById('mmPs'), 2), padraoMon: n(document.getElementById('mmPm'), 2), nota: n(document.getElementById('mmNota'), META), fator: {}, qtd: {}, red: {}, meta: {}, op: {}, extra: extras };
+    f.querySelectorAll('tr[data-op]').forEach(tr => { const s_ = n(tr.querySelector('.mm-fs'), null), m = n(tr.querySelector('.mm-fm'), null); if (s_ !== null || m !== null) novo.fator[tr.dataset.op] = { ...(s_ !== null ? { sup: s_ } : {}), ...(m !== null ? { mon: m } : {}) }; });
+    f.querySelectorAll('tr[data-k]').forEach(tr => { const k = tr.dataset.k, q = n(tr.querySelector('.mm-q'), null), mm = n(tr.querySelector('.mm-m'), null), r = n(tr.querySelector('.mm-r'), 0), op = tr.querySelector('.mm-op'); if (q !== null) novo.qtd[k] = q; if (mm !== null) novo.meta[k] = mm; if (r) novo.red[k] = r; if (op && op.value.trim()) novo.op[k] = op.value.trim(); });
     const D2 = ler(KEY_DES, {}) || {}; D2.metasMon = novo; gravar(KEY_DES, D2);
     document.getElementById('dlgMetaMon').close(); render(); toast('Metas de monitoria salvas');
     if (window.NUVEM && NUVEM.ativo && NUVEM.ativo()) NUVEM.publicarAgora();
@@ -283,7 +315,7 @@ function render() {
   const vis = filtro.slice(0, POR_PAG * est.pag);
   raiz.innerHTML = `
   <div class="cab-pagina"><div><h1>Monitorias de qualidade</h1><p class="sub">Dashboard da qualidade · monitorias do site e da planilha importada</p></div>
-    <div class="cab-acoes"><button type="button" class="btn btn-sec" id="monImp" data-perm="monitorar">${G.ic('upload')}Importar monitorias</button><button type="button" class="btn btn-pri" id="monNova" data-perm="monitorar">${G.ic('plus')}Nova monitoria</button></div></div>
+    <div class="cab-acoes"><button type="button" class="btn btn-sec" id="monMetas" data-perm="importarDesempenho">${G.ic('target')}Metas de monitoria</button><button type="button" class="btn btn-sec" id="monImp" data-perm="monitorar">${G.ic('upload')}Importar monitorias</button><button type="button" class="btn btn-pri" id="monNova" data-perm="monitorar">${G.ic('plus')}Nova monitoria</button></div></div>
   <div id="monFormWrap"></div>
   <div class="des-filtros cartao">
     <label class="mini">Mês <select id="monMes">${meses.map(m => `<option value="${m}"${m === est.mes ? ' selected' : ''}>${mesTxt(m)}${porMes[m] ? ` (${porMes[m].length})` : ''}</option>`).join('')}</select></label>
@@ -302,6 +334,7 @@ function render() {
   const b = id => document.getElementById(id);
   b('monNova').onclick = () => { est.editando = null; est.form = true; formulario(); };
   b('monImp').onclick = abrirImportMon;
+  b('monMetas').onclick = () => abrirMetasMon(est._M);
   if (b('monMais')) b('monMais').onclick = () => { est.pag++; render(); };
   b('monMes').onchange = e => { est.mes = e.target.value; est.pag = 1; render(); };
   b('monSup').onchange = e => { est.sup = e.target.value; est.pag = 1; render(); };
