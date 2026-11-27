@@ -190,7 +190,9 @@ function montarMetas(P, doMes, todasMon) {
   // supervisores e monitores: BD ADM (cargo); sem BD ADM, o que aparece na base
   let supsP = gest.filter(g => /supervis/i.test(g.cargo || '')).map(g => ({ nome: g.nome, login: g.login, mat: g.mat, ies: g.ies, grupo: g.grupo }));
   if (!supsP.length) supsP = [...new Set(vig.map(c => c.supervisor).filter(Boolean))].map(n => ({ nome: n }));
-  let monsP = gest.filter(g => /monitor|qualidade|auditor/i.test(g.cargo || '') && !/supervis|coorden|gerent/i.test(g.cargo || '')).map(g => ({ nome: g.nome, login: g.login, mat: g.mat }));
+  // nome de equipe/setor no BD ADM (ex.: "Qualidade Unijorge e UVA") não é pessoa
+  const naoPessoa = n => /qualidade|unijorge|\buva\b|\buj\b|equipe|setor|geral|time /i.test(n || '');
+  let monsP = gest.filter(g => /monitor|qualidade|auditor/i.test(g.cargo || '') && !/supervis|coorden|gerent/i.test(g.cargo || '') && !naoPessoa(g.nome)).map(g => ({ nome: g.nome, login: g.login, mat: g.mat }));
   if (!monsP.length) { const vistos = new Map(); todasMon.filter(m => m._t === 'Monitor' && pareceNome(m.avaliador) && !supsP.some(s => casaPessoa(m.avaliador, s))).forEach(m => { const k = limpaAval(m.avaliador); if (!vistos.has(k)) vistos.set(k, { nome: tituloNome(m.avaliador) }); }); monsP = [...vistos.values()]; }
   (mt.extra || []).forEach(x => { if (!monsP.some(p => mesmoNome(p.nome, x.nome))) monsP.push({ nome: x.nome, manual: true, opManual: x.op }); });
   // pessoas excluídas da tela de metas (continuam na base; só saem das metas e do dashboard)
@@ -214,19 +216,29 @@ function montarMetas(P, doMes, todasMon) {
   }).sort((a, b) => cmpTxt(a.op || 'zz', b.op || 'zz') || cmpTxt(a.nome, b.nome));
   const linhasMon = [];
   monsP.forEach(p => {
-    const todasDele = doTipo(dele(p, todasMon), 'Monitor'), porOp = {};
+    // células do mês em que a pessoa monitorou (mais as acrescentadas à mão); célula sem monitoria no mês não vira linha
+    const todasDele = dele(p, doMes), porOp = {};
     todasDele.forEach(m => { const o = opM(m); if (o) porOp[chaveOp(o)] = porOp[chaveOp(o)] || o; });
     // operações acrescentadas à mão para este monitor (ex.: Brenda em Admissão UJ e Admissão Uva)
     (mt.extra || []).filter(x => x.op && mesmoNome(x.nome, p.nome)).forEach(x => { porOp[chaveOp(x.op)] = porOp[chaveOp(x.op)] || x.op; });
     if (p.opManual) porOp[chaveOp(p.opManual)] = porOp[chaveOp(p.opManual)] || p.opManual;
-    const ops = Object.values(porOp); if (!ops.length) ops.push('');
+    const ops = Object.values(porOp); if (!ops.length && p.manual) ops.push('');
     ops.forEach(o => {
       const k = 'mon:' + norm(p.nome) + '|' + chaveOp(o); if (fora.has(k)) return;
-      const opEf = (mt.op || {})[k] || o; // operação digitada na tela de metas vale mais que a da base
+      const opEf = o || (mt.op || {})[k] || ''; // a célula das monitorias manda; a digitada só vale para linha sem célula
       const nSet = (mt.n || {})[k], n = nSet ?? PADRAO_N.mon, red = (mt.red || {})[k] || 0, qtdBD = opEf ? consPorOp[chaveOp(opEf)] || 0 : 0, qtd = (mt.qtd || {})[k] ?? qtdBD, meta = n ? Math.max(0, qtd * n - red) : 0;
       const minhas = doTipo(dele(p, doMes), 'Monitor').filter(m => !o || chaveOp(opM(m)) === chaveOp(o));
       linhasMon.push({ tipo: 'mon', chave: k, nome: p.nome, op: opEf, opAuto: o, manual: !!p.manual, qtd, qtdBD, n, nPadrao: nSet === undefined || nSet === null, red, meta, feitas: minhas.length, fb: minhas.reduce((a, m) => a + (m._fbN || 0), 0), notaDada: media_(minhas.map(m => m.nota)), minhas });
     });
+  });
+  // monitor responsável da célula (definido na tela de metas) sem monitoria no mês: entra com 0 feitas
+  Object.values(opsNome).forEach(cel => {
+    const r = respCelula(mt, est.mes, cel, doMes, P); if (!r || r.auto) return;
+    if (linhasMon.some(l => chaveOp(l.op) === chaveOp(cel) && mesmoNome(l.nome, r.nome))) return;
+    const p = monsP.find(x => mesmoNome(x.nome, r.nome)); if (!p) return;
+    const k = 'mon:' + norm(p.nome) + '|' + chaveOp(cel); if (fora.has(k)) return;
+    const nSet = (mt.n || {})[k], n = nSet ?? PADRAO_N.mon, red = (mt.red || {})[k] || 0, qtdBD = consPorOp[chaveOp(cel)] || 0, qtd = (mt.qtd || {})[k] ?? qtdBD;
+    linhasMon.push({ tipo: 'mon', chave: k, nome: p.nome, op: cel, opAuto: cel, qtd, qtdBD, n, nPadrao: nSet === undefined || nSet === null, red, meta: n ? Math.max(0, qtd * n - red) : 0, feitas: 0, fb: 0, notaDada: null, minhas: [] });
   });
   linhasMon.sort((a, b) => cmpTxt(a.op || 'zz', b.op || 'zz') || cmpTxt(a.nome, b.nome));
   // avaliadores da base que não batem com ninguém (aparecem como aviso)
