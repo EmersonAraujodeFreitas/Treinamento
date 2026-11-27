@@ -623,6 +623,7 @@ document.addEventListener('DOMContentLoaded', () => {
   ligarCasca();
   document.querySelectorAll('#admAbas button').forEach(b => b.onclick = () => renderAdmin(b.dataset.t));
   ligarTrocaSenha();
-  retomarSessao().then(ok => { if (!ok) telaLogin(); }).catch(e => { console.error(e); telaLogin(); });
+  // espera os dados do navegador (IndexedDB) ficarem prontos antes de qualquer leitura
+  (window.ARMAZEM ? window.ARMAZEM.pronto : Promise.resolve()).then(() => retomarSessao()).then(ok => { if (!ok) telaLogin(); }).catch(e => { console.error(e); telaLogin(); });
 });
 })();
