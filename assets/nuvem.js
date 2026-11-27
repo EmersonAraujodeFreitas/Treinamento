@@ -281,7 +281,7 @@ function encerrar(msg) {
 }
 
 /* ---------------- carregar o site ---------------- */
-const SCRIPTS = ['assets/graficos.js', 'assets/app.js', 'assets/xlsx-leitor.js', 'assets/ativos.js', 'assets/analises.js', 'assets/buscar.js', 'assets/painel.js', 'assets/desempenho.js', 'assets/monitorias.js', 'assets/agenda.js', 'assets/relatorio.js'];
+const SCRIPTS = ['assets/graficos.js', 'assets/app.js', 'assets/xlsx-leitor.js', 'assets/ativos.js', 'assets/analises.js', 'assets/buscar.js', 'assets/painel.js', 'assets/dash.js', 'assets/desempenho.js', 'assets/monitorias.js', 'assets/agenda.js', 'assets/relatorio.js'];
 function carregarApp() {
   return new Promise(res => {
     let i = 0;

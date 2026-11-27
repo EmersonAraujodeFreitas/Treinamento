@@ -44,7 +44,11 @@ function identificar(v, idx) {
   return idx.get('n:' + n) || idx.get('l:' + n) || idx.get('l:' + n.replace(/\s+/g, '.')) || (p.length > 1 ? idx.get('pu:' + p[0] + ' ' + p[p.length - 1]) : null) || null;
 }
 A.consultoresBD = consultores;
-A.identificarConsultor = v => identificar(v, indice());
+// índice do BD em cache (refeito só quando o BD muda): importar milhares de linhas não trava
+let idxCache = null, idxChave = '';
+const indiceCache = () => { const t = localStorage.getItem(KEY_Q) || ''; const k = t.length + '|' + t.slice(0, 120) + t.slice(-120); if (!idxCache || k !== idxChave) { idxCache = indice(); idxChave = k; } return idxCache; };
+A.identificarConsultor = v => identificar(v, indiceCache());
+A.indiceConsultores = indiceCache; A.identificarCom = identificar;
 
 /* ---------------- leitura de arquivos ---------------- */
 async function lerArquivo(f) {
@@ -294,7 +298,7 @@ function passoConsolidado(det) {
     const mesesF = [...new Set(D.dados.filter(d => d.fonte === nomeF).map(d => d.mes))].sort().reverse();
     if (mesesF.length > 12) { const corte = mesesF[11]; D.dados = D.dados.filter(d => d.fonte !== nomeF || d.mes >= corte); }
     D.importacoes = [{ fonte: nomeF, arquivo: arq.nome, em: new Date().toISOString(), meses: [mes], linhas: r.total, casados: r.dados.length - r.fora.length, naoAchados: r.fora.length }, ...(D.importacoes || [])].slice(0, 60);
-    salvar(); dlg.close(); est.fonte = nomeF; est.mes = mes; est.grupo = 'Completo'; render();
+    salvar(); dlg.close(); est.fonte = nomeF; est.mes = mes; est.grupo = 'Dashboard'; render();
     toast(`${nomeF}: ${r.dados.length} consultor(es) em ${mesTxt(mes)}`);
     if (window.NUVEM && NUVEM.ativo && NUVEM.ativo()) NUVEM.publicarAgora();
   };
@@ -336,9 +340,103 @@ function agregar(mt, linhas, mets) {
 const tagQ = v => !v ? '<span class="zero">NA</span>' : `<span class="qt q${(String(v).match(/[1-4]/) || ['0'])[0]}">${esc(v)}</span>`;
 const celula = (mt, v) => mt.tipo === 'quartil' ? tagQ(v) : mt.tipo === 'texto' ? esc(v ?? '—') : valorTxt(mt, v);
 
+/* ---------------- dashboard do desempenho ---------------- */
+const fmtTipo = (mt, v) => v === null || v === undefined ? '—' : valorTxt(mt, v);
+const curtoN = v => v >= 1e4 ? fmt(v / 1000, 0) + 'k' : v >= 1e3 ? fmt(v / 1000, 1) + 'k' : fmt(v, 0);
+function dashboardDes(ctx) {
+  const { todas, linhas, mesesAsc, mesAnt, base } = ctx;
+  const M = (g, s) => achar(todas, g, s);
+  const ag = (mt, ls) => mt ? agregar(mt, ls, todas) : null;
+  const ant = mesAnt ? base(mesAnt) : [];
+  const serie = mt => mesesAsc.map(m => ag(mt, base(m)));
+  const qg = todas.find(m => m.tipo === 'quartil' && m.grupo === 'Geral');
+  const conta = q => qg ? linhas.filter(d => String(V(d, qg) || '').includes(q)).length : 0;
+  const q = [1, 2, 3, 4].map(n => conta(String(n))), qTot = q.reduce((a, b) => a + b, 0);
+  const cTot = M('Chamadas', 'total'), aTot = M('Aceite', 'total'), mTot = M('Matrícula', 'total');
+  const conv = ls => { const a = ag(aTot, ls), m = ag(mTot, ls); return a ? m / a : null; };
+  const grande = (rot, mt, ic, cor, custom) => {
+    const v = custom ? custom.v : ag(mt, linhas), va = custom ? custom.va : ag(mt, ant), sp = custom ? custom.sp : serie(mt);
+    const tipo = custom ? custom.tipo : mt && mt.tipo;
+    const txt = custom ? custom.txt(v) : fmtTipo(mt, v);
+    return `<div class="db-big" style="--c:${cor}"><span class="db-big-ic">${G.ic(ic)}</span><small>${esc(rot)}</small><b>${txt}</b>
+      <div class="db-big-rod">${DB.delta(v, va, 1, tipo === 'pct' ? 'pct' : ehTempo(tipo) ? 'tempo' : 'n')}${DB.spark(sp, cor)}</div>
+      ${linhas.length && mt && !custom && ['somar'].includes(mt.tipo) ? `<em>${fmt(v / linhas.length, 1)} por consultor</em>` : custom && custom.em ? `<em>${custom.em}</em>` : '<em>&nbsp;</em>'}</div>`;
+  };
+  const GAUGES = [['Aderência', 'aderencia', 'Aderência'], ['C-SAT', 'c-sat final', 'C-SAT final'], ['Qualidade', 'nota monitor', 'Nota monitor'], ['Qualidade', 'nota supervisor', 'Nota supervisor'], ['Chamadas', 'efetividade', 'Efetividade'], ['HubSpot', 'criacao de lead', 'Criação de lead'], ['Ponto', 'abs', 'Absenteísmo (ABS)'], ['Pausa', 'tempo em pausa', 'Tempo em pausa'], ['Shortcall', 'outbound', 'Shortcall outbound']];
+  const gauges = GAUGES.map(([g, s, rot]) => { const mt = M(g, s); if (!mt) return ''; const v = ag(mt, linhas); if (v === null) return ''; const meta = D.metas[mt.rotulo]; const mv = meta ? +meta.valor : null; const razao = mv ? (mt.sentido < 0 || (meta && meta.sentido === 'menor') ? mv / (v || 1e-9) : v / mv) : null; return DB.medidor({ valor: v, texto: fmtTipo(mt, v), rotulo: rot, meta: mv, razao, cor: razao === null ? (mt.sentido < 0 ? '#eb6834' : '#2a78d6') : null, sub: `${DB.delta(v, ag(mt, ant), mt.sentido, 'pct')}${mv ? ` <span class="db-meta-t">meta ${fmt(mv * 100, 1)}%</span>` : ''}` }); }).join('');
+  const mix = (g, subs) => subs.map((s, i) => { const mt = M(g, s); return mt ? { rotulo: mt.sOrig || mt.sub, valor: ag(mt, linhas) || 0, cor: DB.PAL[i] } : null; }).filter(Boolean);
+  // por supervisor
+  const sups = {}; linhas.forEach(d => (sups[d.supervisor || '—'] = sups[d.supervisor || '—'] || []).push(d));
+  const COLS = [['Chamadas', 'total', 'Chamadas', 1], ['Aceite', 'total', 'Aceite', 1], ['Matrícula', 'total', 'Matrícula', 1], ['Aderência', 'aderencia', 'Aderência'], ['Ponto', 'abs', 'ABS'], ['C-SAT', 'c-sat final', 'C-SAT'], ['Qualidade', 'nota monitor', 'Nota monitor'], ['TMA', 'outbound', 'TMA outbound']].map(([g, s, r, porCons]) => ({ mt: M(g, s), r, porCons })).filter(c => c.mt);
+  const op = COLS.map(c => { const v = ag(c.mt, linhas); return c.porCons && linhas.length ? v / linhas.length : v; });
+  const heat = (c, v, ref) => { if (v === null || ref === null || !ref || !c.mt.sentido) return ''; const r = (v - ref) / Math.abs(ref) * (c.mt.sentido < 0 ? -1 : 1); return r > .05 ? 'db-h-bom' : r < -.05 ? 'db-h-ruim' : ''; };
+  const supRows = Object.entries(sups).sort((a, b) => cmpTxt(a[0], b[0])).map(([s, xs]) => {
+    const qs = [1, 2, 3, 4].map(n => qg ? xs.filter(d => String(V(d, qg) || '').includes(String(n))).length : 0);
+    return `<tr><td><b>${esc(s)}</b></td><td class="dir">${xs.length}</td><td>${qg ? `<div class="db-qbar">${qs.map((n, i) => n ? `<i class="q${i + 1}" style="flex:${n}" data-tip="Q${i + 1}: ${n}">${n}</i>` : '').join('')}</div>` : ''}</td>
+      ${COLS.map((c, i) => { const v0 = ag(c.mt, xs), v = c.porCons && xs.length ? v0 / xs.length : v0; return `<td class="dir ${heat(c, v, op[i])}">${c.porCons ? fmt(v, 1) : fmtTipo(c.mt, v)}</td>`; }).join('')}</tr>`;
+  }).join('');
+  // alertas: 2+ quartis Q4
+  const qCols = todas.filter(m => m.tipo === 'quartil' && m.grupo !== 'Geral');
+  const alerta = linhas.map(d => ({ d, q4: qCols.filter(m => String(V(d, m) || '').includes('4')) })).filter(x => x.q4.length >= 2).sort((a, b) => b.q4.length - a.q4.length);
+  const indOpc = todas.filter(m => m.tipo !== 'quartil' && m.tipo !== 'texto');
+  if (!est.ind || !indOpc.some(m => m.rotulo === est.ind)) est.ind = (mTot || aTot || indOpc[0] || {}).rotulo;
+  const ind = indOpc.find(m => m.rotulo === est.ind);
+  const ord = ind ? linhas.filter(d => V(d, ind) !== null).sort((a, b) => (V(b, ind) - V(a, ind)) * (ind.sentido < 0 ? -1 : 1)) : [];
+  const card = (d, i, ruim) => `<li class="${ruim ? 'ruim' : 'bom'}" data-nome="${esc(d.nome)}"><span>${i + 1}</span><div><b>${esc(d.nome)}</b><small>${esc(d.supervisor)}</small></div><em>${fmtTipo(ind, V(d, ind))}</em></li>`;
+  const html = `
+  <div class="db-hero">
+    <div class="db-hero-q cartao">${DB.anel({ pct: qTot ? (q[0] + q[1]) / qTot : 0, titulo: 'Q1 + Q2', centro: qTot ? fmt((q[0] + q[1]) / qTot * 100, 0) + '%' : '—', sub: `${q[0] + q[1]} de ${qTot} consultores`, cor: '#1baf7a' })}
+      <div class="db-qleg">${q.map((n, i) => `<div class="q${i + 1}"><span class="qt q${i + 1}">Q${i + 1}</span><b>${n}</b><small>${qTot ? fmt(n / qTot * 100, 0) + '%' : ''}</small></div>`).join('')}<p>Quartil geral do mês</p></div></div>
+    <div class="db-bigs">
+      ${cTot ? grande('Chamadas atendidas', cTot, 'headset', '#2a78d6') : ''}
+      ${aTot ? grande('Aceites', aTot, 'check', '#1baf7a') : ''}
+      ${mTot ? grande('Matrículas', mTot, 'award', '#8e44c9') : ''}
+      ${aTot && mTot ? grande('Conversão aceite → matrícula', null, 'target', '#eb6834', { v: conv(linhas), va: conv(ant), sp: mesesAsc.map(m => conv(base(m))), tipo: 'pct', txt: v => v === null ? '—' : fmt(v * 100, 1) + '%', em: 'matrículas ÷ aceites' }) : ''}
+    </div>
+  </div>
+  ${gauges ? `<article class="cartao db-gauges-c"><header class="cab-card"><span class="icb">${G.ic('activity')}</span><div><h2>Indicadores de qualidade e eficiência</h2><p>Operação no mês · ▲▼ comparado a ${mesAnt ? mesTxt(mesAnt) : 'mês anterior (ainda não importado)'}${Object.keys(D.metas).length ? ' · traço = meta' : ' · defina metas no botão Metas para colorir pelo atingimento'}</p></div></header><div class="db-gauges">${gauges}</div></article>` : ''}
+  <div class="pn-grade">
+    <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('target')}</span><div><h2>Funil de produção</h2><p>Do volume de chamadas até a matrícula</p></div></header>
+      ${DB.funil([[cTot, 'Chamadas atendidas'], [M('Chamadas', 'outbound finalizadas'), 'Outbound finalizadas'], [aTot, 'Aceites'], [mTot, 'Matrículas']].filter(x => x[0]).map(([mt, r], i) => ({ rotulo: r, valor: ag(mt, linhas) || 0, cor: ['#1d4f91', '#2a78d6', '#1baf7a', '#8e44c9'][i] })))}</article>
+    <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('layers')}</span><div><h2>Composição</h2><p>De onde vêm as chamadas, aceites e matrículas</p></div></header>
+      <h3 class="db-h3">Chamadas por canal</h3>${DB.empilhada(mix('Chamadas', ['inbound', 'ligacao manual', 'botmaker', 'outbound']))}
+      <h3 class="db-h3">Aceites por produto</h3>${DB.empilhada(mix('Aceite', ['gp', 'ead', 'gsp']))}
+      <h3 class="db-h3">Matrículas por produto</h3>${DB.empilhada(mix('Matrícula', ['gp', 'ead', 'gsp', 'pead']))}</article>
+  </div>
+  <div class="pn-grade">
+    <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('clock')}</span><div><h2>TMA × pós-chamada por canal</h2><p>Tempo médio ponderado pelas chamadas</p></div></header><div id="dbTma"></div></article>
+    <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('clock')}</span><div><h2>Pausas</h2><p>Média por consultor · tempo em pausa ${(() => { const mt = M('Pausa', 'tempo em pausa'); return mt ? '<b>' + fmtTipo(mt, ag(mt, linhas)) + '</b>' : '—'; })()}</p></div></header><div id="dbPausa"></div></article>
+  </div>
+  <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('sparkles')}</span><div><h2>Matriz produção × qualidade</h2><p>Cada bolinha é um consultor · linhas nas medianas da operação · clique para abrir a ficha</p></div>
+    <div class="cab-acoes"><select id="dbMx" class="db-sel">${indOpc.map(m => `<option value="${esc(m.rotulo)}"${m.rotulo === (est.mx || (aTot || {}).rotulo) ? ' selected' : ''}>${esc(m.rotulo)}</option>`).join('')}</select><span class="dica">×</span><select id="dbMy" class="db-sel">${indOpc.map(m => `<option value="${esc(m.rotulo)}"${m.rotulo === (est.my || (M('Qualidade', 'nota monitor') || M('C-SAT', 'c-sat final') || M('Aderência', 'aderencia') || {}).rotulo) ? ' selected' : ''}>${esc(m.rotulo)}</option>`).join('')}</select></div></header><div id="dbMatriz"></div></article>
+  <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('users')}</span><div><h2>Comparativo por supervisor</h2><p>Chamadas, aceites e matrículas por consultor · verde/vermelho = acima/abaixo da operação (mais de 5%)</p></div></header>
+    <div class="tabela-wrap"><table class="tabela db-sup"><thead><tr><th>Supervisor</th><th class="dir">Equipe</th><th>Quartil geral</th>${COLS.map(c => `<th class="dir">${esc(c.r)}${c.porCons ? '<small>/consultor</small>' : ''}</th>`).join('')}</tr></thead><tbody>${supRows}
+      <tr class="des-tot"><td><b>Operação</b></td><td class="dir">${linhas.length}</td><td></td>${COLS.map((c, i) => `<td class="dir">${c.porCons ? fmt(op[i], 1) : fmtTipo(c.mt, op[i])}</td>`).join('')}</tr></tbody></table></div></article>
+  <div class="pn-grade">
+    <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('trophy')}</span><div><h2>Destaques e atenção</h2><p>Por indicador</p></div><div class="cab-acoes"><select id="dbInd" class="db-sel">${indOpc.map(m => `<option value="${esc(m.rotulo)}"${m.rotulo === est.ind ? ' selected' : ''}>${esc(m.rotulo)}</option>`).join('')}</select></div></header>
+      <div class="db-top"><div><h3 class="db-h3">Top 5</h3><ol>${ord.slice(0, 5).map((d, i) => card(d, i)).join('')}</ol></div><div><h3 class="db-h3">Atenção</h3><ol>${ord.slice(-5).reverse().map((d, i) => card(d, i, true)).join('')}</ol></div></div></article>
+    <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('alert')}</span><div><h2>Consultores em alerta</h2><p>Q4 em 2 ou mais indicadores · ${alerta.length} consultor(es)</p></div></header>
+      ${alerta.length ? `<ul class="db-alerta">${alerta.slice(0, 14).map(x => `<li data-nome="${esc(x.d.nome)}"><div><b>${esc(x.d.nome)}</b><small>${esc(x.d.supervisor)}</small></div><span>${x.q4.map(m => `<i class="qt q4" title="${esc(m.rotulo)}">${esc(m.grupo)}</i>`).join('')}</span></li>`).join('')}</ul>${alerta.length > 14 ? `<p class="dica">+ ${alerta.length - 14} consultor(es)</p>` : ''}` : '<p class="dica">Nenhum consultor com Q4 em 2 ou mais indicadores. 👏</p>'}</article>
+  </div>
+  ${mesesAsc.length > 1 ? `<article class="cartao"><header class="cab-card"><span class="icb">${G.ic('chart')}</span><div><h2>Evolução mês a mês</h2><p>${esc(est.ind || '')} · operação${est.sup ? ' (equipe filtrada)' : ''}</p></div></header><div id="dbEvo"></div></article>` : ''}`;
+  const depois = () => {
+    const tm = OF.map(s => [s, M('TMA', s), M('Pós-chamada', s)]).filter(x => x[1] || x[2]);
+    const elT = document.getElementById('dbTma'); if (elT) DB.agrupadas(elT, tm.map(x => ({ 'inbound': 'Inbound', 'ligacao manual': 'Manual', 'botmaker': 'Botmaker', 'outbound': 'Outbound', 'outbound finalizadas': 'Out. finaliz.', 'outbound n finalizadas': 'Out. não fin.' })[x[0]] || x[0]), [{ nome: 'TMA', cor: '#2a78d6', valores: tm.map(x => ag(x[1], linhas)) }, { nome: 'Pós-chamada', cor: '#eda100', valores: tm.map(x => ag(x[2], linhas)) }], { fmt: v => DB.hms(v) });
+    const elP = document.getElementById('dbPausa'); if (elP) { const ps = todas.filter(m => m.grupo === 'Pausa' && ehTempo(m.tipo)).map(m => ({ m, v: ag(m, linhas) })).filter(x => x.v).sort((a, b) => b.v - a.v); G.ranking(elP, ps.map((x, i) => ({ rotulo: (x.m.sOrig || x.m.sub).replace(/^M[ÉE]DIA /i, ''), valor: x.v, rotuloValor: DB.hms(x.v), cor: x.m.sentido < 0 ? '#eb6834' : '#2a78d6' }))); }
+    const elM = document.getElementById('dbMatriz'); if (elM) { const mx = todas.find(m => m.rotulo === document.getElementById('dbMx').value), my = todas.find(m => m.rotulo === document.getElementById('dbMy').value); if (mx && my) DB.matriz(elM, linhas.map(d => ({ nome: d.nome, x: V(d, mx), y: V(d, my), extra: esc(d.supervisor) })).filter(p => p.x !== null && p.y !== null), { xRot: mx.rotulo, yRot: my.rotulo, fx: v => fmtTipo(mx, v), fy: v => fmtTipo(my, v), quadrantes: ['Destaques', `Bom em ${mx.sub.toLowerCase()}, abaixo em ${my.sub.toLowerCase()}`, `Bom em ${my.sub.toLowerCase()}, abaixo em ${mx.sub.toLowerCase()}`, 'Atenção'] }); }
+    const elE = document.getElementById('dbEvo'); if (elE && ind) DB.linhasCat(elE, mesesAsc.map(mesTxt), [{ nome: ind.rotulo, cor: '#2a78d6', valores: mesesAsc.map(m => ag(ind, base(m))) }], { fmt: v => fmtTipo(ind, v), curto: v => ind.tipo === 'pct' ? fmt(v * 100, 0) : ehTempo(ind.tipo) ? DB.hms(v) : curtoN(v) });
+    const b = id => document.getElementById(id);
+    if (b('dbInd')) b('dbInd').onchange = e => { est.ind = e.target.value; render(); };
+    if (b('dbMx')) b('dbMx').onchange = e => { est.mx = e.target.value; render(); };
+    if (b('dbMy')) b('dbMy').onchange = e => { est.my = e.target.value; render(); };
+    raiz.querySelectorAll('.db-top li[data-nome], .db-alerta li[data-nome], .db-bolha[data-nome]').forEach(x => x.onclick = () => A.abrirFicha && A.abrirFicha(x.dataset.nome));
+  };
+  return { html, depois };
+}
+
 /* ---------------- tela ---------------- */
 const raiz = document.getElementById('desRaiz');
-const est = { mes: '', fonte: '', sup: '', grupo: 'Completo', busca: '', ord: { k: 'nome', asc: true } };
+const est = { mes: '', fonte: '', sup: '', grupo: 'Dashboard', ind: '', mx: '', my: '', busca: '', ord: { k: 'nome', asc: true } };
 const metricasDe = fonte => comIndice(D.modelos[fonte]);
 function cruzamento(p, mes) {
   const ini = mes + '-01', fim = mes + '-31';
@@ -362,10 +460,10 @@ function render() {
   const meses = [...new Set(D.dados.filter(d => d.fonte === est.fonte).map(d => d.mes))].sort().reverse();
   if (!est.mes || !meses.includes(est.mes)) est.mes = meses[0] || '';
   const todas = metricasDe(est.fonte);
-  const grupos = cons ? ['Completo', 'Resumo', ...[...new Set(todas.map(m => m.grupo))]] : [];
-  if (cons && !grupos.includes(est.grupo)) est.grupo = 'Completo';
+  const grupos = cons ? ['Dashboard', 'Completo', 'Resumo', ...[...new Set(todas.map(m => m.grupo))]] : [];
+  if (cons && !grupos.includes(est.grupo)) est.grupo = 'Dashboard';
   const mets = !cons || est.grupo === 'Completo' ? todas : est.grupo === 'Resumo' ? resumoDe(todas) : todas.filter(m => m.grupo === est.grupo);
-  const cruzar = !cons || est.grupo === 'Resumo' || est.grupo === 'Completo';
+  const cruzar = false; // faltas/monitorias do site ficam na ficha do consultor
   const gTit = g => { const m = todas.find(x => x.grupo === g); return m && m.gOrig ? m.gOrig : g; };
   let linhas = D.dados.filter(d => d.fonte === est.fonte && d.mes === est.mes);
   const doMes = linhas;
@@ -400,6 +498,9 @@ function render() {
       <tr>${th('mat', 'MATRÍCULA', 'des-fixo des-c1')}${th('nome', 'CONSULTOR', 'des-fixo des-c2')}${th('supervisor', 'SUPERVISOR', '')}${mets.map(mt => th(mt.rotulo, sub(mt), (mt.tipo === 'quartil' ? 'des-qcol ' : '') + 'dir', mt.rotulo)).join('')}${cruz}</tr>`;
   };
   const totLinha = cons && linhas.length > 1 ? `<tr class="des-tot"><td class="des-fixo des-c1"></td><td class="des-fixo des-c2"><b>OPERAÇÃO${est.sup ? ' · EQUIPE' : ''}</b></td><td>${linhas.length} consultor(es)</td>${mets.map(mt => `<td class="dir">${mt.tipo === 'quartil' ? '' : valorTxt(mt, agregar(mt, linhas, todas))}</td>`).join('')}${cruzar ? '<td colspan="5"></td>' : ''}</tr>` : '';
+  const mesesAsc = [...meses].reverse().slice(-12);
+  const baseMes = m => D.dados.filter(d => d.fonte === est.fonte && d.mes === m && (!est.sup || d.supervisor === est.sup) && (!est.busca || norm(d.nome).includes(norm(est.busca)) || String(d.mat).includes(est.busca)));
+  const dash = cons && est.grupo === 'Dashboard' && linhas.length ? dashboardDes({ todas, linhas, mesesAsc, mesAnt: meses[meses.indexOf(est.mes) + 1] || '', base: baseMes }) : null;
   raiz.innerHTML = `
   <div class="cab-pagina"><div><h1>Desempenho</h1><p class="sub">Indicadores por consultor (relatório consolidado do Olos, HubSpot e ponto), cruzados com faltas, monitorias e treinamentos</p></div>
     <div class="cab-acoes">
@@ -414,9 +515,9 @@ function render() {
     <label class="mini">Consultor <input type="search" id="desBusca" placeholder="Nome ou matrícula" value="${esc(est.busca)}"></label>
     <span class="dica">${ult ? `Última importação: ${esc(ult.arquivo)} · ${new Date(ult.em).toLocaleDateString('pt-BR')} · ${ult.casados} no BD${ult.naoAchados ? ` · ${ult.naoAchados} fora do BD` : ''}` : ''}</span>
   </div>
-  <div class="kpis pn-kpis">${kpis}</div>
-  ${cons ? `<div class="des-grupos">${grupos.map(g => `<button type="button" data-g="${esc(g)}" class="${g === est.grupo ? 'on' : ''}">${esc(g === 'Completo' ? 'Visão completa' : g === 'Resumo' ? 'Resumo' : gTit(g).toUpperCase())}</button>`).join('')}${distQ ? `<span class="des-q">Quartil geral: ${distQ.map(([n, q]) => `<span class="qt q${n}">Q${n}</span> ${q}`).join(' ')}</span>` : ''}</div>` : ''}
-  <article class="cartao">
+  ${dash ? '' : `<div class="kpis pn-kpis">${kpis}</div>`}
+  ${cons ? `<div class="des-grupos">${grupos.map(g => `<button type="button" data-g="${esc(g)}" class="${g === est.grupo ? 'on' : ''}">${g === 'Dashboard' ? G.ic('chart', '') + 'Dashboard' : esc(g === 'Completo' ? 'Tabela completa' : g === 'Resumo' ? 'Resumo' : gTit(g).toUpperCase())}</button>`).join('')}${distQ ? `<span class="des-q">Quartil geral: ${distQ.map(([n, q]) => `<span class="qt q${n}">Q${n}</span> ${q}`).join(' ')}</span>` : ''}</div>` : ''}
+  ${dash ? dash.html : `  <article class="cartao">
     <header class="cab-card cab-tabela"><span class="icb">${G.ic('trophy')}</span><div><h2>${cons ? esc(est.grupo === 'Completo' ? est.fonte : est.grupo === 'Resumo' ? 'Resumo' : gTit(est.grupo).toUpperCase()) : esc(est.fonte)} · ${mesTxt(est.mes)}</h2><p>Clique no título da coluna para ordenar${cons ? ' · clique no nome para abrir a ficha' : '. A porcentagem pequena é o atingimento da meta.'}</p></div>
       <div class="cab-acoes"><button type="button" class="btn btn-sec" id="desExp" data-perm="exportar">${G.ic('download')}Exportar</button></div></header>
     <div class="tabela-wrap des-wrap"><table class="tabela des-tab${cons ? ' des-base' : ''}"><thead>${cabecalho()}</thead><tbody>
@@ -424,23 +525,24 @@ function render() {
       ${linhas.map(d => `<tr>${cons ? `<td class="des-fixo des-c1">${esc(d.mat || '')}</td>` : ''}<td${cons ? ' class="des-fixo des-c2"' : ''}><b class="lk" data-nome="${esc(d.nome)}">${esc(d.nome)}</b>${d.foraBD ? ' <small class="tag neutro" title="Não está no BD atual">fora do BD</small>' : ''}</td><td>${esc(d.supervisor)}</td>${mets.map(mt => { const v = V(d, mt); return `<td class="dir">${celula(mt, v)} ${celMeta(mt.rotulo, v)}</td>`; }).join('')}
         ${cruzar ? `<td class="dir">${d.x.faltas || '<span class="zero">0</span>'}</td><td class="dir">${d.x.atest || '<span class="zero">0</span>'}</td><td class="dir">${d.x.medidas ? `<span class="tag alerta">${d.x.medidas}</span>` : '<span class="zero">0</span>'}</td><td class="dir">${d.x.mon === null ? '—' : `<span class="tag ${d.x.mon >= 85 ? 'bom' : d.x.mon >= 70 ? 'alerta' : 'ruim'}">${fmt(d.x.mon, 1)}%</span>`}</td><td class="dir">${d.x.trein || '<span class="zero">0</span>'}</td>` : ''}</tr>`).join('') || `<tr><td colspan="${mets.length + 8}" class="dica">Nenhum consultor neste filtro.</td></tr>`}
     </tbody></table></div>
-  </article>`}`;
+  </article>`}`}`;
   G.icones(raiz);
+  if (dash) dash.depois();
   const b = id => document.getElementById(id);
   if (b('desImportar')) b('desImportar').onclick = abrirImportacao;
   if (b('desMetas')) b('desMetas').onclick = abrirMetas;
   if (!fontes.length) return;
-  if (b('desFonte')) b('desFonte').onchange = e => { est.fonte = e.target.value; est.mes = ''; est.grupo = 'Completo'; render(); };
+  if (b('desFonte')) b('desFonte').onchange = e => { est.fonte = e.target.value; est.mes = ''; est.grupo = 'Dashboard'; render(); };
   b('desMes').onchange = e => { est.mes = e.target.value; render(); };
   b('desSup').onchange = e => { est.sup = e.target.value; render(); };
   b('desBusca').oninput = e => { est.busca = e.target.value; clearTimeout(render._t); render._t = setTimeout(() => { render(); const i = b('desBusca'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }, 250); };
   $$('.des-grupos button', raiz).forEach(x => x.onclick = () => { est.grupo = x.dataset.g; render(); });
-  $('thead', raiz).addEventListener('click', e => { const th = e.target.closest('th[data-k]'); if (!th) return; est.ord = { k: th.dataset.k, asc: est.ord.k === th.dataset.k ? !est.ord.asc : ['nome', 'supervisor', 'mat'].includes(th.dataset.k) || todas.some(m => m.rotulo === th.dataset.k && m.tipo === 'quartil') }; render(); });
-  $('tbody', raiz).addEventListener('click', e => { const n = e.target.closest('[data-nome]'); if (n && A.abrirFicha) A.abrirFicha(n.dataset.nome); });
-  b('desExp').onclick = () => {
+  if ($('thead', raiz) && !dash) $('thead', raiz).addEventListener('click', e => { const th = e.target.closest('th[data-k]'); if (!th) return; est.ord = { k: th.dataset.k, asc: est.ord.k === th.dataset.k ? !est.ord.asc : ['nome', 'supervisor', 'mat'].includes(th.dataset.k) || todas.some(m => m.rotulo === th.dataset.k && m.tipo === 'quartil') }; render(); });
+  if (!dash) $('tbody', raiz).addEventListener('click', e => { const n = e.target.closest('[data-nome]'); if (n && A.abrirFicha) A.abrirFicha(n.dataset.nome); });
+  if (b('desExp')) b('desExp').onclick = () => {
     const ms = cons ? todas : mets;
-    const cab = ['Consultor', 'Matrícula', 'Supervisor', 'Mês', ...ms.map(m => m.rotulo), 'Faltas (site)', 'Atestado dias (site)', 'Medidas', 'Monitoria site (%)', 'Treinamentos'];
-    const lin = linhas.map(d => { const x = cruzar ? d.x : cruzamento(d, d.mes); return [d.nome, d.mat, d.supervisor, mesTxt(d.mes), ...ms.map(mt => { const v = V(d, mt); return mt.tipo === 'quartil' || mt.tipo === 'texto' ? (v || '') : valorTxt(mt, v).replace('—', ''); }), x.faltas, x.atest, x.medidas, x.mon === null ? '' : fmt(x.mon, 1), x.trein]; });
+    const cab = ['Consultor', 'Matrícula', 'Supervisor', 'Mês', ...ms.map(m => m.rotulo)];
+    const lin = linhas.map(d => [d.nome, d.mat, d.supervisor, mesTxt(d.mes), ...ms.map(mt => { const v = V(d, mt); return mt.tipo === 'quartil' || mt.tipo === 'texto' ? (v || '') : valorTxt(mt, v).replace('—', ''); })]);
     A.baixar(`desempenho-${norm(est.fonte).replace(/\s+/g, '-')}-${est.mes}.csv`, '﻿' + [cab, ...lin].map(x => x.map(A.csvCel).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
   };
 }
@@ -571,6 +673,20 @@ A.blocoDesempenho = p => {
   const rot = m => m.rotulo.replace(/^(.+?) · Total$/, '$1');
   return `<article class="cartao"><header class="cab-card"><span class="icb">${G.ic('trophy')}</span><div><h2>Desempenho</h2><p>Indicadores importados (últimos meses)</p></div></header>
     ${Object.entries(porFonte).map(([f, xs]) => { const md = mods[f] || {}, todasF = comIndice(md), mets = md.consolidado ? resumoDe(todasF) : todasF; return `<h3 class="sub-titulo">${esc(f)}</h3><div class="tabela-wrap"><table class="tabela des-tab"><thead><tr><th>Mês</th>${mets.map(m => `<th class="dir">${esc(rot(m))}</th>`).join('')}</tr></thead><tbody>${xs.slice(0, 6).map(x => `<tr><td>${mesTxt(x.mes)}</td>${mets.map(m => `<td class="dir">${celula(m, V(x, m))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`; }).join('')}</article>`;
+};
+/* resumo para a Minha área: último mês importado */
+A.pulsoDesempenho = () => {
+  const DD = ler(KEY, {}) || {};
+  const f = Object.keys(DD.modelos || {}).find(k => DD.modelos[k].consolidado); if (!f) return null;
+  const md = DD.modelos[f], ms = comIndice(md);
+  const meses = [...new Set((DD.dados || []).filter(d => d.fonte === f).map(d => d.mes))].sort(); const mes = meses[meses.length - 1]; if (!mes) return null;
+  const ls = DD.dados.filter(d => d.fonte === f && d.mes === mes), ant = DD.dados.filter(d => d.fonte === f && d.mes === meses[meses.length - 2]);
+  const itens = [['Aceite', 'total', 'Aceites'], ['Matrícula', 'total', 'Matrículas'], ['Aderência', 'aderencia', 'Aderência'], ['Ponto', 'abs', 'ABS'], ['C-SAT', 'c-sat final', 'C-SAT'], ['Qualidade', 'nota monitor', 'Nota monitor']].map(([g, s_, r]) => { const mt = achar(ms, g, s_); if (!mt) return null; const v = agregar(mt, ls, ms); return v === null ? null : { r, txt: valorTxt(mt, v), delta: typeof DB !== 'undefined' ? DB.delta(v, agregar(mt, ant, ms), mt.sentido ?? 1, mt.tipo === 'pct' ? 'pct' : 'n') : '' }; }).filter(Boolean);
+  const qg = ms.find(m => m.tipo === 'quartil' && m.grupo === 'Geral');
+  const q = [1, 2, 3, 4].map(n => qg ? ls.filter(d => String(V(d, qg) || '').includes(String(n))).length : 0);
+  const qCols = ms.filter(m => m.tipo === 'quartil' && m.grupo !== 'Geral');
+  const alerta = ls.filter(d => qCols.filter(m => String(V(d, m) || '').includes('4')).length >= 2).map(d => ({ nome: d.nome, info: d.supervisor }));
+  return { mes, n: ls.length, itens, q, alerta };
 };
 /* para o relatório mensal e o painel */
 A.indicadorMes = (mes, grupo, sub) => {

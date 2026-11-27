@@ -14,7 +14,7 @@ const VOL = ['Pedido de demissão', 'Abandono de emprego'];
 const media = xs => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
 
 function montar(mes) {
-  const q = ler(K.quadro, { itens: [] }) || { itens: [] }, oc = ler(K.oc, []) || [], mon = ler(K.mon, []) || [], at = ler(K.at, []) || [], des = ler(K.des, {}) || {}, mot = ler(K.mot, {}) || {};
+  const q = ler(K.quadro, { itens: [] }) || { itens: [] }, oc = ler(K.oc, []) || [], mon = A.monitorias ? A.monitorias() : (ler(K.mon, []) || []), at = ler(K.at, []) || [], des = ler(K.des, {}) || {}, mot = ler(K.mot, {}) || {};
   const doMes = d => (d || '').slice(0, 7) === mes;
   const ativos = (q.itens || []).filter(c => c.status !== 'Desligado' && !c.supForaQuadro);
   const emAtiv = ativos.filter(c => /^ativ/.test(norm(c.status))).length;
@@ -84,7 +84,7 @@ document.addEventListener('admin-servidor', e => {
     <div class="adm-acoes"><button type="button" class="btn btn-sec" id="lgpdAplicar">Aplicar agora</button></div><p class="msg" id="lgpdMsg"></p>`;
   document.getElementById('lgpdAplicar').onclick = () => {
     const meses = +document.getElementById('lgpdMeses').value, lim = new Date(); lim.setMonth(lim.getMonth() - meses); const corte = lim.toISOString().slice(0, 10);
-    const oc = ler(K.oc, []) || [], mon = ler(K.mon, []) || [];
+    const oc = ler(K.oc, []) || [], mon = A.monitorias ? A.monitorias() : (ler(K.mon, []) || []);
     const velhosOc = oc.filter(o => o.data < corte && !o.anonimizado), velhosMon = mon.filter(m => m.data < corte && !m.anonimizado);
     if (!velhosOc.length && !velhosMon.length) { document.getElementById('lgpdMsg').textContent = `Nada anterior a ${dataBR(corte)} para anonimizar.`; return; }
     if (!confirm(`Apagar os detalhes sensíveis de ${velhosOc.length} ocorrência(s) e ${velhosMon.length} monitoria(s) anteriores a ${dataBR(corte)}? As contagens continuam. Não dá para desfazer.`)) return;

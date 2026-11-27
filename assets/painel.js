@@ -88,6 +88,7 @@ function pendencias(D) {
   add('alta', 'scale', 'Medidas disciplinares nos últimos 30 dias', 'Acompanhar com o supervisor e alinhar plano de desenvolvimento.', 'buscar',
     oc30.filter(o => o.tipo === 'Suspensão' || o.tipo === 'Advertência').sort((a, b) => b.data.localeCompare(a.data)).map(o => pessoa(o.nome, `${o.tipo}${o.tipo === 'Suspensão' ? ` de ${o.dias} dia(s)` : o.forma ? ' ' + o.forma.toLowerCase() : ''} · ${dataBR(o.data)}`)));
   const porP = new Map(); oc30.forEach(o => { const k = chaveP(o.matricula, o.nome); const x = porP.get(k) || { nome: o.nome, f: 0, a: 0, at: 0 }; if (o.tipo === 'Falta') x.f++; if (o.tipo === 'Atraso') x.a++; if (o.tipo === 'Atestado') x.at++; porP.set(k, x); });
+  { const pd = A.pulsoDesempenho ? A.pulsoDesempenho() : null; if (pd && pd.alerta.length) add('media', 'trophy', 'Consultores com Q4 em 2 ou mais indicadores', 'Pelo relatório de indicadores do último mês. Bom momento para feedback e plano de ação.', 'desempenho', pd.alerta); }
   add('media', 'alert', 'Absenteísmo alto (30 dias)', '3 ou mais faltas/atrasos, ou 2 ou mais atestados. Conversa de feedback recomendada.', 'buscar',
     [...porP.values()].filter(x => x.f + x.a >= 3 || x.at >= 2).map(x => pessoa(x.nome, [x.f && `${x.f} falta(s)`, x.a && `${x.a} atraso(s)`, x.at && `${x.at} atestado(s)`].filter(Boolean).join(' · '))));
 
@@ -197,6 +198,11 @@ function render() {
     ${kp('Pendências', urg + aten, `${urg} urgente(s) · ${aten} de atenção${total - urg - aten ? ` · ${total - urg - aten} para planejar` : ''}`, urg + aten ? '#ec835a' : '#1baf7a', 'flag')}
   </div>
 
+  ${(() => { const pd = A.pulsoDesempenho ? A.pulsoDesempenho() : null; const mons = A.monitorias ? A.monitorias() : []; const um = mons.length ? mons.map(m => m.data || '').sort().pop().slice(0, 7) : ''; const mm = mons.filter(m => (m.data || '').startsWith(um)); const nt = mm.map(m => m.nota).filter(v => v !== null && v !== undefined); if (!pd && !mm.length) return ''; const qt = pd ? pd.q.reduce((a, b) => a + b, 0) : 0; const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']; const mt = m => m ? MES[+m.slice(5, 7) - 1] + '/' + m.slice(0, 4) : '';
+    return `<article class="cartao pn-pulso"><header class="cab-card"><span class="icb">${G.ic('activity')}</span><div><h2>Pulso da operação</h2><p>${pd ? 'Indicadores de ' + mt(pd.mes) : ''}${pd && mm.length ? ' · ' : ''}${mm.length ? 'monitorias de ' + mt(um) : ''}</p></div><div class="cab-acoes">${pd && podeVer('desempenho') ? `<button type="button" class="btn btn-sec btn-mini" data-ir="desempenho">${G.ic('trophy', '')}Desempenho</button>` : ''}${mm.length && podeVer('monitorias') ? `<button type="button" class="btn btn-sec btn-mini" data-ir="monitorias">${G.ic('headset', '')}Monitorias</button>` : ''}</div></header>
+      <div class="pn-pulso-g">${pd && qt ? `<div class="pn-pq"><small>Quartil geral</small><div class="db-qbar">${pd.q.map((n, i) => n ? `<i class="q${i + 1}" style="flex:${n}">Q${i + 1} · ${n}</i>` : '').join('')}</div><em>${pd.alerta.length} consultor(es) com Q4 em 2 ou mais indicadores</em></div>` : ''}
+      ${pd ? pd.itens.map(x => `<div class="pn-pi"><small>${esc(x.r)}</small><b>${x.txt}</b>${x.delta}</div>`).join('') : ''}
+      ${mm.length ? `<div class="pn-pi"><small>Monitorias</small><b>${mm.length.toLocaleString('pt-BR')}</b><span class="db-delta neutro">nota média ${nt.length ? fmt(nt.reduce((a, b) => a + b, 0) / nt.length, 1) + '%' : '—'}</span></div>` : ''}</div></article>`; })()}
   ${perfil === 'Consulta' ? '' : `<article class="cartao">
     <header class="cab-card"><span class="icb">${G.ic('flag')}</span><div><h2>Pendências</h2><p>Em ordem de prioridade. Clique para ver os nomes e abra a guia certa para resolver.</p></div></header>
     ${P.length ? `<div class="pn-pend">${P.map((p, i) => `<details class="pn-item pn-${p.nivel}"${i < 2 && p.nivel === 'alta' ? ' open' : ''}>
@@ -265,7 +271,7 @@ const ATALHOS = [
 ];
 function contador(n) { const c = document.getElementById('contPend'); if (c) { c.textContent = n; c.hidden = !n; c.title = n + ' pendência(s) urgentes ou de atenção'; } }
 const contarPend = () => { try { contador(pendencias(dados()).filter(p => p.nivel !== 'baixa').reduce((s, p) => s + p.itens.length, 0)); } catch (e) { /* contador é opcional */ } };
-const NOME_ABA = { 'analise-trein': 'Análise treinamento', 'analise-sup': 'Análise supervisão', 'at-registros': 'Registros', 'at-base': 'Base de dados', buscar: 'Buscar consultor' };
+const NOME_ABA = { 'analise-trein': 'Análise treinamento', 'analise-sup': 'Análise supervisão', 'at-registros': 'Registros', 'at-base': 'Base de dados', buscar: 'Buscar consultor', desempenho: 'Desempenho', monitorias: 'Monitorias' };
 
 document.addEventListener('aba-aberta', e => { if (e.detail === 'painel') render(); });
 window.addEventListener('dados-atualizados', () => { if (document.getElementById('aba-painel').classList.contains('ativo')) render(); else contarPend(); });

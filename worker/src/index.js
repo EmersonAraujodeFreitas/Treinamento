@@ -225,7 +225,14 @@ async function rotaEstado(env, u) {
     if (ds === 'analises') linhas = ac.ler.analises.length ? await todos(env, `SELECT dados FROM registros WHERE dataset = 'analises' AND apagado = 0 AND tipo IN (${ac.ler.analises.map(() => '?').join(',')})`, ...ac.ler.analises) : [];
     else if (ac.ler[ds]) linhas = await todos(env, 'SELECT dados FROM registros WHERE dataset = ? AND apagado = 0', ds);
     // supervisor: ocorrências e treinamentos só da própria equipe
-    if (esc && linhas && (ds === 'ocorrencias' || ds === 'ativos' || ds === 'monitorias')) linhas = linhas.filter(r => { try { return esc.daEquipe(JSON.parse(r.dados)); } catch (e) { return false; } });
+    if (esc && linhas && (ds === 'ocorrencias' || ds === 'ativos' || ds === 'monitorias')) linhas = linhas.map(r => {
+      try {
+        const d = JSON.parse(r.dados);
+        // pacote de monitorias importadas: entrega só as linhas da equipe (colunas 1 = nome, 2 = matrícula, 3 = supervisor)
+        if (ds === 'monitorias' && d.tipo === 'lote') { d.linhas = (d.linhas || []).filter(l => esc.daEquipe({ nome: l[1], mat: l[2], supervisor: l[3] })); return d.linhas.length ? { dados: JSON.stringify(d) } : null; }
+        return esc.daEquipe(d) ? r : null;
+      } catch (e) { return null; }
+    }).filter(Boolean);
     partes.push(JSON.stringify(ds) + ':' + (linhas ? '[' + linhas.map(r => r.dados).join(',') + ']' : 'null'));
   }
   for (const v of VALORES) {
@@ -359,7 +366,7 @@ async function rotaAdmin(env, u, req, partes) {
 
 /* ---------------- diagnóstico (não mostra nenhum valor secreto) ---------------- */
 async function diagnostico(env) {
-  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-27-v9', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
+  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-27-v10', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
   if (d.banco_ligado) {
     try { await garantirTabelas(env); } catch (e) { d.erro_criar_tabelas = String(e.message || e).slice(0, 200); }
     for (const t of ['usuarios', 'registros', 'valores', 'tentativas', 'log']) {
