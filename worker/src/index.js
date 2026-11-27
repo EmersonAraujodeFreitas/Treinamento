@@ -82,7 +82,27 @@ const um = (env, sql, ...p) => env.DB.prepare(sql).bind(...p).first();
 const todos = async (env, sql, ...p) => (await env.DB.prepare(sql).bind(...p).all()).results || [];
 const exec = (env, sql, ...p) => env.DB.prepare(sql).bind(...p).run();
 async function registrar(env, usuario, acao, detalhe) { try { await exec(env, 'INSERT INTO log (quando, usuario, acao, detalhe) VALUES (?,?,?,?)', agora(), usuario || '', acao, String(detalhe || '').slice(0, 300)); } catch (e) { /* log é opcional */ } }
-async function lerValor(env, chave, padrao) { const r = await um(env, 'SELECT dados FROM valores WHERE chave = ?', chave); return r ? JSON.parse(r.dados) : padrao; }
+/* valores grandes (histórico do desempenho) passam do limite de uma linha do D1 (~2 MB):
+   ficam em pedaços "chave::1", "chave::2"… e a linha principal guarda {"__partes": n} */
+const PEDACO = 900000;
+function escritasValor(env, chave, txt, por) {
+  const sql = 'INSERT INTO valores (chave, dados, atualizado_em, por) VALUES (?,?,?,?) ON CONFLICT(chave) DO UPDATE SET dados = excluded.dados, atualizado_em = excluded.atualizado_em, por = excluded.por';
+  const out = [];
+  if (txt.length <= PEDACO) { out.push(env.DB.prepare(sql).bind(chave, txt, agora(), por || '')); out.push(env.DB.prepare("DELETE FROM valores WHERE chave LIKE ?").bind(chave + '::%')); return out; }
+  const n = Math.ceil(txt.length / PEDACO);
+  for (let i = 0; i < n; i++) out.push(env.DB.prepare(sql).bind(chave + '::' + (i + 1), txt.slice(i * PEDACO, (i + 1) * PEDACO), agora(), por || ''));
+  out.push(env.DB.prepare("DELETE FROM valores WHERE chave LIKE ? AND CAST(substr(chave, ?) AS INTEGER) > ?").bind(chave + '::%', chave.length + 3, n));
+  out.push(env.DB.prepare(sql).bind(chave, JSON.stringify({ __partes: n }), agora(), por || ''));
+  return out;
+}
+async function montarValorTxt(env, chave, txt) {
+  if (!txt || txt.slice(0, 12) !== '{"__partes":') return txt;
+  const n = JSON.parse(txt).__partes, ps = await todos(env, 'SELECT chave, dados FROM valores WHERE chave LIKE ?', chave + '::%');
+  const mapa = new Map(ps.map(p => [p.chave, p.dados])); let t = '';
+  for (let i = 1; i <= n; i++) { const x = mapa.get(chave + '::' + i); if (x === undefined) return 'null'; t += x; }
+  return t;
+}
+async function lerValor(env, chave, padrao) { const r = await um(env, 'SELECT dados FROM valores WHERE chave = ?', chave); if (!r) return padrao; const t = await montarValorTxt(env, chave, r.dados); return t && t !== 'null' ? JSON.parse(t) : padrao; }
 async function gravarValor(env, chave, dados, por) { await exec(env, 'INSERT INTO valores (chave, dados, atualizado_em, por) VALUES (?,?,?,?) ON CONFLICT(chave) DO UPDATE SET dados = excluded.dados, atualizado_em = excluded.atualizado_em, por = excluded.por', chave, JSON.stringify(dados), agora(), por || ''); }
 async function versao(env) { return (await lerValor(env, 'versao', 0)) || 0; }
 async function subirVersao(env) { const v = (await versao(env)) + 1; await gravarValor(env, 'versao', v, ''); return v; }
@@ -259,7 +279,7 @@ async function rotaEstado(env, u) {
   }
   for (const v of VALORES) {
     const r = vals.find(x => x.chave === v);
-    let txt = ac.ler[v] && r ? r.dados : 'null';
+    let txt = ac.ler[v] && r ? await montarValorTxt(env, v, r.dados) : 'null';
     if (v === 'quadro' && esc && txt !== 'null') txt = JSON.stringify(quadroDaEquipe(JSON.parse(txt), esc));
     if (v === 'desempenho' && esc && txt !== 'null') { const d = JSON.parse(txt); d.dados = (d.dados || []).filter(x => esc.daEquipe(x)); txt = JSON.stringify(d); }
     partes.push(JSON.stringify(v) + ':' + txt);
@@ -311,8 +331,8 @@ async function rotaSincronizar(env, u, req) {
     if (v === 'desempenho') { const atual = await lerValor(env, 'desempenho', null); if (atual) dados = mesclarDes(dados, atual); }
     if (v === 'bairros') { const atual = await lerValor(env, 'bairros', {}); for (const [c, bs] of Object.entries(dados || {})) atual[c] = [...new Set([...(atual[c] || []), ...(Array.isArray(bs) ? bs : [])])].slice(0, 2000); dados = atual; }
     const txt = JSON.stringify(dados);
-    if (txt.length > 5e6) { recusados.push({ ds: v, motivo: 'grande demais' }); continue; }
-    escritas.push(env.DB.prepare('INSERT INTO valores (chave, dados, atualizado_em, por) VALUES (?,?,?,?) ON CONFLICT(chave) DO UPDATE SET dados = excluded.dados, atualizado_em = excluded.atualizado_em, por = excluded.por').bind(v, txt, agora(), u.usuario));
+    if (txt.length > (v === 'desempenho' ? 40e6 : 5e6)) { recusados.push({ ds: v, motivo: 'grande demais' }); continue; }
+    escritas.push(...escritasValor(env, v, txt, u.usuario));
   }
   let ver = await versao(env);
   if (escritas.length) {
@@ -389,7 +409,7 @@ async function rotaAdmin(env, u, req, partes) {
 
 /* ---------------- diagnóstico (não mostra nenhum valor secreto) ---------------- */
 async function diagnostico(env) {
-  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-28-v12', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
+  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-28-v13', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
   if (d.banco_ligado) {
     try { await garantirTabelas(env); } catch (e) { d.erro_criar_tabelas = String(e.message || e).slice(0, 200); }
     for (const t of ['usuarios', 'registros', 'valores', 'tentativas', 'log']) {

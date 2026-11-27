@@ -163,7 +163,7 @@ async function enviar() {
       primeiro = false;
       if (!n && !Object.keys(lote.valores).length) break;
     }
-    if (recusados.length) toastN(`${recusados.length} alteração(ões) não foram aceitas pelo servidor por falta de permissão.`);
+    if (recusados.length) { const g = recusados.filter(x => /grande/.test(x.motivo || '')); toastN(g.length ? `O servidor recusou ${g.map(x => x.ds).join(', ')}: grande demais para gravar. Os dados continuam neste navegador.` : `${recusados.length} alteração(ões) não foram aceitas pelo servidor por falta de permissão.`); }
     await puxar(true);
     setStatus('ok');
     return true;
@@ -190,6 +190,12 @@ function aplicarEstado(est) {
     for (const v of VALORES) {
       if (Object.prototype.hasOwnProperty.call(p.valores || {}, v)) continue;
       const val = est.datasets[v];
+      if (v === 'desempenho' && (val === null || val === undefined || !Array.isArray(val.dados))) {
+        // o servidor ainda não tem os relatórios (ou não conseguiu gravar): nunca apaga os do navegador; manda de novo
+        let local = null; try { local = JSON.parse(localStorage.getItem(DS[v]) || 'null'); } catch (e) { /* segue */ }
+        if (local && Array.isArray(local.dados) && local.dados.length) p.valores[v] = ++carimbo + '-' + Date.now();
+        continue;
+      }
       if (v === 'desempenho' && val) {
         // nunca troca o histórico local pelo do servidor: junta os dois (o que for mais novo em cada mês/operação fica)
         let local = null; try { local = JSON.parse(localStorage.getItem(DS[v]) || 'null'); } catch (e) { /* segue */ }
