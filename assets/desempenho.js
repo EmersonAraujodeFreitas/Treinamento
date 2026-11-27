@@ -17,6 +17,18 @@ let D = Object.assign(vazio(), ler(KEY, {}) || {});
 // cópia de segurança no navegador (não é apagada ao sincronizar): se o servidor devolver menos do que foi importado, o site junta de volta
 const KEY_COPIA = 'inovacao_treinamento_zcopia_desempenho';
 const salvar = () => { gravar(KEY, D); try { localStorage.setItem(KEY_COPIA, JSON.stringify(D)); } catch (e) { /* segue */ } };
+/* linhas antigas (importadas antes de existir Admissão/Serviços, sem operação e com colunas em OUTROS) voltavam do servidor
+   e se misturavam às novas. Quando o mês já tem a importação nova da operação, as antigas dessa operação saem (e não voltam). */
+function limparAntigas() {
+  const d0 = ler(KEY, {}) || {}; if (!Array.isArray(d0.dados) || !d0.dados.length) return;
+  const novas = new Set(d0.dados.filter(d => d.op).map(d => d.fonte + '|' + d.mes + '|' + d.op));
+  const sai = d => !d.op && novas.has(d.fonte + '|' + d.mes + '|' + opDaLinha(d));
+  const tirar = d0.dados.filter(sai); if (!tirar.length) return;
+  const t = new Date().toISOString(); d0.grupos = d0.grupos || {};
+  tirar.forEach(d => { d0.grupos[d.fonte + '|' + d.mes + '|'] = t; });
+  d0.dados = d0.dados.filter(d => !sai(d));
+  gravar(KEY, d0); try { localStorage.setItem(KEY_COPIA, JSON.stringify(d0)); } catch (e) { /* segue */ }
+}
 function restaurarDaCopia() {
   let c = null; try { c = JSON.parse(localStorage.getItem(KEY_COPIA) || 'null'); } catch (e) { return; }
   if (!c || !Array.isArray(c.dados) || !c.dados.length || !window.mesclarDes) return;
@@ -697,7 +709,7 @@ function atingimento(rot, v) {
   return mt.sentido === 'menor' ? alvo / (v || 1e-9) : v / alvo;
 }
 function render() {
-  restaurarDaCopia();
+  restaurarDaCopia(); limparAntigas();
   D = Object.assign(vazio(), ler(KEY, {}) || {});
   const fontes = Object.keys(D.modelos).sort(cmpTxt);
   if (!est.fonte || !fontes.includes(est.fonte)) est.fonte = fontes.find(f => D.modelos[f].consolidado) || fontes[0] || '';
@@ -769,7 +781,7 @@ function render() {
     <label class="mini">Consultor <input type="search" id="desBusca" placeholder="Nome ou matrícula" value="${esc(est.busca)}"></label>
     <span class="dica">${ult ? `Última importação: ${esc(ult.arquivo)} · ${new Date(ult.em).toLocaleDateString('pt-BR')} · ${ult.casados} no BD${ult.naoAchados ? ` · ${ult.naoAchados} fora do BD` : ''}` : ''}</span>
   </div>
-  ${cons && todas.length && todas.filter(m => m.grupo === 'Outros').length / todas.length > .5 ? `<div class="aviso-fluxo db-aviso">${G.ic('alert', '')}<span><b>Este relatório foi lido pela versão anterior do site</b>, que não reconhecia as colunas da base (tudo caiu em OUTROS e os quartis se perderam). Clique em <b>Importar relatório</b> e envie o mesmo arquivo de novo: o mês é substituído e os blocos, tempos, percentuais e quartis aparecem certos.</span></div>` : ''}
+  ${(() => { if (!cons) return ''; const antigos = [...new Set(D.dados.filter(d => d.fonte === est.fonte && !d.op && opDaLinha(d) === est.opF).map(d => d.mes))].sort(); return antigos.length ? `<div class="aviso-fluxo db-aviso">${G.ic('alert', '')}<span><b>${antigos.length} mês(es) de ${esc(est.opF)} ainda com a importação antiga</b> (${antigos.map(mesTxt).join(', ')}): colunas e quartis podem aparecer errados. Clique em <b>Importar relatório</b>, escolha <b>${esc(est.opF)}</b> e envie esses arquivos de novo (pode selecionar todos de uma vez).</span></div>` : ''; })()}
   ${window.NUVEM && NUVEM.ehAdmin && NUVEM.ehAdmin() && NUVEM.ativo() ? `<p class="dica des-diag" id="desDiag">Navegador: ${D.dados.length} linha(s) · servidor: ${(NUVEM.diagDesempenho() || {}).servidor ?? '—'} linha(s) na última leitura</p>` : ''}
   ${(() => { try { const pd = JSON.parse(localStorage.getItem('inovacao_pendentes_v2') || '{}'); return pd.valores && pd.valores.desempenho && window.NUVEM && NUVEM.ativo && NUVEM.ativo() ? `<p class="aviso-fluxo">${G.ic('alert', '')} Os relatórios importados ainda <b>não foram salvos no servidor</b> (estão só neste navegador). Aguarde o aviso <b>Sincronizado</b> no topo antes de fechar ou sair. Se não sincronizar, confira se o Worker publicado é o v13.</p>` : ''; } catch (e) { return ''; } })()}
   ${dash ? '' : `<div class="kpis pn-kpis">${kpis}</div>`}
