@@ -39,104 +39,227 @@ const est = { mes: hoje().slice(0, 7), sup: '', q: '', editando: null, form: fal
 
 /* ---------- leitura do que veio da planilha ---------- */
 const KEY_DES = 'inovacao_treinamento_desempenho_v1';
-const metasMon = () => ((ler(KEY_DES, {}) || {}).metasMon) || {};
 function perfilBase(xs) {
-  // colunas extras: tipo de avaliador, produto/fila, feedback e PEC
+  // colunas extras: tipo de avaliador, operação/organização, monitor responsável, feedback e PEC
   const chaves = {}; xs.forEach(m => Object.keys(m.campos || {}).forEach(k => { chaves[k] = chaves[k] || new Map(); const v = String(m.campos[k]); chaves[k].set(v, (chaves[k].get(v) || 0) + 1); }));
   const ks = Object.keys(chaves);
   const tipoK = ks.find(k => { const vs = [...chaves[k].keys()].map(norm); return vs.length <= 8 && vs.some(v => v.includes('supervis')) && vs.some(v => v.includes('monitor') || v.includes('qualidade') || v.includes('analista')); });
-  const prodK = ks.find(k => k !== tipoK && /produto|fila|campanha|operac|segmento|servic|tipo de liga|ies|unidade/.test(norm(k)) && chaves[k].size >= 2 && chaves[k].size <= 14);
+  const prodK = ks.find(k => k !== tipoK && /organiza|celula|operac|produto|fila|campanha|segmento|unidade/.test(norm(k)) && chaves[k].size >= 2 && chaves[k].size <= 14)
+    || ks.find(k => k !== tipoK && /servic|ies/.test(norm(k)) && chaves[k].size >= 2 && chaves[k].size <= 14);
+  const respK = ks.find(k => k !== tipoK && /monitor respons|responsavel|monitor$/.test(norm(k)) && chaves[k].size <= 20);
   const fbK = ks.find(k => /feedback|devolutiva/.test(norm(k)));
-  const pecK = ks.filter(k => /^pec\b|^pec /i.test(norm(k)) || /^pec/.test(norm(k)));
-  const crit = new Set(); xs.forEach(m => Object.keys(m.crit || {}).forEach(k => crit.add(k)));
-  // sem coluna de tipo: avaliador que é supervisor no BD conta como supervisor
+  const pecK = ks.filter(k => /^pec/.test(norm(k)) && [...chaves[k].keys()].some(v => !isNaN(A.num(String(v).replace('%', '')))));
+  // critérios: os que quase sempre valem 0 são marcas de falha (1 = aconteceu); os demais são conformidade (1 = atendeu)
+  const critT = {}; xs.forEach(m => Object.entries(m.crit || {}).forEach(([k, v]) => { if (v === null || v === undefined) return; const c = critT[k] = critT[k] || { s: 0, n: 0 }; c.s += v; c.n++; }));
+  if (fbK) delete critT[fbK];
+  const falha = Object.keys(critT).filter(k => critT[k].s / critT[k].n < .5 || /^(nao|não|atraso|erro|falta|faltou|deixou|tranferiu|transferiu|protocolo prenchido|protocolo preenchido inc|utilizou|interrompeu)/.test(norm(k)));
+  const conf = Object.keys(critT).filter(k => !falha.includes(k));
   const q = ler('inovacao_treinamento_quadro_v1', {}) || {};
-  const sups = new Set((q.itens || []).map(c => norm(c.supervisor)).concat((q.gestao || []).map(g => norm(g.nome))).filter(Boolean));
+  const supsBD = [...new Set((q.itens || []).filter(c => c.status !== 'Desligado' && !c.supForaQuadro).map(c => c.supervisor).filter(Boolean))];
   const tipoDe = m => {
     if (tipoK) { const v = norm(m.campos[tipoK] || ''); return v.includes('supervis') ? 'Supervisor' : v ? 'Monitor' : ''; }
     const a = norm(m.avaliador); if (!a) return '';
-    const p = a.split(' '); return [...sups].some(s => s === a || (p.length > 1 && s.startsWith(p[0] + ' ') && s.includes(p[p.length - 1]))) ? 'Supervisor' : 'Monitor';
+    return supsBD.some(s => mesmoNome(a, s)) ? 'Supervisor' : 'Monitor';
   };
   const fbDe = m => { if (!fbK) return null; const v = m.campos[fbK]; if (v === undefined || v === null || v === '') return false; const c = confDe(v); return c === undefined ? true : c === null ? null : c > 0; };
-  return { tipoK, prodK, fbK, pecK, crit: [...crit], tipoDe, fbDe };
+  const opDe = m => (prodK && m.campos[prodK]) || '';
+  return { tipoK, prodK, respK, fbK, pecK, falha, conf, tipoDe, fbDe, opDe, supsBD, quadro: q };
+}
+// "Kelly" / "KELLY DOS SANTOS" / "Kelly Santos" são a mesma pessoa
+function mesmoNome(a, b) {
+  const x = norm(a).split(' ').filter(t => t.length > 1 && !['de', 'da', 'do', 'dos', 'das', 'e'].includes(t)), y = norm(b).split(' ').filter(t => t.length > 1 && !['de', 'da', 'do', 'dos', 'das', 'e'].includes(t));
+  if (!x.length || !y.length || x[0] !== y[0]) return false;
+  if (x.length === 1 || y.length === 1) return true;
+  return x[x.length - 1] === y[y.length - 1] || y.includes(x[x.length - 1]) || x.includes(y[y.length - 1]);
 }
 const media_ = xs => { const v = xs.filter(x => x !== null && x !== undefined && isFinite(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
 const curto = n => { const p = String(n || '—').split(' '); return p.length > 1 ? p[0] + ' ' + p[p.length - 1][0] + '.' : p[0]; };
+const tituloNome = s => String(s || '').toLowerCase().replace(/(^|\s)\S/g, x => x.toUpperCase()).replace(/\b(De|Da|Do|Dos|Das|E)\b/g, x => x.toLowerCase()).replace(/\b(Uj|Uva|Ead|Gp|Gsp)\b/g, x => x.toUpperCase());
+const iniciais = n => String(n || '?').split(' ').filter(Boolean).map(p => p[0]).filter((_, i, a) => i === 0 || i === a.length - 1).join('').toUpperCase();
+const corNota = n => n === null || n === undefined ? '#8a96a8' : n >= 95 ? '#0f9d58' : n >= 85 ? '#1baf7a' : n >= 70 ? '#eda100' : '#d03b3b';
+
+/* ---------- metas (quantidade de monitorias por consultor no mês) ---------- */
+const DEF_METAS = { padraoSup: 2, padraoMon: 2, fator: {}, qtd: {}, red: {}, nota: META };
+const metasMon = () => Object.assign({}, DEF_METAS, ((ler(KEY_DES, {}) || {}).metasMon) || {});
+function operacaoBD(c) {
+  // operação do consultor no BD: Captação → Admissão, Permanência → Serviços; IES UVA/Unijorge
+  const o = norm(c.operacao || ''), i = norm(c.ies || '');
+  const a = o.includes('capta') ? 'Admissão' : o.includes('perman') ? 'Serviços' : '';
+  const b = i.includes('uva') ? 'UVA' : i.includes('unijorge') || i === 'uj' ? 'UJ' : '';
+  return a && b ? `${a} ${b}` : '';
+}
+const chaveOp = s => norm(s).replace(/[^a-z0-9]+/g, ' ').replace(/\bunijorge\b/g, 'uj').trim();
+function montarMetas(P, doMes, todasMon) {
+  const mt = metasMon(), q = P.quadro;
+  const vig = (q.itens || []).filter(c => c.status !== 'Desligado' && !c.supForaQuadro);
+  // operação de cada consultor: a mais frequente nas monitorias; sem monitoria, a do BD
+  const opCons = {}; todasMon.forEach(m => { const o = P.opDe(m); if (!o) return; const k = norm(m.nome); const c = opCons[k] = opCons[k] || {}; c[o] = (c[o] || 0) + 1; });
+  const opDeCons = c => { const x = opCons[norm(c.nome)]; if (x) return Object.entries(x).sort((a, b) => b[1] - a[1])[0][0]; return operacaoBD(c); };
+  const ops = {}; const opsNome = {};
+  todasMon.forEach(m => { const o = P.opDe(m); if (o) opsNome[chaveOp(o)] = opsNome[chaveOp(o)] || o; });
+  vig.forEach(c => { const o = opDeCons(c); if (o) { const k = chaveOp(o); opsNome[k] = opsNome[k] || o; (ops[k] = ops[k] || []).push(c); } });
+  const fator = (op, t) => { const f = (mt.fator || {})[chaveOp(op)] || {}; return f[t] ?? (t === 'sup' ? mt.padraoSup : mt.padraoMon); };
+  // supervisores (equipe do BD)
+  const sups = {}; vig.forEach(c => { if (c.supervisor) (sups[c.supervisor] = sups[c.supervisor] || []).push(c); });
+  const avalSup = doMes.filter(m => m._t === 'Supervisor');
+  const linhasSup = Object.entries(sups).map(([s, eq]) => {
+    const opsEq = {}; eq.forEach(c => { const o = opDeCons(c); if (o) opsEq[o] = (opsEq[o] || 0) + 1; });
+    const op = Object.entries(opsEq).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+    const k = 'sup:' + norm(s), qtd = mt.qtd[k] ?? eq.length, red = mt.red[k] || 0;
+    const meta = Math.max(0, Math.round(qtd * fator(op, 'sup') - red));
+    const minhas = avalSup.filter(m => mesmoNome(m.avaliador || '', s));
+    const daEquipe = doMes.filter(m => norm(m.supervisor) === norm(s) || eq.some(c => norm(c.nome) === norm(m.nome)));
+    return { tipo: 'sup', chave: k, nome: s, op, qtd, qtdAuto: eq.length, red, fator: fator(op, 'sup'), meta, feitas: minhas.length, fb: minhas.filter(m => m._fb).length, notaDada: media_(minhas.map(m => m.nota)), mediaEquipe: media_(daEquipe.map(m => m.nota)), equipe: daEquipe };
+  }).sort((a, b) => cmpTxt(a.nome, b.nome));
+  // monitores: cada par monitor × operação que aparece na base
+  const pares = {}; todasMon.filter(m => m._t === 'Monitor' && m.avaliador).forEach(m => { const o = P.opDe(m) || '—'; const k = norm(m.avaliador) + '|' + chaveOp(o); pares[k] = pares[k] || { nome: m.avaliador, op: o }; });
+  const linhasMon = Object.entries(pares).map(([k0, p]) => {
+    const k = 'mon:' + k0, auto = (ops[chaveOp(p.op)] || []).length, qtd = mt.qtd[k] ?? auto, red = mt.red[k] || 0;
+    const meta = Math.max(0, Math.round(qtd * fator(p.op, 'mon') - red));
+    const minhas = doMes.filter(m => m._t === 'Monitor' && norm(m.avaliador) === norm(p.nome) && chaveOp(P.opDe(m) || '—') === chaveOp(p.op));
+    return { tipo: 'mon', chave: k, nome: p.nome, op: p.op, qtd, qtdAuto: auto, red, fator: fator(p.op, 'mon'), meta, feitas: minhas.length, fb: minhas.filter(m => m._fb).length, notaDada: media_(minhas.map(m => m.nota)), minhas };
+  }).sort((a, b) => cmpTxt(a.nome, b.nome) || cmpTxt(a.op, b.op));
+  return { mt, linhasSup, linhasMon, opsNome, fator };
+}
+
+/* ---------- desenho ---------- */
+function trilha(rot, feitas, meta, cor, ritmo) {
+  const p = meta ? feitas / meta : 0;
+  return `<div class="q-trilha" style="--c:${cor}"><div class="q-tr-cab"><span>${esc(rot)}</span><b>${feitas.toLocaleString('pt-BR')}<small> / ${meta ? meta.toLocaleString('pt-BR') : 'sem meta'}</small></b><em>${meta ? fmt(p * 100, 1) + '%' : '—'}</em></div>
+    <div class="q-tr-barra"><i style="--w:${Math.min(100, p * 100)}%"></i>${meta && ritmo ? `<u style="left:${Math.min(100, ritmo * 100)}%" data-tip="Ritmo esperado para hoje: ${fmt(ritmo * 100, 0)}% da meta"></u>` : ''}</div>
+    ${meta ? `<small class="q-tr-rod">${feitas >= meta ? '✓ meta batida' : `faltam ${(meta - feitas).toLocaleString('pt-BR')}`}${ritmo ? ` · ${p >= ritmo ? 'no ritmo' : 'abaixo do ritmo do mês'}` : ''}</small>` : '<small class="q-tr-rod">defina a quantidade de monitorias por consultor em ⚙ Metas</small>'}</div>`;
+}
+function halter(cats, a, b, nomes, cores) {
+  // gráfico de halteres: duas notas por operação na mesma régua
+  const vals = cats.flatMap((_, i) => [a[i], b[i]]).filter(v => v !== null);
+  if (!vals.length) return '<p class="dica">Sem notas.</p>';
+  const mn = Math.max(0, Math.floor(Math.min(...vals) / 5) * 5 - 5), mx = 100;
+  const x = v => (v - mn) / (mx - mn) * 100;
+  return `<div class="q-halter"><div class="q-h-esc"><span style="left:0">${mn}%</span><span style="left:50%">${(mn + mx) / 2}%</span><span style="left:100%">100%</span></div>
+    ${cats.map((c, i) => { const va = a[i], vb = b[i]; const l = Math.min(x(va ?? vb), x(vb ?? va)), r = Math.max(x(va ?? vb), x(vb ?? va)); return `<div class="q-h-l"><span class="q-h-rot">${esc(c)}</span><div class="q-h-trilho"><i class="q-h-ligacao" style="left:${l}%;width:${r - l}%"></i>
+      ${va !== null ? `<b class="q-h-pt" style="left:${x(va)}%;--c:${cores[0]}" data-tip="${esc(nomes[0])}: ${fmt(va, 2)}%"><em>${fmt(va, 1)}</em></b>` : ''}${vb !== null ? `<b class="q-h-pt" style="left:${x(vb)}%;--c:${cores[1]}" data-tip="${esc(nomes[1])}: ${fmt(vb, 2)}%"><em>${fmt(vb, 1)}</em></b>` : ''}</div></div>`; }).join('')}
+    <div class="g-leg"><span><i style="background:${cores[0]}"></i>${esc(nomes[0])}</span><span><i style="background:${cores[1]}"></i>${esc(nomes[1])}</span></div></div>`;
+}
+function linhaMeta(l, ehSup) {
+  const p = l.meta ? l.feitas / l.meta : null;
+  return `<tr><td><b>${esc(tituloNome(l.nome))}</b><small>${esc(l.op || '—')}</small></td><td class="dir">${l.qtd}${l.qtd !== l.qtdAuto ? '<sup title="ajustado">*</sup>' : ''}</td><td class="dir">${l.meta}${l.red ? `<small> (−${l.red})</small>` : ''}</td><td class="dir">${l.feitas}</td>
+    <td class="q-ent"><div class="q-ent-b"><i style="width:${Math.min(100, (p || 0) * 100)}%;background:${p === null ? '#8a96a8' : p >= 1 ? '#1baf7a' : p >= .7 ? '#eda100' : '#d03b3b'}"></i></div><b>${p === null ? '—' : fmt(p * 100, 1) + '%'}</b></td>
+    <td><span class="tag ${p === null ? 'neutro' : p >= 1 ? 'bom' : 'ruim'}">${p === null ? 'sem meta' : p >= 1 ? 'Entregou' : 'Não entregou'}</span></td>
+    <td class="dir">${l.fb}<small> de ${l.feitas}</small></td><td class="dir">${ehSup ? tagNota(l.mediaEquipe) : tagNota(l.notaDada)}</td></tr>`;
+}
 
 function dashboardMon(filtro, ant, mesesAsc, porMes) {
-  const P = perfilBase(filtro), mt = metasMon();
-  const notas = filtro.map(m => m.nota), md = media_(notas), mdAnt = media_(ant.map(m => m.nota));
-  filtro.forEach(m => { m._t = P.tipoDe(m); m._fb = P.fbDe(m); });
+  const tudo = todas();
+  const P = perfilBase(tudo);
+  const marcar = xs => xs.forEach(m => { if (m._t === undefined) { m._t = P.tipoDe(m); m._fb = P.fbDe(m); } });
+  marcar(tudo); marcar(filtro); marcar(ant);
+  const M = montarMetas(P, filtro, tudo), mt = M.mt, metaN = mt.nota || META;
   const sup = filtro.filter(m => m._t === 'Supervisor'), mon = filtro.filter(m => m._t === 'Monitor');
+  const notas = filtro.map(m => m.nota), md = media_(notas), mdAnt = media_(ant.map(m => m.nota));
+  const metaSup = M.linhasSup.reduce((a, l) => a + l.meta, 0), metaMon = M.linhasMon.reduce((a, l) => a + l.meta, 0);
+  const hojeISO = hoje(), mesSel = (filtro[0] || {}).data ? filtro[0].data.slice(0, 7) : hojeISO.slice(0, 7);
+  const diasMes = new Date(+mesSel.slice(0, 4), +mesSel.slice(5, 7), 0).getDate();
+  const ritmo = mesSel === hojeISO.slice(0, 7) ? +hojeISO.slice(8, 10) / diasMes : mesSel < hojeISO.slice(0, 7) ? 1 : 0;
+  const ultima = filtro.reduce((a, m) => m.data > a ? m.data : a, '');
+  const lotes = (ler(KEY, []) || []).filter(x => x.tipo === 'lote'); const impEm = lotes.reduce((a, x) => (x.importadoEm || '') > a ? x.importadoEm : a, '');
   const fbs = filtro.filter(m => m._fb !== null), fbOk = fbs.filter(m => m._fb).length;
-  const metaN = mt.nota || META;
-  const nam = notas.filter(n => n !== null && n >= metaN).length, nn = notas.filter(n => n !== null).length;
-  const anelAt = (tit, real, meta, cor) => meta ? DB.anel({ pct: real / meta, titulo: tit, centro: fmt(real / meta * 100, 0) + '%', sub: `${real} de ${meta}`, cor }) : DB.anel({ pct: 0, titulo: tit, centro: real.toLocaleString('pt-BR'), sub: 'monitorias · sem meta', cor });
-  // crítérios: site + planilha
-  const critSite = CRITERIOS.map(([k, t, peso]) => { const xs = filtro.map(m => FATOR[(m.respostas || {})[k]]).filter(v => v !== null && v !== undefined); return { t, pct: xs.length ? media_(xs) : null, n: xs.length }; });
-  const critPl = P.crit.map(k => { const xs = filtro.map(m => (m.crit || {})[k]).filter(v => v !== null && v !== undefined); return { t: k, pct: xs.length ? media_(xs) : null, n: xs.length }; });
-  const crits = critSite.concat(critPl).filter(c => c.pct !== null).sort((a, b) => a.pct - b.pct);
+  const consAval = new Set(filtro.map(m => norm(m.nome))).size;
+  // operações
+  const ops = [...new Set(tudo.map(m => P.opDe(m)).filter(Boolean))].sort(cmpTxt);
+  const ano = mesSel.slice(0, 4);
+  const opCard = o => {
+    const xs = filtro.filter(m => P.opDe(m) === o);
+    const ns = media_(xs.filter(m => m._t === 'Supervisor').map(m => m.nota)), nm = media_(xs.filter(m => m._t === 'Monitor').map(m => m.nota));
+    const serie = mesesAsc.map(k => media_((porMes[k] || []).filter(m => P.opDe(m) === o).map(m => m.nota)));
+    const notaAno = media_(tudo.filter(m => P.opDe(m) === o && (m.data || '').startsWith(ano)).map(m => m.nota));
+    const tri = mesesAsc.slice(-3);
+    return `<div class="q-op"><div class="q-op-cab"><b>${esc(o)}</b><span class="q-op-ano" style="--c:${corNota(notaAno)}">${notaAno === null ? '—' : fmt(notaAno, 1) + '%'}<small>nota ${ano}</small></span></div>
+      <div class="q-op-num"><div><small>Mês</small><b style="color:${corNota(media_(xs.map(m => m.nota)))}">${xs.length ? fmt(media_(xs.map(m => m.nota)), 1) + '%' : '—'}</b><em>${xs.length} monitoria(s)</em></div><div>${DB.spark(serie, '#2a78d6')}<em>últimos ${serie.filter(v => v !== null).length} meses</em></div></div>
+      <table class="q-tri"><thead><tr><th></th>${tri.map(k => `<th>${mesTxt(k)}</th>`).join('')}</tr></thead><tbody>${[['Supervisor', 'Supervisor'], ['Monitor', 'Monitor']].map(([t, r]) => `<tr><td>${r}</td>${tri.map(k => { const v = media_((porMes[k] || []).filter(m => P.opDe(m) === o && m._t === t).map(m => m.nota)); return `<td><span style="background:${v === null ? 'transparent' : corNota(v)}" class="q-cel${v === null ? ' vazio' : ''}">${v === null ? '–' : fmt(v, 1)}</span></td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`;
+  };
+  // falhas (ofensores)
+  const falhas = P.falha.map(k => { const xs = filtro.filter(m => (m.crit || {})[k] !== undefined); const oc = xs.filter(m => m.crit[k] >= .5); return { k, n: xs.length, oc }; }).filter(f => f.oc.length).sort((a, b) => b.oc.length - a.oc.length);
+  const totOc = falhas.reduce((a, f) => a + f.oc.length, 0);
+  if (!est.falha || !falhas.some(f => f.k === est.falha)) est.falha = falhas[0] ? falhas[0].k : '';
+  const fSel = falhas.find(f => f.k === est.falha);
+  const confs = P.conf.map(k => { const xs = filtro.map(m => (m.crit || {})[k]).filter(v => v !== null && v !== undefined); return { k, v: media_(xs), n: xs.length }; }).filter(c => c.v !== null).sort((a, b) => a.v - b.v);
   const pecs = P.pecK.map(k => { const xs = filtro.map(m => m.campos[k]).map(v => typeof v === 'number' ? v : A.num(String(v ?? '').replace('%', ''))).filter(v => v !== null && isFinite(v)); const v = media_(xs); return v === null ? null : { k, v: v > 1.5 ? v / 100 : v }; }).filter(Boolean);
+  // ranking de consultores
+  const pc = {}; filtro.forEach(m => { const k = norm(m.nome); (pc[k] = pc[k] || []).push(m); });
+  const rk = Object.values(pc).map(xs => ({ nome: xs[0].nome, sup: xs[0].supervisor, op: P.opDe(xs[0]), resp: P.respK ? xs[0].campos[P.respK] : (xs.find(m => m._t === 'Monitor') || {}).avaliador || '', v: media_(xs.map(m => m.nota)), q: xs.length })).filter(x => x.v !== null);
+  const top = [...rk].sort((a, b) => b.v - a.v || b.q - a.q).slice(0, 15), ofe = [...rk].sort((a, b) => a.v - b.v || b.q - a.q).slice(0, 15);
+  const pessoa = (x, i, ruim) => `<li data-nome="${esc(x.nome)}"><span class="q-pos ${ruim ? 'r' : ''}">${i + 1}</span><span class="q-av" style="--c:${corNota(x.v)}">${esc(iniciais(x.nome))}</span><div><b>${esc(tituloNome(x.nome))}</b><small>${esc(tituloNome(x.sup))}${x.op ? ' · ' + esc(x.op) : ''}${x.resp ? ' · ' + esc(tituloNome(x.resp)) : ''}</small></div><em style="--c:${corNota(x.v)}">${fmt(x.v, 1)}%</em></li>`;
   const html = `
-  <div class="db-hero db-hero-mon">
-    <div class="db-hero-q cartao db-aneis">${anelAt('Geral', filtro.length, mt.geral || ((mt.supervisor || 0) + (mt.monitor || 0)) || 0, '#f5c542')}${P.tipoK || sup.length ? anelAt('Supervisor', sup.length, mt.supervisor || 0, '#1baf7a') + anelAt('Monitor', mon.length, mt.monitor || 0, '#c77dff') : ''}</div>
-    <div class="db-bigs">
-      <div class="db-big" style="--c:#2a78d6"><span class="db-big-ic">${G.ic('headset')}</span><small>Monitorias lançadas</small><b>${filtro.length.toLocaleString('pt-BR')}</b><div class="db-big-rod">${DB.delta(filtro.length, ant.length, 1, 'n')}${DB.spark(mesesAsc.map(m => (porMes[m] || []).length), '#2a78d6')}</div><em>${new Set(filtro.map(m => m.matricula || m.nome)).size} consultores avaliados</em></div>
-      <div class="db-big" style="--c:#1baf7a"><span class="db-big-ic">${G.ic('star')}</span><small>Nota média</small><b>${md === null ? '—' : fmt(md, 1) + '%'}</b><div class="db-big-rod">${DB.delta(md === null ? null : md / 100, mdAnt === null ? null : mdAnt / 100, 1, 'pct')}${DB.spark(mesesAsc.map(m => media_((porMes[m] || []).map(x => x.nota))), '#1baf7a')}</div><em>${nn ? fmt(nam / nn * 100, 0) + '% na meta de ' + metaN + '%' : '&nbsp;'}</em></div>
-      ${sup.length || mon.length ? `<div class="db-big" style="--c:#8e44c9"><span class="db-big-ic">${G.ic('users')}</span><small>Nota supervisor × monitor</small><b>${sup.length ? fmt(media_(sup.map(m => m.nota)), 1) : '—'}<span class="db-x">×</span>${mon.length ? fmt(media_(mon.map(m => m.nota)), 1) : '—'}</b><div class="db-big-rod"><span class="db-delta neutro">${sup.length} sup. · ${mon.length} mon.</span></div><em>${P.tipoK ? 'coluna ' + esc(P.tipoK) : 'supervisor = avaliador que é supervisor no BD'}</em></div>` : ''}
-      ${P.fbK ? `<div class="db-big" style="--c:#eb6834"><span class="db-big-ic">${G.ic('send')}</span><small>Feedback aplicado</small><b>${fbs.length ? fmt(fbOk / fbs.length * 100, 0) + '%' : '—'}</b><div class="db-big-rod"><span class="db-delta neutro">${fbOk} de ${fbs.length}</span></div><em>coluna ${esc(P.fbK)}</em></div>` : ''}
-    </div>
+  <div class="q-topo"><span>${G.ic('clock', '')} Último lançamento: <b>${ultima ? dataBR(ultima) : '—'}</b>${impEm ? ` · base importada em ${new Date(impEm).toLocaleDateString('pt-BR')} ${new Date(impEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+    <button type="button" class="q-eng" id="monMetas2" data-perm="importarDesempenho" title="Ajustar metas">${G.ic('target', '')} Metas</button></div>
+  <section class="q-placar">
+    ${trilha('Geral', filtro.length, metaSup + metaMon, '#f5c542', ritmo)}
+    ${trilha('Supervisores', sup.length, metaSup, '#1baf7a', ritmo)}
+    ${trilha('Monitores', mon.length, metaMon, '#b06ad9', ritmo)}
+  </section>
+  <div class="q-kpis">
+    <div><small>Nota média</small><b style="color:${corNota(md)}">${md === null ? '—' : fmt(md, 2) + '%'}</b>${DB.delta(md === null ? null : md / 100, mdAnt === null ? null : mdAnt / 100, 1, 'pct')}</div>
+    <div><small>Nota supervisores</small><b style="color:${corNota(media_(sup.map(m => m.nota)))}">${sup.length ? fmt(media_(sup.map(m => m.nota)), 2) + '%' : '—'}</b><span class="db-delta neutro">${sup.length} monitorias</span></div>
+    <div><small>Nota monitores</small><b style="color:${corNota(media_(mon.map(m => m.nota)))}">${mon.length ? fmt(media_(mon.map(m => m.nota)), 2) + '%' : '—'}</b><span class="db-delta neutro">${mon.length} monitorias</span></div>
+    <div><small>Feedback realizado</small><b>${fbs.length ? fmt(fbOk / fbs.length * 100, 0) + '%' : '—'}</b><span class="db-delta neutro">${fbOk} de ${fbs.length}</span></div>
+    <div><small>Consultores avaliados</small><b>${consAval}</b><span class="db-delta neutro">${notas.filter(n => n !== null && n >= metaN).length} monitorias ≥ ${metaN}%</span></div>
   </div>
-  ${pecs.length || crits.length ? `<article class="cartao"><header class="cab-card"><span class="icb">${G.ic('activity')}</span><div><h2>${pecs.length ? 'PEC e critérios' : 'Critérios'}</h2><p>Conformidade no mês · do mais fraco para o mais forte</p></div>${!pecs.length && crits[0] && crits[0].pct < .85 && A.planejarReciclagem && pode('agenda') ? `<div class="cab-acoes"><button type="button" class="btn btn-sec" id="monRecicla">${G.ic('rocket')}Reciclagem: ${esc(crits[0].t)}</button></div>` : ''}</header>
-    <div class="db-gauges">${pecs.map(p => DB.medidor({ valor: p.v, texto: fmt(p.v * 100, 1) + '%', rotulo: p.k, razao: p.v / .9 })).join('')}${crits.slice(0, pecs.length ? 6 : 12).map(c => DB.medidor({ valor: c.pct, texto: fmt(c.pct * 100, 0) + '%', rotulo: c.t, razao: c.pct / .9, sub: `<span class="db-meta-t">${c.n} avaliações</span>` })).join('')}</div></article>` : ''}
+  ${ops.length ? `<article class="cartao"><header class="cab-card"><span class="icb">${G.ic('layers')}</span><div><h2>Operações</h2><p>Nota do mês, nota do ano, tendência e os últimos 3 meses de supervisor e monitor</p></div></header>
+    <div class="q-ops">${ops.map(opCard).join('')}</div>
+    <h3 class="db-h3">Supervisor × monitor no mês</h3>${halter(ops, ops.map(o => media_(sup.filter(m => P.opDe(m) === o).map(m => m.nota))), ops.map(o => media_(mon.filter(m => P.opDe(m) === o).map(m => m.nota))), ['Supervisor', 'Monitor'], ['#1baf7a', '#b06ad9'])}</article>` : ''}
+  <article class="cartao q-sec q-sec-sup"><header class="cab-card"><span class="icb">${G.ic('users')}</span><div><h2>Supervisores</h2><p>Monitorias feitas pelo supervisor · meta = consultores da equipe × monitorias por consultor${M.linhasSup.length ? '' : ' · sem equipes no BD'}</p></div></header>
+    <div class="pn-grade"><div><h3 class="db-h3">Monitorias lançadas × feedback realizado</h3><div id="qSupFb"></div></div><div><h3 class="db-h3">Média da equipe (todas as monitorias dos consultores)</h3><div id="qSupEq"></div></div></div>
+    <div class="tabela-wrap"><table class="tabela q-meta"><thead><tr><th>Supervisor</th><th class="dir">Consultores</th><th class="dir">Meta</th><th class="dir">Feitas</th><th>Entrega</th><th>Status</th><th class="dir">Feedback</th><th class="dir">Média equipe</th></tr></thead><tbody>${M.linhasSup.map(l => linhaMeta(l, true)).join('') || '<tr><td colspan="8" class="dica">Importe o BD para montar as equipes.</td></tr>'}</tbody></table></div></article>
+  <article class="cartao q-sec q-sec-mon"><header class="cab-card"><span class="icb">${G.ic('headset')}</span><div><h2>Monitores</h2><p>Monitorias feitas pela qualidade · meta = consultores da operação × monitorias por consultor</p></div></header>
+    <div class="pn-grade"><div><h3 class="db-h3">Monitorias lançadas × feedback realizado</h3><div id="qMonFb"></div></div><div><h3 class="db-h3">Nota dada pelos monitores a cada equipe</h3><div id="qMonEq"></div></div></div>
+    <div class="tabela-wrap"><table class="tabela q-meta"><thead><tr><th>Monitor · operação</th><th class="dir">Consultores</th><th class="dir">Meta</th><th class="dir">Feitas</th><th>Entrega</th><th>Status</th><th class="dir">Feedback</th><th class="dir">Nota média</th></tr></thead><tbody>${M.linhasMon.map(l => linhaMeta(l, false)).join('') || '<tr><td colspan="8" class="dica">Nenhuma monitoria de monitor na base.</td></tr>'}</tbody></table></div></article>
+  ${pecs.length || falhas.length || confs.length ? `<article class="cartao"><header class="cab-card"><span class="icb">${G.ic('alert')}</span><div><h2>PEC e ofensores</h2><p>${pecs.length ? 'Conformidade de cada PEC · ' : ''}falhas mais frequentes no mês · clique numa falha para ver quem errou</p></div></header>
+    ${pecs.length ? `<div class="q-pecs">${pecs.sort((a, b) => b.v - a.v).map(p => `<div class="q-pec" style="--c:${corNota(p.v * 100)}"><span>${esc(p.k)}</span><div><i style="width:${Math.min(100, p.v * 100)}%"></i></div><b>${fmt(p.v * 100, 2)}%</b></div>`).join('')}</div>` : ''}
+    ${falhas.length ? `<div class="q-of"><div class="q-of-l"><h3 class="db-h3">Falhas no mês · ${totOc} ocorrência(s)</h3>${falhas.map(f => `<button type="button" class="q-of-it${f.k === est.falha ? ' on' : ''}" data-falha="${esc(f.k)}"><span>${esc(f.k)}</span><i><b style="width:${f.oc.length / falhas[0].oc.length * 100}%"></b></i><em>${f.oc.length}</em><small>${fmt(f.oc.length / (f.n || 1) * 100, 1)}%</small></button>`).join('')}</div>
+      <div class="q-of-d">${fSel ? `<h3 class="db-h3">${esc(fSel.k)} · ${fSel.oc.length} vez(es)</h3><div class="q-of-pessoas">${Object.values(fSel.oc.reduce((o, m) => { const k = norm(m.nome); (o[k] = o[k] || { m, n: 0 }).n++; return o; }, {})).sort((a, b) => b.n - a.n).map(({ m, n }) => `<div data-nome="${esc(m.nome)}"><span class="q-av" style="--c:#d03b3b">${esc(iniciais(m.nome))}</span><div><b>${esc(tituloNome(m.nome))}</b><small>${esc(tituloNome(m.supervisor))}${P.opDe(m) ? ' · ' + esc(P.opDe(m)) : ''}</small></div>${n > 1 ? `<em>${n}×</em>` : ''}</div>`).join('')}</div>
+        ${A.planejarReciclagem && pode('agenda') ? `<button type="button" class="btn btn-sec btn-mini" id="qRecicla">${G.ic('rocket', '')}Planejar reciclagem sobre esta falha</button>` : ''}` : ''}</div></div>` : confs.length ? `<div class="db-gauges">${confs.slice(0, 12).map(c => DB.medidor({ valor: c.v, texto: fmt(c.v * 100, 0) + '%', rotulo: c.k, razao: c.v / .9, sub: `<span class="db-meta-t">${c.n} avaliações</span>` })).join('')}</div>` : ''}
+  </article>` : ''}
   <div class="pn-grade">
-    <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('chart')}</span><div><h2>${P.prodK ? 'Nota por ' + esc(P.prodK.toLowerCase()) : 'Nota por canal'}</h2><p>${sup.length && mon.length ? 'Supervisor × monitor' : 'Média do mês'}</p></div></header><div id="dmProd"></div></article>
-    <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('users')}</span><div><h2>Média por equipe</h2><p>Supervisor do consultor · linha = meta ${metaN}%</p></div></header><div id="dmEquipe"></div></article>
-  </div>
-  <div class="pn-grade">
-    <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('send')}</span><div><h2>Supervisor × ${P.fbK ? 'feedback' : 'monitorias'}</h2><p>Monitorias lançadas${P.fbK ? ' e feedbacks aplicados' : ''} por equipe</p></div></header><div id="dmSupFb"></div></article>
-    <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('headset')}</span><div><h2>Por avaliador</h2><p>Quantidade e nota média dada</p></div></header><div id="dmAval"></div></article>
-  </div>
-  <div class="pn-grade">
-    <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('histogram')}</span><div><h2>Distribuição das notas</h2><p>Quantas monitorias em cada faixa</p></div></header><div id="dmHist"></div></article>
-    <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('alert')}</span><div><h2>Consultores abaixo da meta</h2><p>Média do mês abaixo de ${metaN}% · clique para abrir a ficha</p></div></header><div id="dmAbaixo"></div></article>
-  </div>
-  ${mesesAsc.length > 1 ? `<article class="cartao"><header class="cab-card"><span class="icb">${G.ic('chart')}</span><div><h2>Evolução</h2><p>Monitorias e nota média por mês</p></div></header><div id="dmEvo"></div></article>` : ''}`;
+    <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('trophy')}</span><div><h2>Top monitorias</h2><p>Maiores médias de nota final no mês</p></div></header><ol class="q-rank">${top.map((x, i) => pessoa(x, i)).join('')}</ol></article>
+    <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('alert')}</span><div><h2>Top ofensores</h2><p>Menores médias de nota final no mês</p></div></header><ol class="q-rank">${ofe.map((x, i) => pessoa(x, i, true)).join('')}</ol></article>
+  </div>`;
   const depois = () => {
     const el = id => document.getElementById(id);
-    const grp = (xs, f) => { const o = {}; xs.forEach(m => { const k = f(m) || '—'; (o[k] = o[k] || []).push(m); }); return o; };
-    const ord = o => Object.keys(o).sort(cmpTxt);
-    const pk = grp(filtro, m => P.prodK ? m.campos[P.prodK] : m.canal);
-    const cats = ord(pk).slice(0, 12);
-    DB.agrupadas(el('dmProd'), cats, sup.length && mon.length ? [{ nome: 'Monitor', cor: '#8e44c9', valores: cats.map(c => media_(pk[c].filter(m => m._t === 'Monitor').map(m => m.nota))) }, { nome: 'Supervisor', cor: '#1baf7a', valores: cats.map(c => media_(pk[c].filter(m => m._t === 'Supervisor').map(m => m.nota))) }] : [{ nome: 'Nota', cor: '#2a78d6', valores: cats.map(c => media_(pk[c].map(m => m.nota))) }], { fmt: v => fmt(v, 1) + '%', meta: metaN, max: 105 });
-    const eq = grp(filtro, m => m.supervisor); const eqs = ord(eq).filter(k => k !== '—');
-    DB.agrupadas(el('dmEquipe'), eqs.map(curto), [{ nome: 'Nota média', cor: '#1baf7a', valores: eqs.map(k => media_(eq[k].map(m => m.nota))) }], { fmt: v => fmt(v, 1) + '%', meta: metaN, max: 105 });
-    DB.linhasCat(el('dmSupFb'), eqs.map(curto), [{ nome: 'Monitorias lançadas', cor: '#1d4f91', valores: eqs.map(k => eq[k].length) }].concat(P.fbK ? [{ nome: 'Feedbacks aplicados', cor: '#1baf7a', valores: eqs.map(k => eq[k].filter(m => m._fb).length) }] : []), { curto: v => fmt(v, 0) });
-    const av = grp(filtro, m => m.avaliador); const avs = ord(av).filter(k => k !== '—').sort((a, b) => av[b].length - av[a].length).slice(0, 14);
-    G.ranking(el('dmAval'), avs.map(k => ({ rotulo: k, sub: `nota média ${fmt(media_(av[k].map(m => m.nota)), 1)}%${P.tipoK || sup.length ? ' · ' + (av[k][0]._t || '') : ''}`, valor: av[k].length, rotuloValor: av[k].length + (P.fbK ? ` · ${av[k].filter(m => m._fb).length} fb` : ''), cor: av[k][0]._t === 'Supervisor' ? '#1baf7a' : '#8e44c9' })), { vazio: 'Sem avaliador na base' });
-    const faixas = [['< 50%', 0, 50, '#d03b3b'], ['50–70%', 50, 70, '#eb6834'], ['70–85%', 70, 85, '#eda100'], ['85–95%', 85, 95, '#8bc34a'], ['≥ 95%', 95, 1e9, '#0f9d58']];
-    G.colunas(el('dmHist'), faixas.map(([r, a, b, cor]) => { const n = filtro.filter(m => m.nota !== null && m.nota >= a && m.nota < b).length; return { rotulo: r, valor: n, cor, tip: `<b>${r}</b><br>${n} monitoria(s)` }; }), { altura: 230 });
-    const pc = grp(filtro, m => m.nome); const ab = Object.entries(pc).map(([n, xs]) => ({ n, sup: xs[0].supervisor, v: media_(xs.map(m => m.nota)), q: xs.length })).filter(x => x.v !== null && x.v < metaN).sort((a, b) => a.v - b.v);
-    el('dmAbaixo').innerHTML = ab.length ? `<ul class="db-alerta">${ab.slice(0, 12).map(x => `<li data-nome="${esc(x.n)}"><div><b>${esc(x.n)}</b><small>${esc(x.sup || '')} · ${x.q} monitoria(s)</small></div><span>${tagNota(x.v)}</span></li>`).join('')}</ul>${ab.length > 12 ? `<p class="dica">+ ${ab.length - 12} consultor(es)</p>` : ''}` : '<p class="dica">Todos os consultores avaliados estão na meta. 👏</p>';
-    el('dmAbaixo').querySelectorAll('[data-nome]').forEach(x => x.onclick = () => A.abrirFicha && A.abrirFicha(x.dataset.nome));
-    if (el('dmEvo')) DB.linhasCat(el('dmEvo'), mesesAsc.map(mesTxt), [{ nome: 'Nota média (%)', cor: '#1baf7a', valores: mesesAsc.map(m => media_((porMes[m] || []).map(x => x.nota))) }], { curto: v => fmt(v, 0), fmt: v => fmt(v, 1) + '%' });
-    if (el('monRecicla')) el('monRecicla').onclick = () => A.planejarReciclagem(`Reciclagem: ${crits[0].t}`, filtro.filter(m => { const v = (m.crit || {})[crits[0].t] ?? FATOR[(m.respostas || {})[crits[0].t]]; return v !== undefined && v !== 1; }).map(m => m.nome));
+    const sl = M.linhasSup.filter(l => l.feitas || l.meta);
+    if (el('qSupFb')) DB.agrupadas(el('qSupFb'), sl.map(l => curto(tituloNome(l.nome))), [{ nome: 'Lançadas', cor: '#1d4f91', valores: sl.map(l => l.feitas) }, { nome: 'Feedback realizado', cor: '#1baf7a', valores: sl.map(l => l.fb) }, { nome: 'Meta', cor: '#c9d3df', valores: sl.map(l => l.meta || null) }], { fmt: v => fmt(v, 0) });
+    if (el('qSupEq')) DB.agrupadas(el('qSupEq'), M.linhasSup.map(l => curto(tituloNome(l.nome))), [{ nome: 'Média da equipe', cor: '#1baf7a', valores: M.linhasSup.map(l => l.mediaEquipe) }], { fmt: v => fmt(v, 1) + '%', meta: metaN, max: 105 });
+    const ml = M.linhasMon;
+    if (el('qMonFb')) DB.agrupadas(el('qMonFb'), ml.map(l => tituloNome(l.nome).split(' ')[0] + ' · ' + String(l.op).replace(/Admiss[ãa]o/i, 'Adm.').replace(/Servi[çc]os/i, 'Serv.')), [{ nome: 'Lançadas', cor: '#6a2c91', valores: ml.map(l => l.feitas) }, { nome: 'Feedback realizado', cor: '#d58ae8', valores: ml.map(l => l.fb) }, { nome: 'Meta', cor: '#c9d3df', valores: ml.map(l => l.meta || null) }], { fmt: v => fmt(v, 0) });
+    if (el('qMonEq')) { const eqs = [...new Set(mon.map(m => m.supervisor).filter(Boolean))].sort(cmpTxt); DB.agrupadas(el('qMonEq'), eqs.map(s => curto(tituloNome(s))), [{ nome: 'Nota dos monitores', cor: '#b06ad9', valores: eqs.map(s => media_(mon.filter(m => m.supervisor === s).map(m => m.nota))) }], { fmt: v => fmt(v, 1) + '%', meta: metaN, max: 105 }); }
+    raiz.querySelectorAll('[data-falha]').forEach(x => x.onclick = () => { est.falha = x.dataset.falha; render(); });
+    raiz.querySelectorAll('.q-rank [data-nome], .q-of-pessoas [data-nome]').forEach(x => x.onclick = () => A.abrirFicha && A.abrirFicha(x.dataset.nome));
+    if (el('qRecicla') && fSel) el('qRecicla').onclick = () => A.planejarReciclagem(`Reciclagem: ${fSel.k}`, fSel.oc.map(m => m.nome));
+    if (el('monMetas2')) el('monMetas2').onclick = () => abrirMetasMon(M);
   };
-  return { html, depois };
+  return { html, depois, M };
 }
-function abrirMetasMon() {
-  const D = ler(KEY_DES, {}) || {}, mt = D.metasMon || {};
-  if (!document.getElementById('dlgMetaMon')) document.body.insertAdjacentHTML('beforeend', `<dialog class="dlg" id="dlgMetaMon"><form method="dialog" class="dlg-in" id="mmForm"></form></dialog>`);
-  const f = document.getElementById('mmForm');
-  f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('target')}</span><div><h2>Metas de monitoria</h2><p>Quantidade por mês e nota mínima</p></div></header>
-    <div class="grade g2"><label class="campo"><span>Monitorias dos supervisores</span><input type="number" id="mmSup" min="0" value="${mt.supervisor || ''}"></label><label class="campo"><span>Monitorias dos monitores</span><input type="number" id="mmMon" min="0" value="${mt.monitor || ''}"></label>
-    <label class="campo"><span>Meta geral (em branco = soma)</span><input type="number" id="mmGer" min="0" value="${mt.geral || ''}"></label><label class="campo"><span>Nota meta (%)</span><input type="number" id="mmNota" min="0" max="100" value="${mt.nota || META}"></label></div>
+function abrirMetasMon(M) {
+  if (!M) { render(); return; }
+  const D0 = ler(KEY_DES, {}) || {}, mt = Object.assign({}, DEF_METAS, D0.metasMon || {});
+  if (!document.getElementById('dlgMetaMon')) document.body.insertAdjacentHTML('beforeend', `<dialog class="dlg dlg-grande" id="dlgMetaMon"><form method="dialog" class="dlg-in" id="mmForm"></form></dialog>`);
+  const f = document.getElementById('mmForm'), opsK = Object.keys(M.opsNome).sort();
+  const linha = l => `<tr data-k="${esc(l.chave)}"><td><b>${esc(tituloNome(l.nome))}</b><small>${esc(l.op || '—')}</small></td><td><input type="number" min="0" class="mm-q" value="${mt.qtd[l.chave] ?? ''}" placeholder="${l.qtdAuto}"></td><td><input type="number" min="0" class="mm-r" value="${mt.red[l.chave] || ''}" placeholder="0"></td><td class="dir">${l.fator}×</td></tr>`;
+  f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('target')}</span><div><h2>Metas de monitoria</h2><p>Quantas monitorias cada consultor deve receber no mês. A meta de cada pessoa é calculada sozinha: consultores × monitorias por consultor − redução.</p></div></header>
+    <div class="grade g4"><label class="campo"><span>Padrão supervisor (por consultor)</span><input type="number" min="0" step="0.5" id="mmPs" value="${mt.padraoSup}"></label><label class="campo"><span>Padrão monitor (por consultor)</span><input type="number" min="0" step="0.5" id="mmPm" value="${mt.padraoMon}"></label><label class="campo"><span>Nota meta (%)</span><input type="number" min="0" max="100" id="mmNota" value="${mt.nota || META}"></label></div>
+    ${opsK.length ? `<h3 class="db-h3">Por operação (em branco = padrão)</h3><div class="tabela-wrap"><table class="tabela mm-tab"><thead><tr><th>Operação</th><th>Supervisor</th><th>Monitor</th></tr></thead><tbody>${opsK.map(k => { const fz = (mt.fator || {})[k] || {}; return `<tr data-op="${esc(k)}"><td>${esc(M.opsNome[k])}</td><td><input type="number" min="0" step="0.5" class="mm-fs" value="${fz.sup ?? ''}" placeholder="${mt.padraoSup}"></td><td><input type="number" min="0" step="0.5" class="mm-fm" value="${fz.mon ?? ''}" placeholder="${mt.padraoMon}"></td></tr>`; }).join('')}</tbody></table></div>` : ''}
+    <details class="mm-aj"><summary>Ajustar consultores e redução por pessoa (férias, afastamento…)</summary>
+      <div class="tabela-wrap"><table class="tabela mm-tab"><thead><tr><th>Pessoa</th><th>Consultores</th><th>Redução</th><th class="dir">Por consultor</th></tr></thead><tbody>${M.linhasSup.map(linha).join('')}${M.linhasMon.map(linha).join('')}</tbody></table></div>
+      <p class="dica">Consultores em branco = número calculado pelo BD (mostrado em cinza).</p></details>
     <div class="dlg-rod"><small class="msg"></small><span><button class="btn btn-sec" value="cancelar" formnovalidate>Cancelar</button> <button type="button" class="btn btn-pri" id="mmOk">${G.ic('check')}Salvar</button></span></div>`;
   G.icones(f); document.getElementById('dlgMetaMon').showModal();
   document.getElementById('mmOk').onclick = () => {
-    const v = id => +document.getElementById(id).value || 0;
-    const D2 = ler(KEY_DES, {}) || {}; D2.metasMon = { supervisor: v('mmSup'), monitor: v('mmMon'), geral: v('mmGer'), nota: v('mmNota') || META };
-    gravar(KEY_DES, D2); document.getElementById('dlgMetaMon').close(); render(); toast('Metas de monitoria salvas');
+    const n = (el, d) => { const v = el.value.trim(); return v === '' ? d : +v; };
+    const novo = { padraoSup: n(document.getElementById('mmPs'), 2), padraoMon: n(document.getElementById('mmPm'), 2), nota: n(document.getElementById('mmNota'), META), fator: {}, qtd: {}, red: {} };
+    f.querySelectorAll('tr[data-op]').forEach(tr => { const s = n(tr.querySelector('.mm-fs'), null), m = n(tr.querySelector('.mm-fm'), null); if (s !== null || m !== null) novo.fator[tr.dataset.op] = { ...(s !== null ? { sup: s } : {}), ...(m !== null ? { mon: m } : {}) }; });
+    f.querySelectorAll('tr[data-k]').forEach(tr => { const q = n(tr.querySelector('.mm-q'), null), r = n(tr.querySelector('.mm-r'), 0); if (q !== null) novo.qtd[tr.dataset.k] = q; if (r) novo.red[tr.dataset.k] = r; });
+    const D2 = ler(KEY_DES, {}) || {}; D2.metasMon = novo; gravar(KEY_DES, D2);
+    document.getElementById('dlgMetaMon').close(); render(); toast('Metas de monitoria salvas');
+    if (window.NUVEM && NUVEM.ativo && NUVEM.ativo()) NUVEM.publicarAgora();
   };
 }
 
@@ -155,11 +278,12 @@ function render() {
   const mesesAsc = meses.filter(m => porMes[m]).reverse().slice(-12);
   const pm = {}; mesesAsc.forEach(m => { pm[m] = porMes[m].filter(f_); });
   const dash = filtro.length ? dashboardMon(filtro, ant, mesesAsc, pm) : null;
+  if (dash) est._M = dash.M;
   const POR_PAG = 100; est.pag = est.pag || 1;
   const vis = filtro.slice(0, POR_PAG * est.pag);
   raiz.innerHTML = `
   <div class="cab-pagina"><div><h1>Monitorias de qualidade</h1><p class="sub">Dashboard da qualidade · monitorias do site e da planilha importada</p></div>
-    <div class="cab-acoes"><button type="button" class="btn btn-sec" id="monMetas" data-perm="importarDesempenho">${G.ic('target')}Metas</button><button type="button" class="btn btn-sec" id="monImp" data-perm="monitorar">${G.ic('upload')}Importar monitorias</button><button type="button" class="btn btn-pri" id="monNova" data-perm="monitorar">${G.ic('plus')}Nova monitoria</button></div></div>
+    <div class="cab-acoes"><button type="button" class="btn btn-sec" id="monImp" data-perm="monitorar">${G.ic('upload')}Importar monitorias</button><button type="button" class="btn btn-pri" id="monNova" data-perm="monitorar">${G.ic('plus')}Nova monitoria</button></div></div>
   <div id="monFormWrap"></div>
   <div class="des-filtros cartao">
     <label class="mini">Mês <select id="monMes">${meses.map(m => `<option value="${m}"${m === est.mes ? ' selected' : ''}>${mesTxt(m)}${porMes[m] ? ` (${porMes[m].length})` : ''}</option>`).join('')}</select></label>
@@ -178,7 +302,6 @@ function render() {
   const b = id => document.getElementById(id);
   b('monNova').onclick = () => { est.editando = null; est.form = true; formulario(); };
   b('monImp').onclick = abrirImportMon;
-  b('monMetas').onclick = abrirMetasMon;
   if (b('monMais')) b('monMais').onclick = () => { est.pag++; render(); };
   b('monMes').onchange = e => { est.mes = e.target.value; est.pag = 1; render(); };
   b('monSup').onchange = e => { est.sup = e.target.value; est.pag = 1; render(); };
@@ -261,7 +384,7 @@ const P_SUP = ['supervisor', 'supervisora', 'lider'];
 const P_POS = ['pontos positivos', 'positivo', 'pontos fortes'];
 const P_MEL = ['pontos de melhoria', 'ponto de melhoria', 'melhorias', 'oportunidade de melhoria']; // comentários longos não entram por padrão (pesam muito)
 const hashTxt = t => { let h = 2166136261; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
-const dataISO = v => { if (v === null || v === undefined || v === '') return ''; const d = XLSXLeitor.dataExcel(typeof v === 'number' ? Math.floor(v) : v); return d || ''; };
+const dataISO = v => { if (v === null || v === undefined || v === '') return ''; const t = String(v).trim(), m = t.match(/^(\d{4})[\/-](\d{1,2})$/) || t.match(/^(\d{1,2})[\/-](\d{4})$/); if (m) { const [ano, mes] = m[1].length === 4 ? [m[1], m[2]] : [m[2], m[1]]; return `${ano}-${String(mes).padStart(2, '0')}-01`; } const d = XLSXLeitor.dataExcel(typeof v === 'number' ? Math.floor(v) : v); return d || ''; };
 const txtCel = v => v === null || v === undefined ? '' : typeof v === 'number' ? String(Math.round(v * 10000) / 10000).replace('.', ',') : String(v).trim();
 let dlgImp = null;
 function abrirImportMon() {
@@ -302,7 +425,8 @@ function mapear(arq, iAba) {
   const cab = (aba.linhas[iCab] || []).map(c => String(c ?? '').replace(/\s+/g, ' ').trim());
   const salvo = (ler(KEY_MODIMP, {}) || {})[hashTxt(cab.join('|'))] || {};
   const palpite = lista_ => { const i = cab.findIndex(c => c && lista_.some(p => norm(c) === p)); if (i >= 0) return i; return cab.findIndex(c => c && lista_.some(p => norm(c).includes(p))); };
-  const g = { cons: palpite(P_CONS), mat: palpite(P_MAT), data: palpite(P_DATA), nota: palpite(P_NOTA), aval: palpite(P_AVAL), canal: palpite(P_CANAL), at: palpite(P_AT), sup: palpite(P_SUP), pos: palpite(P_POS), mel: palpite(P_MEL), ...salvo };
+  const exato = l_ => cab.findIndex(c => c && l_.some(p => norm(c) === p));
+  const g = { cons: palpite(P_CONS), mat: exato(P_MAT), data: palpite(P_DATA), nota: palpite(P_NOTA), aval: palpite(P_AVAL), canal: palpite(P_CANAL), at: exato(P_AT), sup: palpite(P_SUP), pos: palpite(P_POS), mel: palpite(P_MEL), ...salvo };
   const sel = (id, rot, v, obr) => `<label class="campo"><span>${rot}${obr ? ' <i class="obr">*</i>' : ''}</span><select id="${id}"><option value="-1">—</option>${cab.map((c, i) => c ? `<option value="${i}"${i === v ? ' selected' : ''}>${esc(c)}</option>` : '').join('')}</select></label>`;
   f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('layers')}</span><div><h2>${esc(arq.nome)}</h2><p>Confira as colunas. As que não forem escolhidas aqui ficam guardadas como estão (critérios, comentários…).</p></div></header>
     ${arq.abas.length > 1 ? `<label class="campo"><span>Aba</span><select id="miAba">${arq.abas.map((a, i) => `<option value="${i}"${i === iAba ? ' selected' : ''}>${esc(a.nome)} (${a.linhas.filter(Boolean).length} linhas)</option>`).join('')}</select></label>` : ''}
