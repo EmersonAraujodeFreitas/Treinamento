@@ -25,12 +25,15 @@ const salvar = () => { gravar(KEY, D); try { localStorage.setItem(KEY_COPIA, JSO
    e se misturavam às novas. Quando o mês já tem a importação nova da operação, as antigas dessa operação saem (e não voltam). */
 function limparAntigas() {
   const d0 = ler(KEY, {}) || {}; if (!Array.isArray(d0.dados) || !d0.dados.length) return;
-  const novas = new Set(d0.dados.filter(d => d.op).map(d => d.fonte + '|' + d.mes + '|' + d.op));
-  const sai = d => !d.op && novas.has(d.fonte + '|' + d.mes + '|' + opDaLinha(d));
+  // a importação antiga pode ter ficado com outro "nome de relatório": compara só mês e operação
+  const novas = new Set(d0.dados.filter(d => d.op).map(d => d.mes + '|' + d.op));
+  const sai = d => !d.op && novas.has(d.mes + '|' + opDaLinha(d));
   const tirar = d0.dados.filter(sai); if (!tirar.length) return;
   const t = new Date().toISOString(); d0.grupos = d0.grupos || {};
   tirar.forEach(d => { d0.grupos[d.fonte + '|' + d.mes + '|'] = t; });
   d0.dados = d0.dados.filter(d => !sai(d));
+  // relatório consolidado que ficou sem nenhuma linha (só o antigo) sai da lista
+  Object.keys(d0.modelos || {}).forEach(f => { if (d0.modelos[f].consolidado && !d0.dados.some(d => d.fonte === f) && Object.keys(d0.modelos).length > 1) delete d0.modelos[f]; });
   gravar(KEY, d0); try { localStorage.setItem(KEY_COPIA, JSON.stringify(d0)); } catch (e) { /* segue */ }
   logDes('linhas antigas retiradas', tirar.length);
 }
@@ -721,7 +724,8 @@ function render() {
   restaurarDaCopia(); limparAntigas();
   D = Object.assign(vazio(), ler(KEY, {}) || {});
   const fontes = Object.keys(D.modelos).sort(cmpTxt);
-  if (!est.fonte || !fontes.includes(est.fonte)) est.fonte = fontes.find(f => D.modelos[f].consolidado) || fontes[0] || '';
+  const peso = f => D.dados.filter(d => d.fonte === f && d.op).length * 10 + D.dados.filter(d => d.fonte === f).length;
+  if (!est.fonte || !fontes.includes(est.fonte)) est.fonte = fontes.filter(f => D.modelos[f].consolidado).sort((a, b) => peso(b) - peso(a))[0] || fontes[0] || '';
   const md = D.modelos[est.fonte] || {}, cons = !!md.consolidado;
   // Admissão e Serviços têm critérios diferentes: cada uma tem o seu painel (não há consolidado)
   const opsTodas = [...new Set(D.dados.filter(d => d.fonte === est.fonte).map(opDaLinha))];
