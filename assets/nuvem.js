@@ -325,8 +325,11 @@ function sair() {
 }
 function encerrar(msg) {
   sessionStorage.removeItem(K_SESSAO); localStorage.removeItem(K_SESSAO); localStorage.removeItem(K_ATIV);
-  if (!modoLocal()) limparDadosLocais();
-  sessionStorage.setItem('inovacao_msg_login', msg || '');
+  // sessão caiu sozinha com alterações ainda não enviadas (ex.: relatórios importados): não apaga nada;
+  // ao entrar de novo, o que ficou pendente é enviado ao servidor
+  const temPend = contarPendentes() > 0;
+  if (!modoLocal() && !temPend) limparDadosLocais();
+  sessionStorage.setItem('inovacao_msg_login', (msg || '') + (temPend ? ' Suas alterações ainda não enviadas foram mantidas neste navegador e serão enviadas quando você entrar.' : ''));
   location.reload();
 }
 
@@ -431,7 +434,7 @@ async function retomarSessao() {
   const ult = ultimaAtividade();
   if (ult && Date.now() - ult >= INATIVO_MS) {
     localStorage.removeItem(K_SESSAO); sessionStorage.removeItem(K_SESSAO); localStorage.removeItem(K_ATIV);
-    if (!modoLocal()) limparDadosLocais();
+    if (!modoLocal() && !contarPendentes()) limparDadosLocais(); // com envio pendente, guarda até entrar de novo
     sessionStorage.setItem('inovacao_msg_login', 'Você foi desconectado por inatividade (2 horas sem uso).');
     return false;
   }
