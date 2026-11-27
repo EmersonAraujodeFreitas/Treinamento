@@ -218,6 +218,7 @@ function aplicarEstado(est) {
         const junto = mesclarDes(val, local), txt = JSON.stringify(junto);
         setOrig.call(localStorage, DS[v], txt);
         if (localTemMais(val, local)) p.valores[v] = ++carimbo + '-' + Date.now(); // o servidor não tinha tudo: envia de novo
+        logN('recebido do servidor', { servidor: val.dados.length, local: local && local.dados ? local.dados.length : null, reenviar: !!p.valores[v] });
         continue;
       }
       if (val === null || val === undefined) localStorage.removeItem(DS[v]); else setOrig.call(localStorage, DS[v], JSON.stringify(val));
@@ -329,7 +330,9 @@ function fimCarregamento() {
   const el = document.getElementById('carregamento'); carregando(null, 100);
   setTimeout(() => { document.body.classList.remove('carregando'); if (el) el.classList.add('saindo'); setTimeout(() => el && el.remove(), 450); }, 180);
 }
+function logN(ev, x) { try { if (window.APP && APP.logDesempenho) APP.logDesempenho(ev, x); } catch (e) { /* segue */ } }
 function limparDadosLocais() {
+  logN('dados locais apagados (saída/sessão)');
   Object.values(DS).forEach(k => localStorage.removeItem(k));
   localStorage.removeItem(K_PEND);
 }

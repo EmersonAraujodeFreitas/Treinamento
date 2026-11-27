@@ -16,6 +16,10 @@ function marcarGrupos(removidos, novos) { const t = new Date().toISOString(); D.
 let D = Object.assign(vazio(), ler(KEY, {}) || {});
 // cópia de segurança no navegador (não é apagada ao sincronizar): se o servidor devolver menos do que foi importado, o site junta de volta
 const KEY_COPIA = 'inovacao_treinamento_zcopia_desempenho';
+// registro do que acontece com os relatórios (para diagnóstico; fica só neste navegador)
+const KEY_LOG = 'inovacao_treinamento_zlog_desempenho';
+function logDes(ev, extra) { try { const l = JSON.parse(localStorage.getItem(KEY_LOG) || '[]'); const d0 = ler(KEY, {}) || {}; const g = {}; (d0.dados || []).forEach(d => { const k = d.mes + '·' + (d.op || 'sem op'); g[k] = (g[k] || 0) + 1; }); l.push({ t: new Date().toLocaleString('pt-BR'), ev, extra: extra || null, grupos: g }); localStorage.setItem(KEY_LOG, JSON.stringify(l.slice(-60))); } catch (e) { /* segue */ } }
+A.logDesempenho = logDes;
 const salvar = () => { gravar(KEY, D); try { localStorage.setItem(KEY_COPIA, JSON.stringify(D)); } catch (e) { /* segue */ } };
 /* linhas antigas (importadas antes de existir Admissão/Serviços, sem operação e com colunas em OUTROS) voltavam do servidor
    e se misturavam às novas. Quando o mês já tem a importação nova da operação, as antigas dessa operação saem (e não voltam). */
@@ -28,16 +32,21 @@ function limparAntigas() {
   tirar.forEach(d => { d0.grupos[d.fonte + '|' + d.mes + '|'] = t; });
   d0.dados = d0.dados.filter(d => !sai(d));
   gravar(KEY, d0); try { localStorage.setItem(KEY_COPIA, JSON.stringify(d0)); } catch (e) { /* segue */ }
+  logDes('linhas antigas retiradas', tirar.length);
 }
 function restaurarDaCopia() {
   let c = null; try { c = JSON.parse(localStorage.getItem(KEY_COPIA) || 'null'); } catch (e) { return; }
   if (!c || !Array.isArray(c.dados) || !c.dados.length || !window.mesclarDes) return;
   const atual = ler(KEY, {}) || {};
-  const kOf = d => d.fonte + '|' + d.mes + '|' + (d.op || ''), ga = atual.grupos || {}, gc = c.grupos || {}, tem = new Set((atual.dados || []).map(kOf));
-  const falta = [...new Set(c.dados.map(kOf))].some(k => !tem.has(k) && !(ga[k] && ga[k] >= (gc[k] || '')));
-  if (!falta) return;
-  const junto = mesclarDes(Object.assign(vazio(), atual), c); // atual ganha nos empates; o que só a cópia tem volta
-  gravar(KEY, junto); toast('Relatórios de desempenho recuperados da cópia deste navegador; enviando ao servidor…');
+  const kOf = d => d.fonte + '|' + d.mes + '|' + (d.op || ''), ga = atual.grupos || {}, gc = c.grupos || {};
+  const tem = new Set((atual.dados || []).map(kOf));
+  // relatório (mês · operação) que a cópia tem e o navegador perdeu, sem uma importação MAIS NOVA que o tenha apagado de propósito
+  const falta = [...new Set(c.dados.map(kOf))].filter(k => !tem.has(k) && !(ga[k] && gc[k] && ga[k] > gc[k]));
+  if (!falta.length) return;
+  const t = new Date().toISOString(), c2 = { ...c, grupos: { ...gc } }; falta.forEach(k => { c2.grupos[k] = t; });
+  const junto = mesclarDes(Object.assign(vazio(), atual), c2);
+  gravar(KEY, junto); logDes('restaurado da cópia', falta);
+  toast(`${falta.length} relatório(s) de desempenho recuperado(s) da cópia deste navegador; enviando ao servidor…`);
 }
 const pode = x => !window.NUVEM || !NUVEM.pode || NUVEM.pode(x);
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -352,7 +361,7 @@ function passoConsolidado(partes, op, avisos) {
     D.importacoes = [{ fonte: nomeF, op, arquivo: rs.map(x => x.arq.nome).join(', '), em: new Date().toISOString(), meses, linhas: rs.reduce((a, x) => a + x.r.total, 0), casados: novos.filter(d => !d.foraBD).length, naoAchados: novos.filter(d => d.foraBD).length }, ...(D.importacoes || [])].slice(0, 80);
     const tamD = JSON.stringify(D).length;
     if (tamD > 30000000) { msg.textContent = `O histórico ficaria grande demais (${fmt(tamD / 1048576, 1)} MB). Nada foi apagado.`; msg.className = 'msg erro'; D = Object.assign(vazio(), ler(KEY, {}) || {}); return; }
-    salvar(); dlg.close(); est.fonte = nomeF; est.opF = op; est.mes = meses[meses.length - 1]; est.grupo = 'Dashboard'; render();
+    salvar(); logDes('importado', { op, meses, linhas: novos.length }); dlg.close(); est.fonte = nomeF; est.opF = op; est.mes = meses[meses.length - 1]; est.grupo = 'Dashboard'; render();
     toast(`${op}: ${novos.length} consultor(es) · ${meses.map(mesTxt).join(', ')}`);
     if (window.NUVEM && NUVEM.ativo && NUVEM.ativo()) NUVEM.publicarAgora();
   };
@@ -782,7 +791,7 @@ function render() {
     <span class="dica">${ult ? `Última importação: ${esc(ult.arquivo)} · ${new Date(ult.em).toLocaleDateString('pt-BR')} · ${ult.casados} no BD${ult.naoAchados ? ` · ${ult.naoAchados} fora do BD` : ''}` : ''}</span>
   </div>
   ${(() => { if (!cons) return ''; const antigos = [...new Set(D.dados.filter(d => d.fonte === est.fonte && !d.op && opDaLinha(d) === est.opF).map(d => d.mes))].sort(); return antigos.length ? `<div class="aviso-fluxo db-aviso">${G.ic('alert', '')}<span><b>${antigos.length} mês(es) de ${esc(est.opF)} ainda com a importação antiga</b> (${antigos.map(mesTxt).join(', ')}): colunas e quartis podem aparecer errados. Clique em <b>Importar relatório</b>, escolha <b>${esc(est.opF)}</b> e envie esses arquivos de novo (pode selecionar todos de uma vez).</span></div>` : ''; })()}
-  ${window.NUVEM && NUVEM.ehAdmin && NUVEM.ehAdmin() && NUVEM.ativo() ? `<p class="dica des-diag" id="desDiag">Navegador: ${D.dados.length} linha(s) · servidor: ${(NUVEM.diagDesempenho() || {}).servidor ?? '—'} linha(s) na última leitura</p>` : ''}
+  ${window.NUVEM && NUVEM.ehAdmin && NUVEM.ehAdmin() && NUVEM.ativo() ? `<p class="dica des-diag" id="desDiag"><button type="button" class="btn btn-sec btn-mini" id="desLog">Copiar diagnóstico</button> Navegador: ${D.dados.length} linha(s) · servidor: ${(NUVEM.diagDesempenho() || {}).servidor ?? '—'} linha(s) na última leitura</p>` : ''}
   ${(() => { try { const pd = JSON.parse(localStorage.getItem('inovacao_pendentes_v2') || '{}'); return pd.valores && pd.valores.desempenho && window.NUVEM && NUVEM.ativo && NUVEM.ativo() ? `<p class="aviso-fluxo">${G.ic('alert', '')} Os relatórios importados ainda <b>não foram salvos no servidor</b> (estão só neste navegador). Aguarde o aviso <b>Sincronizado</b> no topo antes de fechar ou sair. Se não sincronizar, confira se o Worker publicado é o v13.</p>` : ''; } catch (e) { return ''; } })()}
   ${dash ? '' : `<div class="kpis pn-kpis">${kpis}</div>`}
   ${!dash && cons && est.opF ? `<div class="db-ops">${[['Admissão', 'Admissão'], ['Serviços', 'Serviços']].map(([k, t]) => `<button type="button" data-opf="${k}" class="${k === est.opF ? 'on' : ''}">${t}</button>`).join('')}</div><div class="vazio"><b>${est.mes ? `Sem relatório de ${esc(est.opF)} em ${mesTxt(est.mes)}` : `Nenhum relatório de ${esc(est.opF)} importado`}</b><p>Importe o relatório de ${esc(est.opF)} em <b>Importar relatório</b> e escolha a operação <b>${esc(est.opF)}</b>. Cada operação tem o seu painel; importar uma não apaga a outra.</p></div>` : ''}
@@ -804,6 +813,7 @@ function render() {
   if (b('desFonte')) b('desFonte').onchange = e => { est.fonte = e.target.value; est.mes = ''; est.grupo = 'Dashboard'; render(); };
   b('desMes').onchange = e => { est.mes = e.target.value; render(); };
   b('desSup').onchange = e => { est.sup = e.target.value; render(); };
+  if (b('desLog')) b('desLog').onclick = async () => { let t = ''; try { t = JSON.stringify({ diag: NUVEM.diagDesempenho && NUVEM.diagDesempenho(), worker: NUVEM.versaoServidor ? await NUVEM.versaoServidor() : '', pendente: (JSON.parse(localStorage.getItem('inovacao_pendentes_v2') || '{}').valores || {}).desempenho || null, status: NUVEM.status && NUVEM.status(), log: JSON.parse(localStorage.getItem(KEY_LOG) || '[]') }, null, 1); await navigator.clipboard.writeText(t); toast('Diagnóstico copiado: cole aqui na conversa'); } catch (e) { const w = window.open('', '_blank'); if (w) w.document.body.innerText = t; } };
   if (b('desDiag') && NUVEM.versaoServidor) NUVEM.versaoServidor().then(v => { const el = document.getElementById('desDiag'); if (el && v !== null) el.insertAdjacentHTML('beforeend', ` · Worker <b>${esc(v || '?')}</b>${v && v < '2026-11-28-v13' ? ' <span class="tag ruim">publique o v13</span>' : ''}`); });
   if (b('desOp')) b('desOp').onchange = e => { est.opF = e.target.value; est.sup = ''; render(); };
   raiz.querySelectorAll('[data-opf]').forEach(x => x.onclick = () => { est.opF = x.dataset.opf; est.sup = ''; render(); });
