@@ -274,11 +274,16 @@ function porOrganizacao(linhas, tit) {
 }
 function linhaMeta(l, ehSup) {
   const p = l.meta ? l.feitas / l.meta : null, ok = !l.meta || l.feitas >= l.meta;
-  return `<tr><td><b>${esc(tituloNome(l.nome))}</b></td><td>${esc(l.op || '—')}</td><td class="dir">${l.meta ? l.qtd : ''}</td><td class="dir">${l.meta || ''}</td><td class="dir">${l.red || ''}</td><td class="dir">${l.feitas || ''}</td><td class="dir">${l.fb || ''}</td>
+  return `<tr><td><b>${esc(tituloNome(l.nome))}</b></td><td>${esc(l.op || '—')}</td><td class="dir">${l.qtd || 0}</td><td class="dir">${l.meta ? `<b>${l.meta}</b>` : '—'}</td><td class="dir">${l.red || ''}</td><td class="dir">${l.feitas || 0}</td><td class="dir">${l.fb || 0}</td>
     <td class="q-ent">${p === null ? '' : `<div class="q-ent-b"><i style="width:${Math.min(100, p * 100)}%;background:${p >= 1 ? '#1baf7a' : p >= .7 ? '#eda100' : '#d03b3b'}"></i></div><b>${fmt(p * 100, 2)}%</b>`}</td>
     <td><span class="q-st ${ok ? 'ok' : 'nao'}">${ok ? 'OK' : 'NÃO ENTREGOU'}</span></td><td class="dir">${ehSup ? tagNota(l.mediaEquipe) : tagNota(l.notaDada)}</td></tr>`;
 }
-const cabMeta = (t, ehSup) => `<thead><tr><th>${t}</th><th>Operação</th><th class="dir">Qtd</th><th class="dir">Meta</th><th class="dir">Redução</th><th class="dir">${ehSup ? 'Qtds' : 'M. feitas'}</th><th class="dir">Feedback</th><th>Entrega</th><th>Status</th><th class="dir">${ehSup ? 'Média equipe' : 'Nota média'}</th></tr></thead>`;
+function totMeta(ls, metaTot) {
+  if (!ls.length) return '';
+  const q = ls.reduce((a, l) => a + (l.qtd || 0), 0), m = metaTot || ls.reduce((a, l) => a + (l.meta || 0), 0), r = ls.reduce((a, l) => a + (l.red || 0), 0), f = ls.reduce((a, l) => a + (l.feitas || 0), 0), fb = ls.reduce((a, l) => a + (l.fb || 0), 0), p = m ? f / m : null;
+  return `<tr class="des-tot"><td><b>Total</b></td><td></td><td class="dir"><b>${q}</b></td><td class="dir"><b>${m || '—'}</b></td><td class="dir"><b>${r || ''}</b></td><td class="dir"><b>${f}</b></td><td class="dir"><b>${fb}</b></td><td class="q-ent">${p === null ? '' : `<div class="q-ent-b"><i style="width:${Math.min(100, p * 100)}%;background:${p >= 1 ? '#1baf7a' : p >= .7 ? '#eda100' : '#d03b3b'}"></i></div><b>${fmt(p * 100, 2)}%</b>`}</td><td><span class="q-st ${!m || f >= m ? 'ok' : 'nao'}">${!m || f >= m ? 'OK' : 'NÃO ENTREGOU'}</span></td><td></td></tr>`;
+}
+const cabMeta = (t, ehSup) => `<thead><tr><th>${t}</th><th>Operação</th><th class="dir">Qtd</th><th class="dir">Meta</th><th class="dir">Redução</th><th class="dir">M. feitas</th><th class="dir">Feedback</th><th>Entrega</th><th>Status</th><th class="dir">${ehSup ? 'Média equipe' : 'Nota média'}</th></tr></thead>`;
 
 function dashboardMon(filtro, ant, mesesAsc, porMes) {
   const tudo = todas();
@@ -366,11 +371,11 @@ function dashboardMon(filtro, ant, mesesAsc, porMes) {
   <article class="cartao q-sec q-sec-sup"><header class="cab-card"><span class="icb">${G.ic('users')}</span><div><h2>Supervisores</h2><p>Monitorias feitas pelo supervisor · meta = consultores da equipe × monitorias por consultor${M.linhasSup.length ? '' : ' · sem equipes no BD'}</p></div></header>
     <div class="pn-grade"><div><h3 class="db-h3">Monitorias lançadas × feedback realizado</h3><div id="qSupFb"></div></div><div><h3 class="db-h3">Média da equipe (todas as monitorias dos consultores)</h3><div id="qSupEq"></div></div></div>
     ${porOrganizacao(M.linhasSup, 'Organização')}
-    <div class="tabela-wrap"><table class="tabela q-meta"><caption class="q-cap q-mm-sup">Meta supervisores</caption>${cabMeta('Nome supervisor', true)}<tbody>${M.linhasSup.map(l => linhaMeta(l, true)).join('') || '<tr><td colspan="10" class="dica">Importe o BD (com o BD ADM) para montar os supervisores.</td></tr>'}</tbody></table></div></article>
+    <div class="tabela-wrap"><table class="tabela q-meta"><caption class="q-cap q-mm-sup">Meta supervisores</caption>${cabMeta('Nome supervisor', true)}<tbody>${M.linhasSup.length ? M.linhasSup.map(l => linhaMeta(l, true)).join('') + totMeta(M.linhasSup, metaSup) : '<tr><td colspan="10" class="dica">Importe o BD (com o BD ADM) para montar os supervisores.</td></tr>'}</tbody></table></div></article>
   <article class="cartao q-sec q-sec-mon"><header class="cab-card"><span class="icb">${G.ic('headset')}</span><div><h2>Monitores</h2><p>Monitorias feitas pela qualidade · meta = consultores da operação × monitorias por consultor</p></div></header>
     <div class="pn-grade"><div><h3 class="db-h3">Monitorias lançadas × feedback realizado</h3><div id="qMonFb"></div></div><div><h3 class="db-h3">Nota dada pelos monitores a cada equipe</h3><div id="qMonEq"></div></div></div>
     ${porOrganizacao(M.linhasMon, 'Organização')}
-    <div class="tabela-wrap"><table class="tabela q-meta"><caption class="q-cap q-mm-mon">Meta monitores</caption>${cabMeta('Nome monitor', false)}<tbody>${M.linhasMon.map(l => linhaMeta(l, false)).join('') || '<tr><td colspan="10" class="dica">Nenhum monitor encontrado no BD ADM nem na base.</td></tr>'}</tbody></table></div></article>
+    <div class="tabela-wrap"><table class="tabela q-meta"><caption class="q-cap q-mm-mon">Meta monitores</caption>${cabMeta('Nome monitor', false)}<tbody>${M.linhasMon.length ? M.linhasMon.map(l => linhaMeta(l, false)).join('') + totMeta(M.linhasMon, metaMon) : '<tr><td colspan="10" class="dica">Nenhum monitor encontrado no BD ADM nem na base.</td></tr>'}</tbody></table></div></article>
   ${tabAval.length ? `<article class="cartao"><header class="cab-card"><span class="icb">${G.ic('clipboard')}</span><div><h2>Monitorias por avaliador e célula</h2><p>Como a tabela dinâmica do Dash Qualidade: monitorias lançadas, soma de feedback realizado e média da nota final de quem avaliou, em cada célula</p></div></header>
     <div class="tabela-wrap"><table class="tabela q-aval"><thead><tr><th>Avaliador</th><th>Célula</th><th class="dir">Monitorias lançadas</th><th class="dir">Soma de feedback realizado</th><th class="dir">Média de nota final</th></tr></thead><tbody>
       ${tabAval.map((x, i) => `<tr${i && tabAval[i - 1].nome === x.nome ? ' class="q-aval-cont"' : ''}><td>${i && tabAval[i - 1].nome === x.nome ? '' : `<b>${esc(x.nome)}</b> <small class="q-tipo ${x.tipo === 'Supervisor' ? 's' : 'm'}">${x.tipo || ''}</small>`}</td><td>${esc(x.cel || '—')}</td><td class="dir">${x.n}</td><td class="dir">${x.fb}</td><td class="dir">${x.nota === null ? '—' : fmt(x.nota, 2) + '%'}</td></tr>`).join('')}
