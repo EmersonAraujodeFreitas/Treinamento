@@ -44,8 +44,9 @@ function perfilBase(xs) {
   const chaves = {}; xs.forEach(m => Object.keys(m.campos || {}).forEach(k => { chaves[k] = chaves[k] || new Map(); const v = String(m.campos[k]); chaves[k].set(v, (chaves[k].get(v) || 0) + 1); }));
   const ks = Object.keys(chaves);
   const tipoK = ks.find(k => { const vs = [...chaves[k].keys()].map(norm); return vs.length <= 8 && vs.some(v => v.includes('supervis')) && vs.some(v => v.includes('monitor') || v.includes('qualidade') || v.includes('analista')); });
-  const prodK = ks.find(k => k !== tipoK && /organiza|celula|operac|produto|fila|campanha|segmento|unidade/.test(norm(k)) && chaves[k].size >= 2 && chaves[k].size <= 14)
-    || ks.find(k => k !== tipoK && /servic|ies/.test(norm(k)) && chaves[k].size >= 2 && chaves[k].size <= 14);
+  // operação/organização: a coluna cujos valores parecem operação (Admissão/Serviços, UVA/UJ…), nunca Sim/Não
+  const valOp = k => { const vs = [...chaves[k].keys()].map(norm); return vs.length >= 2 && vs.length <= 14 && vs.filter(v => /admiss|servic|uva|\buj\b|unijorge|capta|perman|receptivo|posvenda|pos venda|retenc/.test(v)).length >= Math.ceil(vs.length / 2) && !vs.every(v => /^(sim|nao|s|n|ok)$/.test(v)); };
+  const prodK = ks.find(k => k !== tipoK && valOp(k) && /organiza|celula|operac|produto|fila|campanha|segmento|unidade/.test(norm(k))) || ks.find(k => k !== tipoK && valOp(k));
   const respK = ks.find(k => k !== tipoK && /monitor respons|responsavel|monitor$/.test(norm(k)) && chaves[k].size <= 20);
   const fbK = ks.find(k => /feedback|devolutiva/.test(norm(k)));
   const pecK = ks.filter(k => /^pec/.test(norm(k)) && [...chaves[k].keys()].some(v => !isNaN(A.num(String(v).replace('%', '')))));
@@ -79,49 +80,66 @@ const iniciais = n => String(n || '?').split(' ').filter(Boolean).map(p => p[0])
 const corNota = n => n === null || n === undefined ? '#8a96a8' : n >= 95 ? '#0f9d58' : n >= 85 ? '#1baf7a' : n >= 70 ? '#eda100' : '#d03b3b';
 
 /* ---------- metas (quantidade de monitorias por consultor no mês) ---------- */
-const DEF_METAS = { padraoSup: 2, padraoMon: 2, fator: {}, qtd: {}, red: {}, meta: {}, op: {}, extra: [], nota: META };
+const DEF_METAS = { n: {}, red: {}, op: {}, extra: [], nota: META };
 const metasMon = () => Object.assign({}, DEF_METAS, ((ler(KEY_DES, {}) || {}).metasMon) || {});
 function operacaoBD(c) {
   // operação do consultor no BD: Captação → Admissão, Permanência → Serviços; IES UVA/Unijorge
-  const o = norm(c.operacao || ''), i = norm(c.ies || '');
-  const a = o.includes('capta') ? 'Admissão' : o.includes('perman') ? 'Serviços' : '';
+  const o = norm(c.operacao || c.grupo || ''), i = norm(c.ies || '');
+  const a = o.includes('capta') || o.includes('admiss') ? 'Admissão' : o.includes('perman') || o.includes('servic') ? 'Serviços' : '';
   const b = i.includes('uva') ? 'UVA' : i.includes('unijorge') || i === 'uj' ? 'UJ' : '';
   return a && b ? `${a} ${b}` : '';
 }
 const chaveOp = s => norm(s).replace(/[^a-z0-9]+/g, ' ').replace(/\bunijorge\b/g, 'uj').trim();
+// a coluna de avaliador pode ter nome, e-mail, login ou matrícula
+const limpaAval = t => norm(String(t || '')).replace(/@.*$/, '').replace(/[._-]+/g, ' ').replace(/\s+/g, ' ').trim();
+function casaPessoa(txt, p) {
+  const t = limpaAval(txt); if (!t) return false;
+  if (p.mat && t === norm(String(p.mat))) return true;
+  if (p.login && t === limpaAval(p.login)) return true;
+  if (/^\d+$/.test(t)) return false;
+  return mesmoNome(t, p.nome);
+}
+const pareceNome = t => { const x = String(t || '').trim(); return /^[A-Za-zÀ-ú]+( [A-Za-zÀ-ú]+){1,6}$/.test(x) && !/^(gravacao|lado a lado|redes sociais|ligacao|audio|whatsapp)$/i.test(norm(x)); };
 function montarMetas(P, doMes, todasMon) {
   const mt = metasMon(), q = P.quadro;
+  const gest = ((ler('inovacao_treinamento_gestao_v1', {}) || {}).itens || q.gestao || []).filter(g => !/deslig/i.test(g.status || ''));
   const vig = (q.itens || []).filter(c => c.status !== 'Desligado' && !c.supForaQuadro);
-  // operação de cada consultor: a mais frequente nas monitorias; sem monitoria, a do BD
+  // operação de cada consultor: a mais frequente na base de qualidade; sem monitoria, a do BD
   const opCons = {}; todasMon.forEach(m => { const o = P.opDe(m); if (!o) return; const k = norm(m.nome); const c = opCons[k] = opCons[k] || {}; c[o] = (c[o] || 0) + 1; });
   const opDeCons = c => { const x = opCons[norm(c.nome)]; if (x) return Object.entries(x).sort((a, b) => b[1] - a[1])[0][0]; return operacaoBD(c); };
-  const ops = {}; const opsNome = {};
-  todasMon.forEach(m => { const o = P.opDe(m); if (o) opsNome[chaveOp(o)] = opsNome[chaveOp(o)] || o; });
-  vig.forEach(c => { const o = opDeCons(c); if (o) { const k = chaveOp(o); opsNome[k] = opsNome[k] || o; (ops[k] = ops[k] || []).push(c); } });
-  const fator = (op, t) => { const f = (mt.fator || {})[chaveOp(op)] || {}; return f[t] ?? (t === 'sup' ? mt.padraoSup : mt.padraoMon); };
-  // supervisores (equipe do BD)
-  const sups = {}; vig.forEach(c => { if (c.supervisor) (sups[c.supervisor] = sups[c.supervisor] || []).push(c); });
-  const avalSup = doMes.filter(m => m._t === 'Supervisor');
-  const linhasSup = Object.entries(sups).map(([s, eq]) => {
+  const opsNome = {}; todasMon.forEach(m => { const o = P.opDe(m); if (o) opsNome[chaveOp(o)] = opsNome[chaveOp(o)] || o; });
+  const consPorOp = {}; vig.forEach(c => { const o = opDeCons(c); if (o) { const k = chaveOp(o); opsNome[k] = opsNome[k] || o; consPorOp[k] = (consPorOp[k] || 0) + 1; } });
+  // supervisores e monitores: BD ADM (cargo); sem BD ADM, o que aparece na base
+  let supsP = gest.filter(g => /supervis/i.test(g.cargo || '')).map(g => ({ nome: g.nome, login: g.login, mat: g.mat, ies: g.ies, grupo: g.grupo }));
+  if (!supsP.length) supsP = [...new Set(vig.map(c => c.supervisor).filter(Boolean))].map(n => ({ nome: n }));
+  let monsP = gest.filter(g => /monitor|qualidade|auditor/i.test(g.cargo || '') && !/supervis|coorden|gerent/i.test(g.cargo || '')).map(g => ({ nome: g.nome, login: g.login, mat: g.mat }));
+  if (!monsP.length) { const vistos = new Map(); todasMon.filter(m => m._t === 'Monitor' && pareceNome(m.avaliador) && !supsP.some(s => casaPessoa(m.avaliador, s))).forEach(m => { const k = limpaAval(m.avaliador); if (!vistos.has(k)) vistos.set(k, { nome: tituloNome(m.avaliador) }); }); monsP = [...vistos.values()]; }
+  (mt.extra || []).forEach(x => { if (!monsP.some(p => mesmoNome(p.nome, x.nome))) monsP.push({ nome: x.nome, manual: true, opManual: x.op }); });
+  const dele = (p, xs) => xs.filter(m => casaPessoa(m.avaliador, p));
+  const linhasSup = supsP.map(p => {
+    const eq = vig.filter(c => c.supervisor && (norm(c.supervisor) === norm(p.nome) || mesmoNome(c.supervisor, p.nome)));
     const opsEq = {}; eq.forEach(c => { const o = opDeCons(c); if (o) opsEq[o] = (opsEq[o] || 0) + 1; });
-    const k = 'sup:' + norm(s);
-    const opAuto = Object.entries(opsEq).sort((a, b) => b[1] - a[1])[0]?.[0] || '', op = (mt.op || {})[k] || opAuto;
-    const qtd = mt.qtd[k] ?? eq.length, red = mt.red[k] || 0, fixa = (mt.meta || {})[k];
-    const calc = Math.round(qtd * fator(op, 'sup')), meta = Math.max(0, (fixa ?? calc) - red);
-    const minhas = avalSup.filter(m => mesmoNome(m.avaliador || '', s));
-    const daEquipe = doMes.filter(m => norm(m.supervisor) === norm(s) || eq.some(c => norm(c.nome) === norm(m.nome)));
-    return { tipo: 'sup', chave: k, nome: s, op, opAuto, qtd, qtdAuto: eq.length, red, fator: fator(op, 'sup'), calc, fixa, meta, feitas: minhas.length, fb: minhas.filter(m => m._fb).length, notaDada: media_(minhas.map(m => m.nota)), mediaEquipe: media_(daEquipe.map(m => m.nota)), equipe: daEquipe };
-  }).sort((a, b) => cmpTxt(a.nome, b.nome));
-  // monitores: cada par monitor × operação que aparece na base
-  const pares = {}; todasMon.filter(m => m._t === 'Monitor' && m.avaliador).forEach(m => { const o = P.opDe(m) || '—'; const k = norm(m.avaliador) + '|' + chaveOp(o); pares[k] = pares[k] || { nome: m.avaliador, op: o }; });
-  (mt.extra || []).forEach(x => { const k = norm(x.nome) + '|' + chaveOp(x.op); pares[k] = pares[k] || { nome: x.nome, op: x.op, manual: true }; });
-  const linhasMon = Object.entries(pares).map(([k0, p]) => {
-    const k = 'mon:' + k0, auto = (ops[chaveOp(p.op)] || []).length, qtd = mt.qtd[k] ?? auto, red = mt.red[k] || 0, fixa = (mt.meta || {})[k];
-    const calc = Math.round(qtd * fator(p.op, 'mon')), meta = Math.max(0, (fixa ?? calc) - red);
-    const minhas = doMes.filter(m => m._t === 'Monitor' && norm(m.avaliador) === norm(p.nome) && chaveOp(P.opDe(m) || '—') === chaveOp(p.op));
-    return { tipo: 'mon', chave: k, nome: p.nome, op: p.op, manual: !!p.manual, qtd, qtdAuto: auto, red, fator: fator(p.op, 'mon'), calc, fixa, meta, feitas: minhas.length, fb: minhas.filter(m => m._fb).length, notaDada: media_(minhas.map(m => m.nota)), minhas };
-  }).sort((a, b) => cmpTxt(a.nome, b.nome) || cmpTxt(a.op, b.op));
-  return { mt, linhasSup, linhasMon, opsNome, fator };
+    const k = 'sup:' + norm(p.nome), opAuto = Object.entries(opsEq).sort((a, b) => b[1] - a[1])[0]?.[0] || operacaoBD(p), op = (mt.op || {})[k] || opAuto;
+    const n = (mt.n || {})[k] ?? null, red = (mt.red || {})[k] || 0, qtd = eq.length, meta = n ? Math.max(0, qtd * n - red) : 0;
+    const minhas = dele(p, doMes), daEquipe = doMes.filter(m => norm(m.supervisor) === norm(p.nome) || mesmoNome(m.supervisor || '', p.nome) || eq.some(c => norm(c.nome) === norm(m.nome)));
+    return { tipo: 'sup', chave: k, nome: p.nome, op, opAuto, qtd, n, red, meta, feitas: minhas.length, fb: minhas.filter(m => m._fb).length, notaDada: media_(minhas.map(m => m.nota)), mediaEquipe: media_(daEquipe.map(m => m.nota)), equipe: daEquipe };
+  }).sort((a, b) => cmpTxt(a.op || 'zz', b.op || 'zz') || cmpTxt(a.nome, b.nome));
+  const linhasMon = [];
+  monsP.forEach(p => {
+    const todasDele = dele(p, todasMon), porOp = {};
+    todasDele.forEach(m => { const o = P.opDe(m) || ''; porOp[chaveOp(o)] = porOp[chaveOp(o)] || o; });
+    const ops = Object.values(porOp).filter(Boolean); if (!ops.length) ops.push(p.opManual || '');
+    ops.forEach(o => {
+      const k = 'mon:' + norm(p.nome) + '|' + chaveOp(o), n = (mt.n || {})[k] ?? null, red = (mt.red || {})[k] || 0, qtd = consPorOp[chaveOp(o)] || 0, meta = n ? Math.max(0, qtd * n - red) : 0;
+      const minhas = dele(p, doMes).filter(m => !o || chaveOp(P.opDe(m) || '') === chaveOp(o));
+      linhasMon.push({ tipo: 'mon', chave: k, nome: p.nome, op: o, manual: !!p.manual, qtd, n, red, meta, feitas: minhas.length, fb: minhas.filter(m => m._fb).length, notaDada: media_(minhas.map(m => m.nota)), minhas });
+    });
+  });
+  linhasMon.sort((a, b) => cmpTxt(a.nome, b.nome) || cmpTxt(a.op, b.op));
+  // avaliadores da base que não batem com ninguém (aparecem como aviso)
+  const todosP = supsP.concat(monsP), naoId = {};
+  doMes.forEach(m => { if (m.avaliador && !todosP.some(p => casaPessoa(m.avaliador, p))) naoId[m.avaliador] = (naoId[m.avaliador] || 0) + 1; });
+  return { mt, linhasSup, linhasMon, opsNome, naoId: Object.entries(naoId).sort((a, b) => b[1] - a[1]), temADM: gest.length > 0 };
 }
 
 /* ---------- desenho ---------- */
@@ -143,18 +161,18 @@ function halter(cats, a, b, nomes, cores) {
     <div class="g-leg"><span><i style="background:${cores[0]}"></i>${esc(nomes[0])}</span><span><i style="background:${cores[1]}"></i>${esc(nomes[1])}</span></div></div>`;
 }
 function porOrganizacao(linhas, tit) {
-  const o = {}; linhas.forEach(l => { const k = l.op || '—'; const x = o[k] = o[k] || { meta: 0, feitas: 0 }; x.meta += l.meta; x.feitas += l.feitas; });
+  const o = {}; linhas.filter(l => l.meta || l.feitas).forEach(l => { const k = l.op || '—'; const x = o[k] = o[k] || { meta: 0, feitas: 0 }; x.meta += l.meta; x.feitas += l.feitas; });
   const tm = Object.values(o).reduce((a, x) => a + x.meta, 0), tf = Object.values(o).reduce((a, x) => a + x.feitas, 0);
   if (!Object.keys(o).length) return '';
   return `<div class="q-org"><table class="tabela"><thead><tr><th>${esc(tit)}</th><th class="dir">Meta</th><th class="dir">Feitas</th><th class="dir">Ating.</th></tr></thead><tbody>${Object.entries(o).sort((a, b) => cmpTxt(a[0], b[0])).map(([k, x]) => `<tr><td>${esc(k)}</td><td class="dir">${x.meta}</td><td class="dir">${x.feitas}</td><td class="dir"><b style="color:${x.meta ? (x.feitas >= x.meta ? '#1baf7a' : '#d03b3b') : 'inherit'}">${x.meta ? fmt(x.feitas / x.meta * 100, 2) + '%' : '—'}</b></td></tr>`).join('')}<tr class="des-tot"><td><b>Total</b></td><td class="dir"><b>${tm}</b></td><td class="dir"><b>${tf}</b></td><td class="dir"><b>${tm ? fmt(tf / tm * 100, 2) + '%' : '—'}</b></td></tr></tbody></table></div>`;
 }
 function linhaMeta(l, ehSup) {
-  const p = l.meta ? l.feitas / l.meta : null;
-  return `<tr><td><b>${esc(tituloNome(l.nome))}</b><small>${esc(l.op || '—')}</small></td><td class="dir">${l.qtd}${l.qtd !== l.qtdAuto ? '<sup title="ajustado">*</sup>' : ''}</td><td class="dir">${l.meta}${l.red ? `<small> (−${l.red})</small>` : ''}</td><td class="dir">${l.feitas}</td>
-    <td class="q-ent"><div class="q-ent-b"><i style="width:${Math.min(100, (p || 0) * 100)}%;background:${p === null ? '#8a96a8' : p >= 1 ? '#1baf7a' : p >= .7 ? '#eda100' : '#d03b3b'}"></i></div><b>${p === null ? '—' : fmt(p * 100, 1) + '%'}</b></td>
-    <td><span class="tag ${p === null ? 'neutro' : p >= 1 ? 'bom' : 'ruim'}">${p === null ? 'sem meta' : p >= 1 ? 'Entregou' : 'Não entregou'}</span></td>
-    <td class="dir">${l.fb}<small> de ${l.feitas}</small></td><td class="dir">${ehSup ? tagNota(l.mediaEquipe) : tagNota(l.notaDada)}</td></tr>`;
+  const p = l.meta ? l.feitas / l.meta : null, ok = !l.meta || l.feitas >= l.meta;
+  return `<tr><td><b>${esc(tituloNome(l.nome))}</b></td><td>${esc(l.op || '—')}</td><td class="dir">${l.meta ? l.qtd : ''}</td><td class="dir">${l.meta || ''}</td><td class="dir">${l.red || ''}</td><td class="dir">${l.feitas || ''}</td>
+    <td class="q-ent">${p === null ? '' : `<div class="q-ent-b"><i style="width:${Math.min(100, p * 100)}%;background:${p >= 1 ? '#1baf7a' : p >= .7 ? '#eda100' : '#d03b3b'}"></i></div><b>${fmt(p * 100, 2)}%</b>`}</td>
+    <td><span class="q-st ${ok ? 'ok' : 'nao'}">${ok ? 'OK' : 'NÃO ENTREGOU'}</span></td><td class="dir">${ehSup ? tagNota(l.mediaEquipe) : tagNota(l.notaDada)}</td></tr>`;
 }
+const cabMeta = (t, ehSup) => `<thead><tr><th>${t}</th><th>Operação</th><th class="dir">Qtd</th><th class="dir">Meta</th><th class="dir">Redução</th><th class="dir">${ehSup ? 'Qtds' : 'M. feitas'}</th><th>Entrega</th><th>Status</th><th class="dir">${ehSup ? 'Média equipe' : 'Nota média'}</th></tr></thead>`;
 
 function dashboardMon(filtro, ant, mesesAsc, porMes) {
   const tudo = todas();
@@ -218,11 +236,11 @@ function dashboardMon(filtro, ant, mesesAsc, porMes) {
   <article class="cartao q-sec q-sec-sup"><header class="cab-card"><span class="icb">${G.ic('users')}</span><div><h2>Supervisores</h2><p>Monitorias feitas pelo supervisor · meta = consultores da equipe × monitorias por consultor${M.linhasSup.length ? '' : ' · sem equipes no BD'}</p></div></header>
     <div class="pn-grade"><div><h3 class="db-h3">Monitorias lançadas × feedback realizado</h3><div id="qSupFb"></div></div><div><h3 class="db-h3">Média da equipe (todas as monitorias dos consultores)</h3><div id="qSupEq"></div></div></div>
     ${porOrganizacao(M.linhasSup, 'Organização')}
-    <div class="tabela-wrap"><table class="tabela q-meta"><thead><tr><th>Supervisor</th><th class="dir">Consultores</th><th class="dir">Meta</th><th class="dir">Feitas</th><th>Entrega</th><th>Status</th><th class="dir">Feedback</th><th class="dir">Média equipe</th></tr></thead><tbody>${M.linhasSup.map(l => linhaMeta(l, true)).join('') || '<tr><td colspan="8" class="dica">Importe o BD para montar as equipes.</td></tr>'}</tbody></table></div></article>
+    <div class="tabela-wrap"><table class="tabela q-meta"><caption class="q-cap q-mm-sup">Meta supervisores</caption>${cabMeta('Nome supervisor', true)}<tbody>${M.linhasSup.map(l => linhaMeta(l, true)).join('') || '<tr><td colspan="9" class="dica">Importe o BD (com o BD ADM) para montar os supervisores.</td></tr>'}</tbody></table></div></article>
   <article class="cartao q-sec q-sec-mon"><header class="cab-card"><span class="icb">${G.ic('headset')}</span><div><h2>Monitores</h2><p>Monitorias feitas pela qualidade · meta = consultores da operação × monitorias por consultor</p></div></header>
     <div class="pn-grade"><div><h3 class="db-h3">Monitorias lançadas × feedback realizado</h3><div id="qMonFb"></div></div><div><h3 class="db-h3">Nota dada pelos monitores a cada equipe</h3><div id="qMonEq"></div></div></div>
     ${porOrganizacao(M.linhasMon, 'Organização')}
-    <div class="tabela-wrap"><table class="tabela q-meta"><thead><tr><th>Monitor · operação</th><th class="dir">Consultores</th><th class="dir">Meta</th><th class="dir">Feitas</th><th>Entrega</th><th>Status</th><th class="dir">Feedback</th><th class="dir">Nota média</th></tr></thead><tbody>${M.linhasMon.map(l => linhaMeta(l, false)).join('') || '<tr><td colspan="8" class="dica">Nenhuma monitoria de monitor na base.</td></tr>'}</tbody></table></div></article>
+    <div class="tabela-wrap"><table class="tabela q-meta"><caption class="q-cap q-mm-mon">Meta monitores</caption>${cabMeta('Nome monitor', false)}<tbody>${M.linhasMon.map(l => linhaMeta(l, false)).join('') || '<tr><td colspan="9" class="dica">Nenhum monitor encontrado no BD ADM nem na base.</td></tr>'}</tbody></table></div></article>
   ${pecs.length || falhas.length || confs.length ? `<article class="cartao"><header class="cab-card"><span class="icb">${G.ic('alert')}</span><div><h2>PEC e ofensores</h2><p>${pecs.length ? 'Conformidade de cada PEC · ' : ''}falhas mais frequentes no mês · clique numa falha para ver quem errou</p></div></header>
     ${pecs.length ? `<div class="q-pecs">${pecs.sort((a, b) => b.v - a.v).map(p => `<div class="q-pec" style="--c:${corNota(p.v * 100)}"><span>${esc(p.k)}</span><div><i style="width:${Math.min(100, p.v * 100)}%"></i></div><b>${fmt(p.v * 100, 2)}%</b></div>`).join('')}</div>` : ''}
     ${falhas.length ? `<div class="q-of"><div class="q-of-l"><h3 class="db-h3">Falhas no mês · ${totOc} ocorrência(s)</h3>${falhas.map(f => `<button type="button" class="q-of-it${f.k === est.falha ? ' on' : ''}" data-falha="${esc(f.k)}"><span>${esc(f.k)}</span><i><b style="width:${f.oc.length / falhas[0].oc.length * 100}%"></b></i><em>${f.oc.length}</em><small>${fmt(f.oc.length / (f.n || 1) * 100, 1)}%</small></button>`).join('')}</div>
@@ -253,42 +271,41 @@ function abrirMetasMon(M) {
   const D0 = ler(KEY_DES, {}) || {}, mt = Object.assign({}, DEF_METAS, D0.metasMon || {});
   if (!document.getElementById('dlgMetaMon')) document.body.insertAdjacentHTML('beforeend', `<dialog class="dlg dlg-grande" id="dlgMetaMon"><form method="dialog" class="dlg-in" id="mmForm"></form></dialog>`);
   const f = document.getElementById('mmForm'), opsK = Object.keys(M.opsNome).sort();
-  const listaOps = `<datalist id="mmOps">${opsK.map(k => `<option value="${esc(M.opsNome[k])}">`).join('')}</datalist>`;
-  const linha = (l, sup) => `<tr data-k="${esc(l.chave)}"${l.manual ? ' data-manual="1"' : ''}><td><b>${esc(tituloNome(l.nome))}</b>${l.manual ? ' <button type="button" class="btn-icone mm-del" title="Remover">×</button>' : ''}</td>
-    <td>${sup ? `<input class="mm-op" list="mmOps" value="${esc((mt.op || {})[l.chave] || '')}" placeholder="${esc(l.opAuto || '—')}">` : esc(l.op)}</td>
-    <td><input type="number" min="0" class="mm-q" value="${mt.qtd[l.chave] ?? ''}" placeholder="${l.qtdAuto}"></td>
-    <td><input type="number" min="0" class="mm-m" value="${(mt.meta || {})[l.chave] ?? ''}" placeholder="${l.calc}"></td>
-    <td><input type="number" min="0" class="mm-r" value="${mt.red[l.chave] || ''}" placeholder="0"></td>
-    <td class="dir"><b class="mm-final">${l.meta}</b></td><td class="dir">${l.feitas}</td></tr>`;
-  const cab = t => `<thead><tr><th>${t}</th><th>Operação</th><th>Consultores</th><th>Meta do mês</th><th>Redução</th><th class="dir">Meta final</th><th class="dir">Feitas</th></tr></thead>`;
-  f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('target')}</span><div><h2>Metas de monitoria</h2><p>Digite a <b>meta do mês</b> de cada pessoa. Em branco, o site calcula: consultores × monitorias por consultor (valor em cinza). A redução desconta férias, afastamento ou folga.</p></div></header>
-    ${listaOps}
+  const linha = (l, sup) => `<tr data-k="${esc(l.chave)}" data-q="${l.qtd}" data-f="${l.feitas}"><td><b>${esc(tituloNome(l.nome))}</b>${l.manual ? ' <button type="button" class="btn-icone mm-del" title="Remover">×</button>' : ''}</td>
+    <td>${sup ? `<input class="mm-op" list="mmOps" value="${esc((mt.op || {})[l.chave] || '')}" placeholder="${esc(l.opAuto || '—')}">` : esc(l.op || '—')}</td>
+    <td class="dir mm-qtd">${l.qtd}</td>
+    <td><input type="number" min="0" step="0.5" class="mm-n" value="${(mt.n || {})[l.chave] ?? ''}" placeholder="—"></td>
+    <td><input type="number" min="0" class="mm-r" value="${(mt.red || {})[l.chave] || ''}" placeholder="0"></td>
+    <td class="dir"><b class="mm-final">${l.meta || ''}</b></td><td class="dir">${l.feitas || ''}</td><td class="dir mm-ent"></td><td class="mm-st"></td></tr>`;
+  const cab = t => `<thead><tr><th>${t}</th><th>Operação</th><th class="dir">Qtd</th><th>Monitorias por consultor</th><th>Redução</th><th class="dir">Meta</th><th class="dir">M. feitas</th><th class="dir">Entrega</th><th>Status</th></tr></thead>`;
+  f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('target')}</span><div><h2>Metas de monitoria</h2><p>Para cada pessoa, digite só <b>quantas monitorias por consultor</b> ela faz no mês. Meta = Qtd × monitorias por consultor − redução. Qtd = consultores ativos da equipe (supervisor) ou da operação (monitor), pelo BD.</p></div></header>
+    <datalist id="mmOps">${opsK.map(k => `<option value="${esc(M.opsNome[k])}">`).join('')}</datalist>
     <h3 class="q-mm-t q-mm-mon">Meta monitores</h3>
-    <div class="tabela-wrap"><table class="tabela mm-tab" id="mmMon">${cab('Monitor')}<tbody>${M.linhasMon.map(l => linha(l, false)).join('')}</tbody></table></div>
+    <div class="tabela-wrap"><table class="tabela mm-tab" id="mmMon">${cab('Nome monitor')}<tbody>${M.linhasMon.map(l => linha(l, false)).join('') || `<tr><td colspan="9" class="dica">Nenhum monitor encontrado ${M.temADM ? 'no BD ADM (cargo com MONITOR ou QUALIDADE)' : 'na base'}.</td></tr>`}</tbody></table></div>
     <div class="mm-add"><input id="mmNovoNome" placeholder="Nome do monitor"><input id="mmNovoOp" list="mmOps" placeholder="Operação"><button type="button" class="btn btn-sec btn-mini" id="mmAdd">${G.ic('plus', '')}Adicionar monitor</button></div>
     <h3 class="q-mm-t q-mm-sup">Meta supervisores</h3>
-    <div class="tabela-wrap"><table class="tabela mm-tab" id="mmSup">${cab('Supervisor')}<tbody>${M.linhasSup.map(l => linha(l, true)).join('')}</tbody></table></div>
-    <details class="mm-aj"><summary>Cálculo automático (monitorias por consultor) e nota meta</summary>
-      <div class="grade g4"><label class="campo"><span>Supervisor: por consultor</span><input type="number" min="0" step="0.5" id="mmPs" value="${mt.padraoSup}"></label><label class="campo"><span>Monitor: por consultor</span><input type="number" min="0" step="0.5" id="mmPm" value="${mt.padraoMon}"></label><label class="campo"><span>Nota meta (%)</span><input type="number" min="0" max="100" id="mmNota" value="${mt.nota || META}"></label></div>
-      ${opsK.length ? `<div class="tabela-wrap"><table class="tabela mm-tab"><thead><tr><th>Operação</th><th>Supervisor por consultor</th><th>Monitor por consultor</th></tr></thead><tbody>${opsK.map(k => { const fz = (mt.fator || {})[k] || {}; return `<tr data-op="${esc(k)}"><td>${esc(M.opsNome[k])}</td><td><input type="number" min="0" step="0.5" class="mm-fs" value="${fz.sup ?? ''}" placeholder="${mt.padraoSup}"></td><td><input type="number" min="0" step="0.5" class="mm-fm" value="${fz.mon ?? ''}" placeholder="${mt.padraoMon}"></td></tr>`; }).join('')}</tbody></table></div>` : ''}</details>
+    <div class="tabela-wrap"><table class="tabela mm-tab" id="mmSup">${cab('Nome supervisor')}<tbody>${M.linhasSup.map(l => linha(l, true)).join('')}</tbody></table></div>
+    ${M.naoId.length ? `<details class="mm-aj"><summary>${M.naoId.length} valor(es) da coluna de avaliador não batem com ninguém do ${M.temADM ? 'BD ADM' : 'BD'}</summary><p class="dica">${M.naoId.slice(0, 30).map(([v, n]) => `${esc(v)} (${n})`).join(' · ')}</p></details>` : ''}
+    <label class="campo" style="max-width:220px;margin-top:10px"><span>Nota meta (%)</span><input type="number" min="0" max="100" id="mmNota" value="${mt.nota || META}"></label>
     <div class="dlg-rod"><small class="msg"></small><span><button class="btn btn-sec" value="cancelar" formnovalidate>Cancelar</button> <button type="button" class="btn btn-pri" id="mmOk">${G.ic('check')}Salvar metas</button></span></div>`;
   G.icones(f); document.getElementById('dlgMetaMon').showModal();
-  // meta final ao vivo
-  f.querySelectorAll('tr[data-k]').forEach(tr => { const at = () => { const q = tr.querySelector('.mm-m'), r = tr.querySelector('.mm-r'); const base = q.value.trim() === '' ? +q.placeholder || 0 : +q.value; tr.querySelector('.mm-final').textContent = Math.max(0, base - (+r.value || 0)); }; tr.querySelectorAll('input').forEach(i => i.oninput = at); });
+  const calc = tr => { const q = +tr.dataset.q || 0, fe = +tr.dataset.f || 0, n = +tr.querySelector('.mm-n').value || 0, r = +tr.querySelector('.mm-r').value || 0, meta = n ? Math.max(0, q * n - r) : 0; tr.querySelector('.mm-final').textContent = meta || ''; const p = meta ? fe / meta : null; tr.querySelector('.mm-ent').innerHTML = p === null ? '' : `<b style="color:${p >= 1 ? '#1baf7a' : '#d03b3b'}">${fmt(p * 100, 2)}%</b>`; tr.querySelector('.mm-st').innerHTML = `<span class="q-st ${!meta || fe >= meta ? 'ok' : 'nao'}">${!meta || fe >= meta ? 'OK' : 'NÃO ENTREGOU'}</span>`; };
+  const ligar = tr => { tr.querySelectorAll('input').forEach(i => i.oninput = () => calc(tr)); calc(tr); };
+  f.querySelectorAll('tr[data-k]').forEach(ligar);
   const extras = [...(mt.extra || [])];
-  f.querySelectorAll('.mm-del').forEach(bt => bt.onclick = () => { const tr = bt.closest('tr'); const k = tr.dataset.k.slice(4); const i = extras.findIndex(x => norm(x.nome) + '|' + chaveOp(x.op) === k); if (i >= 0) extras.splice(i, 1); tr.remove(); });
+  f.querySelectorAll('.mm-del').forEach(bt => bt.onclick = () => { const tr = bt.closest('tr'), nome = tr.querySelector('b').textContent; const i = extras.findIndex(x => mesmoNome(x.nome, nome)); if (i >= 0) extras.splice(i, 1); tr.remove(); });
   document.getElementById('mmAdd').onclick = () => {
     const nome = document.getElementById('mmNovoNome').value.trim(), op = document.getElementById('mmNovoOp').value.trim();
     if (!nome || !op) { f.querySelector('.msg').textContent = 'Informe o nome do monitor e a operação.'; f.querySelector('.msg').className = 'msg erro'; return; }
-    extras.push({ nome, op }); const k = 'mon:' + norm(nome) + '|' + chaveOp(op);
-    document.querySelector('#mmMon tbody').insertAdjacentHTML('beforeend', `<tr data-k="${esc(k)}" data-manual="1"><td><b>${esc(tituloNome(nome))}</b></td><td>${esc(op)}</td><td><input type="number" min="0" class="mm-q" placeholder="0"></td><td><input type="number" min="0" class="mm-m" placeholder="0"></td><td><input type="number" min="0" class="mm-r" placeholder="0"></td><td class="dir"><b class="mm-final">0</b></td><td class="dir">0</td></tr>`);
+    extras.push({ nome, op }); const k = 'mon:' + norm(nome) + '|' + chaveOp(op), q = 0;
+    document.querySelector('#mmMon tbody').insertAdjacentHTML('beforeend', `<tr data-k="${esc(k)}" data-q="${q}" data-f="0"><td><b>${esc(tituloNome(nome))}</b></td><td>${esc(op)}</td><td class="dir mm-qtd">${q}</td><td><input type="number" min="0" step="0.5" class="mm-n" placeholder="—"></td><td><input type="number" min="0" class="mm-r" placeholder="0"></td><td class="dir"><b class="mm-final"></b></td><td class="dir"></td><td class="dir mm-ent"></td><td class="mm-st"></td></tr>`);
+    ligar(document.querySelector('#mmMon tbody tr:last-child'));
     document.getElementById('mmNovoNome').value = ''; document.getElementById('mmNovoOp').value = '';
   };
   document.getElementById('mmOk').onclick = () => {
-    const n = (el, d) => { if (!el) return d; const v = el.value.trim(); return v === '' ? d : +v; };
-    const novo = { padraoSup: n(document.getElementById('mmPs'), 2), padraoMon: n(document.getElementById('mmPm'), 2), nota: n(document.getElementById('mmNota'), META), fator: {}, qtd: {}, red: {}, meta: {}, op: {}, extra: extras };
-    f.querySelectorAll('tr[data-op]').forEach(tr => { const s_ = n(tr.querySelector('.mm-fs'), null), m = n(tr.querySelector('.mm-fm'), null); if (s_ !== null || m !== null) novo.fator[tr.dataset.op] = { ...(s_ !== null ? { sup: s_ } : {}), ...(m !== null ? { mon: m } : {}) }; });
-    f.querySelectorAll('tr[data-k]').forEach(tr => { const k = tr.dataset.k, q = n(tr.querySelector('.mm-q'), null), mm = n(tr.querySelector('.mm-m'), null), r = n(tr.querySelector('.mm-r'), 0), op = tr.querySelector('.mm-op'); if (q !== null) novo.qtd[k] = q; if (mm !== null) novo.meta[k] = mm; if (r) novo.red[k] = r; if (op && op.value.trim()) novo.op[k] = op.value.trim(); });
+    const v = el => { const t = (el && el.value || '').trim(); return t === '' ? null : +t; };
+    const novo = { nota: v(document.getElementById('mmNota')) || META, n: {}, red: {}, op: {}, extra: extras };
+    f.querySelectorAll('tr[data-k]').forEach(tr => { const k = tr.dataset.k, n = v(tr.querySelector('.mm-n')), r = v(tr.querySelector('.mm-r')), op = tr.querySelector('.mm-op'); if (n !== null) novo.n[k] = n; if (r) novo.red[k] = r; if (op && op.value.trim()) novo.op[k] = op.value.trim(); });
     const D2 = ler(KEY_DES, {}) || {}; D2.metasMon = novo; gravar(KEY_DES, D2);
     document.getElementById('dlgMetaMon').close(); render(); toast('Metas de monitoria salvas');
     if (window.NUVEM && NUVEM.ativo && NUVEM.ativo()) NUVEM.publicarAgora();
@@ -412,12 +429,12 @@ function formulario() {
 /* ---------------- importação de monitorias (planilha da qualidade) ----------------
    Lê .xlsx/.csv, reconhece as colunas principais e guarda as demais como estão,
    para a análise por critério. Reimportar o mesmo arquivo atualiza (não duplica). */
-const KEY_MODIMP = 'inovacao_mon_importacao_v1';
+const KEY_MODIMP = 'inovacao_mon_importacao_v1b';
 const P_CONS = ['consultor', 'agente', 'atendente', 'operador', 'colaborador', 'nome do consultor', 'nome'];
 const P_MAT = ['matricula', 'mat', 'id olos', 'login'];
 const P_DATA = ['data da monitoria', 'data monitoria', 'data', 'dia', 'date', 'data da ligacao', 'data do atendimento'];
 const P_NOTA = ['nota final', 'nota', 'score', 'pontuacao', 'resultado', 'nota monitoria', '%'];
-const P_AVAL = ['avaliador', 'monitor', 'monitora', 'auditor', 'analista', 'responsavel'];
+const P_AVAL = ['avaliador', 'avaliadora', 'nome do avaliador', 'monitor', 'monitora', 'nome do monitor', 'auditor', 'analista', 'monitor responsavel', 'responsavel'];
 const P_CANAL = ['canal', 'tipo de atendimento', 'midia'];
 const P_AT = ['protocolo', 'id da ligacao', 'id ligacao', 'ligacao', 'id atendimento', 'atendimento', 'negocio', 'link', 'telefone'];
 const P_SUP = ['supervisor', 'supervisora', 'lider'];
@@ -466,7 +483,7 @@ function mapear(arq, iAba) {
   const salvo = (ler(KEY_MODIMP, {}) || {})[hashTxt(cab.join('|'))] || {};
   const palpite = lista_ => { const i = cab.findIndex(c => c && lista_.some(p => norm(c) === p)); if (i >= 0) return i; return cab.findIndex(c => c && lista_.some(p => norm(c).includes(p))); };
   const exato = l_ => cab.findIndex(c => c && l_.some(p => norm(c) === p));
-  const g = { cons: palpite(P_CONS), mat: exato(P_MAT), data: palpite(P_DATA), nota: palpite(P_NOTA), aval: palpite(P_AVAL), canal: palpite(P_CANAL), at: exato(P_AT), sup: palpite(P_SUP), pos: palpite(P_POS), mel: palpite(P_MEL), ...salvo };
+  const g = { cons: palpite(P_CONS), mat: exato(P_MAT), data: palpite(P_DATA), nota: palpite(P_NOTA), aval: (() => { const i = exato(P_AVAL); return i >= 0 ? i : cab.findIndex(c => c && /avaliad|auditor|monitor(a)?\b/.test(norm(c)) && !/monitoria|tipo|modalidade/.test(norm(c))); })(), canal: palpite(P_CANAL), at: exato(P_AT), sup: palpite(P_SUP), pos: palpite(P_POS), mel: palpite(P_MEL), ...salvo };
   const sel = (id, rot, v, obr) => `<label class="campo"><span>${rot}${obr ? ' <i class="obr">*</i>' : ''}</span><select id="${id}"><option value="-1">—</option>${cab.map((c, i) => c ? `<option value="${i}"${i === v ? ' selected' : ''}>${esc(c)}</option>` : '').join('')}</select></label>`;
   f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('layers')}</span><div><h2>${esc(arq.nome)}</h2><p>Confira as colunas. As que não forem escolhidas aqui ficam guardadas como estão (critérios, comentários…).</p></div></header>
     ${arq.abas.length > 1 ? `<label class="campo"><span>Aba</span><select id="miAba">${arq.abas.map((a, i) => `<option value="${i}"${i === iAba ? ' selected' : ''}>${esc(a.nome)} (${a.linhas.filter(Boolean).length} linhas)</option>`).join('')}</select></label>` : ''}
