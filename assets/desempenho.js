@@ -349,22 +349,52 @@ const celula = (mt, v) => mt.tipo === 'quartil' ? tagQ(v) : mt.tipo === 'texto' 
 /* ---------------- dashboard do desempenho (guias de análise) ---------------- */
 const fmtTipo = (mt, v) => v === null || v === undefined ? '—' : valorTxt(mt, v);
 const curtoN = v => v >= 1e4 ? fmt(v / 1000, 0) + 'k' : v >= 1e3 ? fmt(v / 1000, 1) + 'k' : fmt(v, 0);
-const GUIAS = [['geral', 'Visão geral', 'chart'], ['consultores', 'Consultores', 'users'], ['supervisores', 'Supervisores', 'award'], ['organizacao', 'Organização', 'layers'], ['tempos', 'Tempos e pausas', 'clock'], ['evolucao', 'Evolução', 'activity'], ['tabela', 'Tabela', 'clipboard']];
+const GUIAS = [['geral', 'Visão geral', 'chart'], ['consultores', 'Consultores', 'users'], ['quartis', 'Quartis · Pit Stop', 'trophy'], ['supervisores', 'Supervisores', 'award'], ['organizacao', 'Organização', 'layers'], ['tempos', 'Tempos e pausas', 'clock'], ['evolucao', 'Evolução', 'activity'], ['tabela', 'Tabela', 'clipboard']];
 const mediaA = xs => { const v = xs.filter(x => x !== null && x !== undefined && isFinite(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
 const cardA = (ic, tit, sub, corpo, acoes = '') => `<article class="cartao"><header class="cab-card"><span class="icb">${G.ic(ic)}</span><div><h2>${tit}</h2><p>${sub}</p></div>${acoes ? `<div class="cab-acoes">${acoes}</div>` : ''}</header>${corpo}</article>`;
 const tituloN = s => String(s || '').toLowerCase().replace(/(^|\s)\S/g, x => x.toUpperCase()).replace(/\b(De|Da|Do|Dos|Das|E)\b/g, x => x.toLowerCase());
 const curtoNome = n => { const p = tituloN(n).split(' '); return p.length > 1 ? p[0] + ' ' + p[p.length - 1][0] + '.' : p[0]; };
 const mesesEntre = (a, b) => { if (!a) return null; const d1 = new Date(a), d2 = new Date(b); if (isNaN(d1)) return null; return Math.max(0, (d2.getFullYear() - d1.getFullYear()) * 12 + d2.getMonth() - d1.getMonth()); };
 
+const iesDe = t => { const x = norm(t || ''); return x.includes('uva') ? 'UVA' : x.includes('unijorge') || /\buj\b/.test(x) ? 'UJ' : (String(t || '').trim().toUpperCase() || '—'); };
+const ativoDes = d => !d.status || (/ativ/i.test(d.status) && !/inativ|deslig/i.test(d.status));
+const quartilPos = (r, n) => r <= n / 4 ? 1 : r <= n / 2 ? 2 : r <= 3 * n / 4 ? 3 : 4;
+const QMAP = new Map(); // quartis calculados (só em memória; não vão para o armazenamento)
+const qChave = d => (d.mes || '') + '|' + (d.mat || norm(d.nome));
+const GERAL_KS = ['abs', 'csat', 'qual', 'aceite', 'mat'];
+function quartisDef(M) {
+  return [['geral', 'Geral', null, 0, 'Geral'], ['qual', 'Qualidade', M('Qualidade', 'nota monitor'), 1, 'Qualidade'], ['abs', 'ABS', M('Ponto', 'abs'), -1, 'Ponto'], ['aceite', 'Aceite', M('Aceite', 'total'), 1, 'Aceite'],
+    ['csat', 'Pesquisa de satisfação', M('C-SAT', 'c-sat final'), 1, 'C-SAT', true], ['mat', 'Matrícula', M('Matrícula', 'total'), 1, 'Matrícula'],
+    ['insMed', 'Inscrição medicina', M('Medicina', 'inscricao medicina'), 1, 'Medicina', true], ['matMed', 'Matrícula medicina', M('Medicina', 'matricula medicina'), 1, 'Medicina', true]]
+    .filter(x => x[0] === 'geral' || x[2]).map(([k, rot, mt, dir, grupo, semZero]) => ({ k, rot, mt, dir, grupo, semZero: !!semZero }))
+    .filter((q, _, a) => q.k !== 'geral' || a.some(x => GERAL_KS.includes(x.k)));
+}
+const qkDe = m => { if (!m) return ''; if (m.qk) return m.qk; const g = m.grupo; if (g === 'Geral') return 'geral'; if (g === 'Ponto') return 'abs'; if (g === 'C-SAT') return 'csat'; if (g === 'Qualidade') return 'qual'; if (g === 'Aceite') return 'aceite'; if (g === 'Matrícula') return 'mat'; if (g === 'Medicina') return /inscri/.test(norm(m.ref || m.rotulo)) ? 'insMed' : 'matMed'; return ''; };
+function calcQuartis(dados, QDEF, iesTxt) {
+  QMAP.clear(); dados.forEach(d => QMAP.set(qChave(d), { q: {}, r: {}, ies: iesDe(iesTxt(d)) }));
+  const porIes = {}; dados.filter(ativoDes).forEach(d => { const k = QMAP.get(qChave(d)).ies; (porIes[k] = porIes[k] || []).push(d); });
+  Object.values(porIes).forEach(ls => {
+    const posDe = (xs, asc) => { const ord = xs.map(x => x.v).sort((a, b) => asc ? a - b : b - a), pos = new Map(); ord.forEach((v, i) => { if (!pos.has(v)) pos.set(v, i + 1); }); return pos; };
+    QDEF.filter(q => q.mt).forEach(q => {
+      const xs = ls.map(d => ({ d, v: V(d, q.mt) })).filter(x => x.v !== null && x.v !== undefined && isFinite(x.v) && (!q.semZero || x.v > 0));
+      const pos = posDe(xs, q.dir < 0);
+      xs.forEach(x => { const r = pos.get(x.v), o = QMAP.get(qChave(x.d)); o.r[q.k] = r; o.q[q.k] = quartilPos(r, xs.length); });
+    });
+    const ks = GERAL_KS.filter(k => QDEF.some(q => q.k === k)); if (!ks.length) return;
+    const n = ls.length, xs = ls.map(d => ({ d, v: ks.reduce((a, k) => a + (QMAP.get(qChave(d)).r[k] || n), 0) })), pos = posDe(xs, true);
+    xs.forEach(x => { QMAP.get(qChave(x.d)).q.geral = quartilPos(pos.get(x.v), n); });
+  });
+}
 function dashboardDes(ctx) {
   const { todas, linhas, mesesAsc, mesAnt, base } = ctx;
   const M = (g, s) => achar(todas, g, s);
   const ag = (mt, ls) => mt ? agregar(mt, ls, todas) : null;
   const ant = mesAnt ? base(mesAnt) : [];
   const serie = mt => mesesAsc.map(m => ag(mt, base(m)));
-  const qg = todas.find(m => m.tipo === 'quartil' && m.grupo === 'Geral');
-  const qCols = todas.filter(m => m.tipo === 'quartil' && m.grupo !== 'Geral');
-  const qn = (d, m) => { const k = String(V(d, m) || '').match(/[1-4]/); return k ? +k[0] : 0; };
+  let qg = todas.find(m => m.tipo === 'quartil' && m.grupo === 'Geral');
+  let qCols = todas.filter(m => m.tipo === 'quartil' && m.grupo !== 'Geral');
+  // quartil da base; se a base não trouxer, o calculado pela regra do Relatório Ranking
+  const qn = (d, m) => { const k = String(V(d, m) || '').match(/[1-4]/); if (k) return +k[0]; const qk = qkDe(m); const o = qk && QMAP.get(qChave(d)); return o ? o.q[qk] || 0 : 0; };
   const cTot = M('Chamadas', 'total'), aTot = M('Aceite', 'total'), mTot = M('Matrícula', 'total');
   const ader = M('Aderência', 'aderencia'), abs = M('Ponto', 'abs'), csat = M('C-SAT', 'c-sat final'), nmon = M('Qualidade', 'nota monitor'), efet = M('Chamadas', 'efetividade'), pausa = M('Pausa', 'tempo em pausa');
   const conv = ls => { const a = ag(aTot, ls), m = ag(mTot, ls); return a ? m / a : null; };
@@ -377,6 +407,15 @@ function dashboardDes(ctx) {
   const ocs = ler(KEY_OC, []) || [], ini12 = (() => { const d = new Date(mes + '-01'); d.setMonth(d.getMonth() - 11); return d.toISOString().slice(0, 10); })();
   const ocPor = {}; ocs.forEach(o => { const k = norm(o.nome); const x = ocPor[k] = ocPor[k] || { faltas: 0, atest: 0, medidas: 0 }; if ((o.data || '').startsWith(mes)) { if (o.tipo === 'Falta') x.faltas++; if (o.tipo === 'Atestado') x.atest += o.dias || 1; } if (o.data >= ini12 && (o.tipo === 'Advertência' || o.tipo === 'Suspensão')) x.medidas++; });
   const fimMes = mes + '-28';
+  /* Quartis (regra do Relatório Ranking - Gerencial): por IES, só ativos, RANK.EQ de cada indicador
+     (ABS crescente; NPS/C-SAT, nota do monitor, aceite e matrícula decrescentes) e Q1 ≤ n/4, Q2 ≤ n/2, Q3 ≤ 3n/4, Q4.
+     Quartil geral = posição da soma dos 5 ranks. */
+  const QDEF = quartisDef(M);
+  calcQuartis(D.dados.filter(d => d.fonte === est.fonte && d.mes === mes), QDEF, d => d.ies || (bdDe(d) || {}).ies || '');
+  if (QDEF.length) {
+    if (!qg) qg = { grupo: 'Geral', tipo: 'quartil', rotulo: 'Quartil geral', sub: 'Quartil geral', sOrig: 'QUARTIL GERAL', qk: 'geral', virtual: true };
+    QDEF.forEach(q => { if (!qCols.some(m => qkDe(m) === q.k)) qCols.push({ grupo: q.grupo, tipo: 'quartil', rotulo: q.rot + ' · Quartil', sub: 'Quartil', sOrig: 'QUARTIL', gOrig: q.rot.toUpperCase(), qk: q.k, virtual: true }); });
+  }
   const perfil = linhas.map(d => {
     const c = bdDe(d), o = ocPor[norm(d.nome)] || { faltas: 0, atest: 0, medidas: 0 }, nq = mediaA(monPor[norm(d.nome)] || []);
     const qs = qCols.map(m => qn(d, m)), q4 = qs.filter(x => x === 4).length, q1 = qs.filter(x => x === 1).length, qgv = qg ? qn(d, qg) : 0;
@@ -462,6 +501,38 @@ function dashboardDes(ctx) {
         document.getElementById('dbQord').onchange = e => { est.qord = e.target.value; render(); };
       }
     };
+  }
+
+  if (g === 'quartis') {
+    if (!est.qind || !QDEF.some(q => q.k === est.qind)) est.qind = 'geral';
+    const qi = QDEF.find(q => q.k === est.qind) || QDEF[0];
+    const colDe = k => k === 'geral' ? qg : qCols.find(m => qkDe(m) === k);
+    const qOf = (d, k = qi.k) => qn(d, colDe(k));
+    const vInd = d => qi.mt ? V(d, qi.mt) : null, fv = v => qi.mt ? fmtTipo(qi.mt, v) : '—';
+    const iesD = d => (QMAP.get(qChave(d)) || {}).ies || iesDe(d.ies);
+    const iesL = [...new Set(linhas.map(iesD))].sort(cmpTxt);
+    const calcUsado = QDEF.some(q => { const m = colDe(q.k); return m && m.virtual; }) || linhas.some(d => QDEF.some(q => { const m = colDe(q.k); return m && !m.virtual && !String(V(d, m) || '').match(/[1-4]/) && qn(d, m); }));
+    const cnt = ls => [1, 2, 3, 4].map(n => ls.filter(d => qOf(d) === n).length);
+    const barra = qs => `<div class="db-qbar">${qs.map((n, i) => n ? `<i class="q${i + 1}" style="flex:${n}" data-tip="Q${i + 1}: ${n}">${n}</i>` : '').join('')}</div>`;
+    const blocos = iesL.map(i => {
+      const ls = linhas.filter(d => iesD(d) === i), sups = [...new Set(ls.map(d => d.supervisor || '—'))].sort(cmpTxt);
+      const tot = cnt(ls), med = [1, 2, 3, 4].map(n => mediaA(ls.filter(d => qOf(d) === n).map(vInd)));
+      return `<tbody class="db-qies"><tr class="db-qies-cab"><th colspan="8">${esc(i)} · ${ls.length} consultores</th></tr>
+        ${sups.map(sp => { const xs = ls.filter(d => (d.supervisor || '—') === sp), c = cnt(xs), t = c.reduce((a, b) => a + b, 0); return `<tr><td><b>${esc(tituloN(sp))}</b></td>${c.map((n, k) => `<td class="dir"><span class="db-qn${k === 3 && n ? ' r' : ''}">${n || ''}</span></td>`).join('')}<td class="dir">${t}</td><td class="dir"><b>${t ? fmt((c[0] + c[1]) / t * 100, 0) + '%' : '—'}</b></td><td style="min-width:120px">${barra(c)}</td></tr>`; }).join('')}
+        <tr class="des-tot"><td><b>Total ${esc(i)}</b></td>${tot.map(n => `<td class="dir"><b>${n}</b></td>`).join('')}<td class="dir"><b>${tot.reduce((a, b) => a + b, 0)}</b></td><td class="dir"><b>${tot.reduce((a, b) => a + b, 0) ? fmt((tot[0] + tot[1]) / tot.reduce((a, b) => a + b, 0) * 100, 0) + '%' : '—'}</b></td><td>${barra(tot)}</td></tr>
+        ${qi.mt ? `<tr class="db-qmed"><td>Média ${esc(qi.rot.toLowerCase())}</td>${med.map(v => `<td class="dir">${v === null ? '—' : fv(v)}</td>`).join('')}<td colspan="3"></td></tr>` : ''}</tbody>`;
+    }).join('');
+    const lista_ = (n, tit, cls) => { const xs = linhas.filter(d => qOf(d) === n).sort((a, b) => qi.mt ? ((vInd(a) ?? 0) - (vInd(b) ?? 0)) * (qi.dir < 0 ? -1 : 1) * (n === 4 ? 1 : -1) : cmpTxt(a.nome, b.nome));
+      return cardA(n === 4 ? 'alert' : 'trophy', `${tit} · ${esc(qi.rot)}`, `${xs.length} consultor(es) em Q${n}${n === 4 ? ' · prioridade de acompanhamento' : ' · referência para a operação'}`, xs.length ? `<div class="tabela-wrap db-pit ${cls}"><table class="tabela"><thead><tr><th>ID</th><th>Consultor</th><th>Supervisor</th><th>IES</th><th class="dir">Resultado</th></tr></thead><tbody>${xs.map(d => `<tr><td>${esc(d.mat || '—')}</td><td data-nome="${esc(d.nome)}"><b>${esc(tituloN(d.nome))}</b></td><td>${esc(tituloN(d.supervisor))}</td><td>${esc(iesD(d))}</td><td class="dir"><b>${qi.mt ? fv(vInd(d)) : '<span class="qt q' + n + '">Q' + n + '</span>'}</b></td></tr>`).join('')}</tbody></table></div>` : '<p class="dica">Ninguém neste quartil.</p>'); };
+    const resumoInd = QDEF.map(q => { const cc = [1, 2, 3, 4].map(n => linhas.filter(d => qOf(d, q.k) === n).length); return `<button type="button" class="db-qind${q.k === qi.k ? ' on' : ''}" data-qind="${q.k}"><b>${esc(q.rot)}</b>${barra(cc)}<small><span class="qt q1">Q1</span> ${cc[0]} · <span class="qt q4">Q4</span> ${cc[3]}</small></button>`; }).join('');
+    const COLI = [[aTot, 'Aceite', 1], [mTot, 'Matrícula', 1], [cTot, 'Chamadas', 1], [efet, 'Efetividade'], [abs, 'ABS'], [csat, 'C-SAT'], [nmon, 'Nota monitor'], [ader, 'Aderência']].filter(c => c[0]);
+    corpo = `
+    <div class="db-qinds">${resumoInd}</div>
+    ${calcUsado ? `<p class="dica">Onde a base veio sem quartil, o site calcula pela regra do Relatório Ranking: por IES, só ativos, posição (RANK) do indicador · Q1 até 25% · Q2 até 50% · Q3 até 75% · Q4 o resto. Quartil geral = posição da soma dos ranks de ABS, pesquisa de satisfação, nota do monitor, aceite e matrícula.</p>` : ''}
+    ${cardA('layers', `Quartil por supervisor · ${esc(qi.rot)}`, 'Quantidade de consultores em cada quartil, por IES · Q1+Q2 = metade de cima da IES' + (qi.mt ? ' · última linha = média do indicador em cada quartil' : ''), `<div class="tabela-wrap"><table class="tabela db-qsup"><thead><tr><th>Supervisor</th><th class="dir"><span class="qt q1">Q1</span></th><th class="dir"><span class="qt q2">Q2</span></th><th class="dir"><span class="qt q3">Q3</span></th><th class="dir"><span class="qt q4">Q4</span></th><th class="dir">Total</th><th class="dir">Q1+Q2</th><th>Distribuição</th></tr></thead>${blocos}</table></div>`)}
+    <div class="pn-grade">${lista_(4, 'Pit Stop', 'r')}${lista_(1, 'Success', 'b')}</div>
+    ${cardA('award', 'Performance por IES', 'Totais por consultor (aceite, matrícula, chamadas) e médias da IES', `<div class="tabela-wrap"><table class="tabela"><thead><tr><th>IES</th><th class="dir">Consultores</th>${COLI.map(c => `<th class="dir">${c[1]}${c[2] ? ' /cons.' : ''}</th>`).join('')}<th>Quartil geral</th></tr></thead><tbody>${iesL.concat(iesL.length > 1 ? ['__op'] : []).map(i => { const ls = i === '__op' ? linhas : linhas.filter(d => iesD(d) === i); return `<tr${i === '__op' ? ' class="des-tot"' : ''}><td><b>${i === '__op' ? 'Operação' : esc(i)}</b></td><td class="dir">${ls.length}</td>${COLI.map(([mt, , pc]) => { const v = ag(mt, ls); return `<td class="dir">${v === null ? '—' : pc ? fmt(v / (ls.length || 1), 1) : fmtTipo(mt, v)}</td>`; }).join('')}<td style="min-width:100px">${barra([1, 2, 3, 4].map(n => ls.filter(d => qOf(d, 'geral') === n).length))}</td></tr>`; }).join('')}</tbody></table></div>`)}`;
+    depois = () => { raiz.querySelectorAll('[data-qind]').forEach(x => x.onclick = () => { est.qind = x.dataset.qind; render(); }); raiz.querySelectorAll('.db-pit [data-nome]').forEach(x => x.onclick = () => A.abrirFicha && A.abrirFicha(x.dataset.nome)); };
   }
 
   if (g === 'supervisores') {
