@@ -270,10 +270,13 @@ function abrirImportMon() {
   f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('upload')}</span><div><h2>Importar monitorias</h2><p>Planilha (.xlsx) ou CSV da qualidade · uma linha por monitoria</p></div></header>
     <div class="grade g3">
       <label class="campo c2"><span>Arquivo <i class="obr">*</i></span><input type="file" id="miArq" accept=".xlsx,.xlsm,.csv,.txt"></label>
-      <label class="campo"><span>Mês (se não houver coluna de data)</span><input type="month" id="miMes" value="${hoje().slice(0, 7)}"></label>
+      <div class="campo"><span>O que ler</span><div class="seg mi-modo" id="miModo"><button type="button" data-v="tudo" class="on">Base toda</button><button type="button" data-v="mes">Só um mês</button></div></div>
+      <label class="campo"><span id="miMesRot">Mês (para linhas sem data)</span><input type="month" id="miMes" value="${hoje().slice(0, 7)}"></label>
     </div>
     <div class="dlg-rod"><small class="msg" id="miMsg"></small><span><button class="btn btn-sec" value="cancelar" formnovalidate>Cancelar</button> <button type="button" class="btn btn-pri" id="miLer">${G.ic('arrow-right')}Continuar</button></span></div>`;
   G.icones(f); dlgImp.showModal();
+  let modo = 'tudo';
+  f.querySelectorAll('#miModo button').forEach(bt => bt.onclick = () => { modo = bt.dataset.v; f.querySelectorAll('#miModo button').forEach(x => x.classList.toggle('on', x === bt)); document.getElementById('miMesRot').textContent = modo === 'mes' ? 'Mês que quero ver' : 'Mês (para linhas sem data)'; });
   document.getElementById('miLer').onclick = async () => {
     const file = document.getElementById('miArq').files[0], msg = document.getElementById('miMsg');
     if (!file) { msg.textContent = 'Escolha o arquivo.'; msg.className = 'msg erro'; return; }
@@ -286,7 +289,7 @@ function abrirImportMon() {
       const abas = (/\.csv$|\.txt$/i.test(file.name) ? [{ nome: file.name, linhas: A.parseCSV(await file.text()) }] : await XLSXLeitor.lerPlanilha(await file.arrayBuffer(), { progresso: prog, escolher: previas => { const boas = previas.filter(a => a.linhas.filter(Boolean).length > 1).sort((a, b) => pont(b) - pont(a)); return boas.length ? [boas[0].nome] : previas.map(a => a.nome); } })).filter(a => a.linhas && a.linhas.filter(Boolean).length > 1);
       if (!abas.length) throw new Error('O arquivo não tem linhas.');
       abas.sort((a, b) => pont(b) - pont(a));
-      mapear({ nome: file.name, abas, mes: document.getElementById('miMes').value || hoje().slice(0, 7) }, 0);
+      mapear({ nome: file.name, abas, mes: document.getElementById('miMes').value || hoje().slice(0, 7), soMes: modo === 'mes' }, 0);
     } catch (e) { msg.textContent = 'Não consegui ler: ' + e.message; msg.className = 'msg erro'; }
   };
 }
@@ -357,6 +360,7 @@ function processarMon(arq, aba, iCab, cab, m) {
     const c = (matTxt && achar_(matTxt)) || (nomeTxt && achar_(nomeTxt)) || null;
     let data = m.data >= 0 ? dataISO(l[m.data]) : '';
     if (!data) { semData++; data = arq.mes + '-01'; }
+    if (arq.soMes && data.slice(0, 7) !== arq.mes) continue;
     let nota = null;
     if (m.nota >= 0) { const raw = l[m.nota]; const n = typeof raw === 'number' ? raw : A.num(String(raw ?? '').replace('%', '')); if (n !== null && isFinite(n)) nota = Math.round(n * escala * 10) / 10; }
     const nome = c ? c.nome : nomeTxt.toUpperCase();

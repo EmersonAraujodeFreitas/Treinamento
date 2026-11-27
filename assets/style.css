@@ -1331,3 +1331,33 @@ html.menu-recolhido .btn-recolher svg{transform:rotate(180deg)}
 .xl-prog{display:inline-block;width:140px;height:8px;border-radius:6px;background:var(--sup-3);overflow:hidden;vertical-align:middle;margin-right:8px}
 .xl-prog i{display:block;height:100%;background:linear-gradient(90deg,var(--marca),#2a78d6);border-radius:6px;transition:width .2s}
 .mi-meses{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;border:1px solid var(--borda);border-radius:10px;padding:10px 12px;margin:8px 0}.mi-meses b{width:100%;font-size:12.5px}.mi-meses small{color:var(--tinta-3)}
+.mi-modo button{min-width:96px}
+/* mapa de quartis */
+.db-qmapa{max-height:560px;overflow:auto;border:1px solid var(--borda);border-radius:12px}
+.db-qmapa table{border-collapse:separate;border-spacing:0;width:100%;font-size:12px}
+.db-qmapa th{position:sticky;top:0;z-index:2;background:var(--superficie);padding:6px 4px;border-bottom:1px solid var(--borda);vertical-align:bottom;font-size:10.5px;color:var(--tinta-3);font-weight:800;letter-spacing:.3px}
+.db-qmapa th span{display:block;max-width:86px;margin:auto;line-height:1.2;white-space:normal;text-align:center}
+.db-qmapa th:first-child,.db-qmapa td:first-child{position:sticky;left:0;z-index:1;background:var(--superficie);text-align:left;min-width:230px;padding:6px 10px}
+.db-qmapa th:first-child{z-index:3}
+.db-qmapa tr.db-qres td{position:sticky;top:44px;z-index:2;background:var(--sup-2);font-weight:800;font-size:11px;color:var(--ruim);text-align:center;border-bottom:1px solid var(--borda)}
+.db-qmapa tr.db-qres td:first-child{color:var(--tinta-3);z-index:3}
+.db-qmapa td{padding:3px 3px;text-align:center;border-bottom:1px solid color-mix(in srgb,var(--borda) 60%,transparent)}
+.db-qmapa td:first-child{cursor:pointer}
+.db-qmapa td:first-child b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+.db-qmapa td:first-child small{font-size:10.5px;color:var(--tinta-3)}
+.db-qmapa tbody tr:hover td{background:var(--marca-clara)}
+.qc{display:inline-grid;place-items:center;width:38px;height:24px;border-radius:6px;font-style:normal;font-size:11px;font-weight:800;color:#fff;background:#8a96a8}
+.qc.q0{background:transparent;color:var(--tinta-3)}
+.qc.q1{background:#0f9d58}.qc.q2{background:#8bc34a}.qc.q3{background:#f2a900}.qc.q4{background:#d32f2f}
+.db-qn{font-weight:800;color:#0f9d58}.db-qn.r{color:#d32f2f}
+/* todos os blocos */
+.db-blocos{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.db-bloco{border:1px solid var(--borda);border-radius:14px;padding:12px 14px;background:var(--sup-2);display:flex;flex-direction:column;gap:8px}
+.db-bloco h3{margin:0;font-size:12px;letter-spacing:.6px;color:var(--marca);text-transform:uppercase}
+.db-bloco ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
+.db-bloco li{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;font-size:12.5px}
+.db-bloco li span{color:var(--tinta-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.db-bloco li b{font-variant-numeric:tabular-nums;color:var(--titulo,var(--marca-escura))}
+.db-bloco li .db-delta{font-size:10.5px;padding:1px 6px}
+.db-bq small{display:block;font-size:10.5px;color:var(--tinta-3);font-weight:700;margin-bottom:3px}
+[data-tema="escuro"] .db-bloco h3{color:#8fb8ea}
