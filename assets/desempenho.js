@@ -59,7 +59,7 @@ A.opDesempenho = opDaLinha;
 async function lerArquivo(f, progresso) {
   if (/\.csv$|\.txt$/i.test(f.name)) return [{ nome: f.name, linhas: A.parseCSV(await f.text()) }];
   // se uma aba for o relatório de indicadores, lê só ela
-  return XLSXLeitor.lerPlanilha(await f.arrayBuffer(), { progresso, escolher: previas => { const d = acharConsolidado(previas); return d ? [previas[d.ia].nome] : previas.map(a => a.nome); } });
+  return XLSXLeitor.lerPlanilha(await f.arrayBuffer(), { progresso, escolher: previas => { const ds = acharConsolidados(previas); if (ds.length) return ds.map(d => previas[d.ia].nome); const d = null; return d ? [previas[d.ia].nome] : previas.map(a => a.nome); } });
 }
 function cabecalhoDe(linhas) {
   for (let i = 0; i < Math.min(30, linhas.length); i++) {
@@ -124,6 +124,9 @@ const GRUPOS = [['view geral', 'Geral'], ['tabulacao', 'Pós-chamada'], ['pos ch
 const ACR = new Set(['GP', 'EAD', 'GSP', 'PEAD', 'ABS', 'TMA', 'C-SAT', 'CSAT', 'NPS', 'ID', 'IES', 'UVA', 'UJ', 'EAD|GSP']);
 const grupoNome = g => { const n = norm(g); if (!n) return ''; const a = GRUPOS.find(([k]) => n.includes(k)); return a ? a[1] : g.charAt(0).toUpperCase() + g.slice(1).toLowerCase(); };
 const subNome = s => String(s).replace(/\s+/g, ' ').trim().split(' ').map((w, i) => { const u = w.toUpperCase(); const keep = ACR.has(u) || /^[A-Z]{2,4}(\|[A-Z]{2,4})+$/.test(w); const t = keep ? u : w.toLowerCase(); return i === 0 && !keep ? t.charAt(0).toUpperCase() + t.slice(1) : t; }).join(' ');
+function acharConsolidados(abas) { const out = []; abas.forEach((a, ia) => { const d = acharConsolidado([a]); if (d) out.push({ ia, iCab: d.iCab }); }); return out; }
+// aba "Performance Agentes - ADM OUT" → Admissão / outubro; "… SERV OUT" → Serviços
+const opDaAba = t => { const x = ' ' + norm(t).replace(/[^a-z0-9]+/g, ' ') + ' '; return / adm |admiss|capta/.test(x) ? 'Admissão' : / serv |servic|perman/.test(x) ? 'Serviços' : ''; };
 function acharConsolidado(abas) {
   for (let ia = 0; ia < abas.length; ia++) {
     const ls = abas[ia].linhas;
@@ -173,7 +176,7 @@ const MODELO_BASE = [
   ['Pós-chamada', 'TEMPO DE TABULAÇÃO - PÓS CHAMADA', [['total', 'tempoMedio', -1], ...OF.filter(x => x !== 'botmaker').map(x => [x, 'tempoMedio', -1])]],
   ['Carga horária', 'CARGA HORÁRIA', [['media', 'tempoMedio', 1], ['total', 'tempo', 1], ['esperado', 'tempo', 0], ['dias esperados', 'somar', 0]]],
   ['Ponto', 'FORPONTO', [['abs', 'pct', -1], ['quartil', 'quartil', -1]]],
-  ['C-SAT', 'PESQUISA DE SATISFAÇÃO', [['c-sat envio', 'pct', 1], ['c-sat nota', 'pct', 1], ['c-sat final', 'pct', 1], ['quartil', 'quartil', -1]]],
+  ['C-SAT', 'PESQUISA DE SATISFAÇÃO', [['c-sat envio', 'pct', 1], ['c-sat nota', 'pct', 1], ['c-sat bot', 'pct', 1], ['c-sat final', 'pct', 1], ['quartil', 'quartil', -1]]],
   ['Qualidade', 'QUALIDADE', [['nota supervisor', 'pct', 1], ['nota monitor', 'pct', 1], ['quartil', 'quartil', -1]]],
   ['Aceite', 'ACEITE', [['total', 'somar', 1], ['quartil', 'quartil', -1], ['gp', 'somar', 1], ['ead', 'somar', 1], ['gsp', 'somar', 1]]],
   ['Matrícula', 'MATRÍCULA', [['total', 'somar', 1], ['quartil', 'quartil', -1], ['gp', 'somar', 1], ['ead', 'somar', 1], ['gsp', 'somar', 1], ['pead', 'somar', 1]]],
@@ -181,11 +184,15 @@ const MODELO_BASE = [
   ['HubSpot', 'HUBSPOT', [['criacao de lead', 'pct', 1]]],
   ['Medicina', 'MEDICINA', [['inscricao medicina', 'somar', 1], ['quartil', 'quartil', -1], ['matricula medicina', 'somar', 1], ['quartil', 'quartil', -1]]],
   ['Aderência', 'ADERÊNCIA', [['aderencia', 'pct', 1], ['quartil', 'quartil', -1]]],
-  ['Reingresso', 'REINGRESSO', [['matricula gp', 'somar', 1], ['matricula ead|gsp', 'somar', 1]]]
+  ['Reingresso', 'REINGRESSO', [['matricula gp', 'somar', 1], ['matricula ead|gsp', 'somar', 1]]],
+  // relatório de Serviços (Permanência)
+  ['Aceite reingresso', 'ACEITES REINGRESSO', [['aceites reingresso - gp', 'somar', 1], ['aceites reingresso - ead', 'somar', 1], ['aceites reingresso - gsp', 'somar', 1], ['aceites reingresso - total', 'somar', 1], ['quartil', 'quartil', -1]]],
+  ['Matrícula reingresso', 'MATRÍCULA REINGRESSO', [['matricula reingresso - gp', 'somar', 1], ['matricula reingresso - ead', 'somar', 1], ['matricula reingresso - gsp', 'somar', 1], ['matricula reingresso - total', 'somar', 1], ['quartil', 'quartil', -1]]],
+  ['Retenção', 'RETENÇÃO', [['revertidos', 'somar', 1], ['quartil', 'quartil', -1], ['cancelados', 'somar', -1], ['quartil', 'quartil', -1]]]
 ];
 const SEQ = []; MODELO_BASE.forEach(([g, t, cs]) => cs.forEach(([s, tipo, sentido]) => SEQ.push({ g, t, s, tipo, sentido })));
 // nome da coluna sem o sufixo que o Excel/Power Pivot põe nas repetidas (BOTMAKER_5, QUARTIL_16, INBOUND2…)
-const limparCab = t => String(t ?? '').replace(/\s+/g, ' ').trim().replace(/[_ ]\d+$/, '').replace(/(?<=[A-Za-zÀ-ú])\d+$/, '').trim();
+const limparCab = t => String(t ?? '').replace(/\s+/g, ' ').trim().replace(/[_ .]\d+$/, '').replace(/(?<=[A-Za-zÀ-ú])\d+$/, '').trim();
 const chaveCab = t => norm(limparCab(t)).replace(/ñ/g, 'n').replace(/\s*\|\s*/g, '|').replace(/[^a-z0-9|% -]/g, ' ').replace(/\s+/g, ' ').trim();
 function lerConsolidado(aba, iCab) {
   const cab = aba.linhas[iCab] || [];
@@ -205,6 +212,8 @@ function lerConsolidado(aba, iCab) {
     if (gRaw) g = gRaw;
     if (!sRaw) continue;
     const sOrig = limparCab(sRaw), sk = chaveCab(sRaw);
+    // colunas sem nenhum valor (blocos repetidos vazios, "Column65"…) não viram indicador
+    if (mets.length && !aba.linhas.slice(iCab + 1).some(l => l && l[j] !== null && l[j] !== undefined && String(l[j]).trim() !== '')) continue;
     if (!mets.length && ID_COLS.includes(sk) && ixId[sk] === undefined) { ixId[sk] = j; continue; }
     // acha a coluna no modelo conhecido (pelo grupo da planilha, se houver, ou pela ordem)
     let tpl = null;
@@ -254,9 +263,10 @@ function processarConsolidado(aba, iCab, info, mes) {
 /* modelo do consolidado: a lista de indicadores só cresce (índices estáveis para os meses antigos) */
 /* modelo do consolidado: as colunas do arquivo novo, na ordem dele, mais as antigas que ainda têm dados em outros meses.
    Os meses já guardados são regravados na nova ordem. */
-function remontarModelo(fonte, mets, mesNovo) {
+function remontarModelo(fonte, mets, substitui) {
+  if (typeof substitui === 'string') { const m0 = substitui; substitui = d => d.mes === m0; }
   const velho = D.modelos[fonte] && D.modelos[fonte].consolidado ? comIndice(D.modelos[fonte]) : [];
-  const outros = D.dados.filter(d => d.fonte === fonte && d.mes !== mesNovo);
+  const outros = D.dados.filter(d => d.fonte === fonte && !substitui(d));
   const obj = d => { const o = {}; velho.forEach(m => { const v = V(d, m); if (v !== null && v !== undefined) o[m.rotulo] = v; }); return o; };
   const antigos = outros.map(d => ({ d, o: obj(d) }));
   const novos = mets.map(m => ({ rotulo: m.rotulo, grupo: m.grupo, sub: m.sub, gOrig: m.gOrig, sOrig: m.sOrig, tipo: m.tipo, sentido: m.sentido }));
@@ -266,56 +276,61 @@ function remontarModelo(fonte, mets, mesNovo) {
   antigos.forEach(({ d, o }) => { d.v = cod(o); delete d.m; });
   return { md, cod };
 }
-function passoConsolidado(det) {
-  const f = document.getElementById('desForm'), aba = arq.abas[det.ia] || arq.abas[0];
-  const info = lerConsolidado(aba, det.iCab);
-  const fonte = arq.fonte || FONTE_PADRAO;
-  const porGrupo = {}; info.mets.forEach(m => (porGrupo[m.grupo] = porGrupo[m.grupo] || []).push(m));
+function passoConsolidado(dets) {
+  // um arquivo pode trazer várias abas: ADM (Admissão) e SERV (Serviços), de um ou mais meses
+  if (!Array.isArray(dets)) dets = [dets];
+  const f = document.getElementById('desForm'), fonte = arq.fonte || FONTE_PADRAO;
+  const partes = dets.map(det => { const aba = arq.abas[det.ia] || arq.abas[0], info = lerConsolidado(aba, det.iCab); return { aba, det, info, op: opDaAba(aba.nome) || opNorm(arq.nome), mes: mesDoArquivo(aba.nome) || arq.mes }; });
   const TT = { tempo: 'tempo', tempoMedio: 'tempo', pct: '%', quartil: 'quartil', texto: 'texto', somar: 'nº' };
+  const lerUI = () => partes.forEach((p, i) => { const o = document.getElementById('dsOp' + i), m = document.getElementById('dsMes' + i); if (o) p.op = o.value; if (m && m.value) p.mes = m.value; });
+  const processar = () => partes.map(p => { p.info.op = p.op; const r = processarConsolidado(p.aba, p.det.iCab, p.info, p.mes); return { ...p, r }; });
   const desenhar = () => {
-    const mes = document.getElementById('dsMesC') ? document.getElementById('dsMesC').value : arq.mes;
-    info.op = document.getElementById('dsOpC') ? document.getElementById('dsOpC').value : opNorm(arq.nome);
-    const r = processarConsolidado(aba, det.iCab, info, mes);
-    const ja = D.dados.some(d => d.fonte === fonte && d.mes === mes && (!info.op || d.op === info.op));
-    document.getElementById('dsResumo').innerHTML = `<div class="an-chips"><span><small>Consultores no arquivo</small><b>${r.dados.length}</b></span><span><small>Encontrados no BD</small><b>${r.dados.length - r.fora.length}</b></span><span><small>Fora do BD</small><b>${r.fora.length}</b></span><span><small>Indicadores</small><b>${info.mets.length}</b></span><span><small>Reconhecidos no modelo</small><b>${info.reconhecidas}</b></span></div>${info.reconhecidas < info.mets.length ? `<p class="aviso-fluxo">${info.mets.length - info.reconhecidas} coluna(s) não batem com o modelo da base e ficam no bloco OUTROS.</p>` : ''}
-      ${r.fora.length ? `<details class="do-trein"><summary>${G.ic('alert', '')}Não estão no BD atual (${r.fora.length})</summary><p class="dica">Entram mesmo assim, com o nome e o supervisor do relatório (normalmente são desligados ou matrícula diferente).</p><ul class="aps-lidos">${r.fora.slice(0, 80).map(n => `<li>${esc(n)}</li>`).join('')}</ul></details>` : ''}
-      <p class="dica">${ja ? `<b>${mesTxt(mes)}${info.op ? ' · ' + info.op : ''} já foi importado:</b> os dados ${info.op ? 'desta operação neste mês' : 'deste mês'} serão substituídos por estes.` : `Os dados ficam guardados como <b>${mesTxt(mes)}</b>.`}</p>`;
+    lerUI(); const rs = processar();
+    const tot = rs.reduce((a, x) => a + x.r.dados.length, 0), fora = rs.reduce((a, x) => a + x.r.fora.length, 0);
+    const reconh = rs.reduce((a, x) => a + x.info.reconhecidas, 0), mets = rs.reduce((a, x) => a + x.info.mets.length, 0);
+    const ja = rs.filter(x => D.dados.some(d => d.fonte === fonte && d.mes === x.mes && (!x.op || d.op === x.op)));
+    document.getElementById('dsResumo').innerHTML = `<div class="an-chips"><span><small>Abas</small><b>${rs.length}</b></span><span><small>Consultores</small><b>${tot}</b></span><span><small>Encontrados no BD</small><b>${tot - fora}</b></span><span><small>Fora do BD</small><b>${fora}</b></span><span><small>Indicadores reconhecidos</small><b>${reconh} de ${mets}</b></span></div>
+      ${fora ? `<details class="do-trein"><summary>${G.ic('alert', '')}Não estão no BD atual (${fora})</summary><p class="dica">Entram mesmo assim, com o nome e o supervisor do relatório.</p><ul class="aps-lidos">${rs.flatMap(x => x.r.fora).slice(0, 80).map(n => `<li>${esc(n)}</li>`).join('')}</ul></details>` : ''}
+      <p class="dica">${ja.length ? `<b>Já importado:</b> ${ja.map(x => `${x.op || 'consolidado'} ${mesTxt(x.mes)}`).join(', ')} — será substituído por este arquivo. ` : ''}Cada aba substitui só a sua operação no seu mês; a outra operação continua como está.</p>`;
     G.icones(document.getElementById('dsResumo'));
-    document.getElementById('dsSalvarC').disabled = !r.dados.length;
-    return r;
+    rs.forEach((x, i) => { const el = document.getElementById('dsN' + i); if (el) el.textContent = x.r.dados.length; });
+    document.getElementById('dsSalvarC').disabled = !tot;
+    return rs;
   };
-  f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('check')}</span><div><h2>Relatório de indicadores reconhecido</h2><p>${esc(arq.nome)} · aba ${esc(aba.nome)} · uma linha por consultor</p></div></header>
-    <div class="grade g3">
-      <label class="campo"><span>Nome do relatório</span><input id="dsFonteC" value="${esc(fonte)}"></label>
-      <label class="campo"><span>Operação do relatório</span><select id="dsOpC"><option value="">Pelo BD (cada consultor na sua operação)</option>${['Admissão', 'Serviços'].map(o => `<option${opNorm(arq.nome) === o ? ' selected' : ''}>${o}</option>`).join('')}</select><small class="dica">Admissão e Serviços podem ser importados no mesmo mês: um não apaga o outro.</small></label>
-      <label class="campo"><span>Mês dos dados <i class="obr">*</i></span><input type="month" id="dsMesC" value="${arq.mes}"><small class="dica">${arq.mesDoNome ? 'Lido do nome do arquivo.' : 'O nome do arquivo não tem o mês: confira.'}</small></label>
-    </div>
+  const porGrupo = {}; partes.forEach(p => p.info.mets.forEach(m => { const g = porGrupo[m.grupo] = porGrupo[m.grupo] || new Map(); if (!g.has(m.rotulo)) g.set(m.rotulo, m); }));
+  f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('check')}</span><div><h2>Relatório de indicadores reconhecido</h2><p>${esc(arq.nome)} · ${partes.length} aba(s) · uma linha por consultor</p></div></header>
+    <label class="campo" style="max-width:360px"><span>Nome do relatório</span><input id="dsFonteC" value="${esc(fonte)}"></label>
+    <div class="tabela-wrap"><table class="tabela ds-abas"><thead><tr><th>Aba</th><th>Operação</th><th>Mês dos dados</th><th class="dir">Consultores</th></tr></thead><tbody>
+      ${partes.map((p, i) => `<tr><td><b>${esc(p.aba.nome.trim())}</b></td><td><select id="dsOp${i}"><option value="">Pelo BD</option>${['Admissão', 'Serviços'].map(o => `<option${p.op === o ? ' selected' : ''}>${o}</option>`).join('')}</select></td><td><input type="month" id="dsMes${i}" value="${p.mes}"></td><td class="dir" id="dsN${i}"></td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="dica">Operação e mês vêm do nome de cada aba (ADM/SERV e o mês, ex.: OUT = outubro) ou do nome do arquivo. Confira antes de salvar.</p>
     <div id="dsResumo"></div>
-    <div class="ds-grupos">${Object.entries(porGrupo).map(([g, ms]) => `<div><b>${esc(ms[0].gOrig || g)}</b><span>${ms.map(m => `<small title="${esc(m.rotulo)}">${esc(m.sOrig || m.sub)} <i>${TT[m.tipo] || ''}</i></small>`).join('')}</span></div>`).join('')}</div>
+    <div class="ds-grupos">${Object.entries(porGrupo).map(([g, ms]) => { const l = [...ms.values()]; return `<div><b>${esc(l[0].gOrig || g)}</b><span>${l.map(m => `<small title="${esc(m.rotulo)}">${esc(m.sOrig || m.sub)} <i>${TT[m.tipo] || ''}</i></small>`).join('')}</span></div>`; }).join('')}</div>
     <div class="dlg-rod"><small class="msg" id="dsMsg"></small><span><button type="button" class="btn btn-sec" id="dsVoltar">Voltar</button> <button type="button" class="btn btn-pri" id="dsSalvarC">${G.ic('check')}Salvar</button></span></div>`;
   G.icones(f);
-  document.getElementById('dsMesC').onchange = desenhar; document.getElementById('dsOpC').onchange = desenhar;
+  partes.forEach((_, i) => { document.getElementById('dsOp' + i).onchange = desenhar; document.getElementById('dsMes' + i).onchange = desenhar; });
   document.getElementById('dsVoltar').onclick = passo1;
   desenhar();
   document.getElementById('dsSalvarC').onclick = () => {
-    const mes = document.getElementById('dsMesC').value, nomeF = document.getElementById('dsFonteC').value.trim() || FONTE_PADRAO, msg = document.getElementById('dsMsg');
-    info.op = document.getElementById('dsOpC').value;
-    if (!mes) { msg.textContent = 'Informe o mês dos dados.'; msg.className = 'msg erro'; return; }
-    const r = processarConsolidado(aba, det.iCab, info, mes);
+    const nomeF = document.getElementById('dsFonteC').value.trim() || FONTE_PADRAO, msg = document.getElementById('dsMsg');
+    lerUI(); if (partes.some(p => !p.mes)) { msg.textContent = 'Informe o mês de cada aba.'; msg.className = 'msg erro'; return; }
+    const rs = processar();
     D = Object.assign(vazio(), ler(KEY, {}) || {});
-    const { md, cod } = remontarModelo(nomeF, info.mets, mes);
+    // indicadores de todas as abas (Serviços tem reingresso e retenção; Admissão tem medicina)
+    const uniao = [], vistos = new Set(); rs.forEach(x => x.info.mets.forEach(m => { if (!vistos.has(m.rotulo)) { vistos.add(m.rotulo); uniao.push(m); } }));
+    const pk = d => d.mat || norm(d.nome);
+    const subst = rs.map(x => ({ mes: x.mes, op: x.op, chaves: new Set(x.r.dados.map(pk)) }));
+    const substitui = d => subst.some(x => d.mes === x.mes && (!x.op || d.op === x.op || x.chaves.has(pk(d))));
+    const { md, cod } = remontarModelo(nomeF, uniao, substitui);
     D.modelos[nomeF] = md;
-    // valores guardados em lista na ordem dos indicadores do modelo (bem mais leve)
-    const novos = r.dados.map(d => ({ ...d, fonte: nomeF, v: cod(d.v) }));
-    // com a operação escolhida, só ela é substituída (Admissão e Serviços convivem no mesmo mês)
-    const chaves = new Set(novos.map(d => d.mat || norm(d.nome)));
-    D.dados = D.dados.filter(d => !(d.fonte === nomeF && d.mes === mes && (!info.op || d.op === info.op || chaves.has(d.mat || norm(d.nome))))).concat(novos);
-    // guarda 12 meses de cada relatório consolidado (o arquivo fica leve para sincronizar)
+    const novos = rs.flatMap(x => x.r.dados.map(d => ({ ...d, fonte: nomeF, v: cod(d.v) })));
+    D.dados = D.dados.filter(d => !(d.fonte === nomeF && substitui(d))).concat(novos);
     const mesesF = [...new Set(D.dados.filter(d => d.fonte === nomeF).map(d => d.mes))].sort().reverse();
     if (mesesF.length > 12) { const corte = mesesF[11]; D.dados = D.dados.filter(d => d.fonte !== nomeF || d.mes >= corte); }
-    D.importacoes = [{ fonte: nomeF, arquivo: arq.nome, em: new Date().toISOString(), meses: [mes], linhas: r.total, casados: r.dados.length - r.fora.length, naoAchados: r.fora.length }, ...(D.importacoes || [])].slice(0, 60);
-    salvar(); dlg.close(); est.fonte = nomeF; est.mes = mes; est.grupo = 'Dashboard'; render();
-    toast(`${nomeF}: ${r.dados.length} consultor(es) em ${mesTxt(mes)}`);
+    const meses = [...new Set(rs.map(x => x.mes))].sort();
+    D.importacoes = [{ fonte: nomeF, arquivo: arq.nome, em: new Date().toISOString(), meses, linhas: rs.reduce((a, x) => a + x.r.total, 0), casados: novos.filter(d => !d.foraBD).length, naoAchados: novos.filter(d => d.foraBD).length }, ...(D.importacoes || [])].slice(0, 60);
+    salvar(); dlg.close(); est.fonte = nomeF; est.mes = meses[meses.length - 1]; est.grupo = 'Dashboard'; render();
+    toast(`${nomeF}: ${novos.length} consultor(es) · ${rs.map(x => `${x.op || 'BD'} ${mesTxt(x.mes)}`).join(' · ')}`);
     if (window.NUVEM && NUVEM.ativo && NUVEM.ativo()) NUVEM.publicarAgora();
   };
 }
@@ -373,21 +388,22 @@ const QMAP = new Map(); // quartis calculados (só em memória; não vão para o
 const qChave = d => (d.mes || '') + '|' + (d.mat || norm(d.nome));
 const GERAL_KS = ['abs', 'csat', 'qual', 'aceite', 'mat'];
 function quartisDef(M) {
-  return [['geral', 'Geral', null, 0, 'Geral'], ['qual', 'Qualidade', M('Qualidade', 'nota monitor'), 1, 'Qualidade'], ['abs', 'ABS', M('Ponto', 'abs'), -1, 'Ponto'], ['aceite', 'Aceite', M('Aceite', 'total'), 1, 'Aceite'],
-    ['csat', 'Pesquisa de satisfação', M('C-SAT', 'c-sat final'), 1, 'C-SAT', true], ['mat', 'Matrícula', M('Matrícula', 'total'), 1, 'Matrícula'],
+  return [['geral', 'Geral', null, 0, 'Geral'], ['qual', 'Qualidade', M('Qualidade', 'nota monitor'), 1, 'Qualidade'], ['abs', 'ABS', M('Ponto', 'abs'), -1, 'Ponto'], ['aceite', 'Aceite', M('Aceite', 'total') || M('Aceite reingresso', 'aceites reingresso - total'), 1, 'Aceite', false, M('Aceite reingresso', 'aceites reingresso - total')],
+    ['csat', 'Pesquisa de satisfação', M('C-SAT', 'c-sat final'), 1, 'C-SAT', true], ['mat', 'Matrícula', M('Matrícula', 'total') || M('Matrícula reingresso', 'matricula reingresso - total'), 1, 'Matrícula', false, M('Matrícula reingresso', 'matricula reingresso - total')],
     ['insMed', 'Inscrição medicina', M('Medicina', 'inscricao medicina'), 1, 'Medicina', true], ['matMed', 'Matrícula medicina', M('Medicina', 'matricula medicina'), 1, 'Medicina', true]]
-    .filter(x => x[0] === 'geral' || x[2]).map(([k, rot, mt, dir, grupo, semZero]) => ({ k, rot, mt, dir, grupo, semZero: !!semZero }))
+    .filter(x => x[0] === 'geral' || x[2]).map(([k, rot, mt, dir, grupo, semZero, alt]) => ({ k, rot, mt, dir, grupo, semZero: !!semZero, alt: alt || null }))
     .filter((q, _, a) => q.k !== 'geral' || a.some(x => GERAL_KS.includes(x.k)));
 }
-const qkDe = m => { if (!m) return ''; if (m.qk) return m.qk; const g = m.grupo; if (g === 'Geral') return 'geral'; if (g === 'Ponto') return 'abs'; if (g === 'C-SAT') return 'csat'; if (g === 'Qualidade') return 'qual'; if (g === 'Aceite') return 'aceite'; if (g === 'Matrícula') return 'mat'; if (g === 'Medicina') return /inscri/.test(norm(m.ref || m.rotulo)) ? 'insMed' : 'matMed'; return ''; };
+const qkDe = m => { if (!m) return ''; if (m.qk) return m.qk; const g = m.grupo; if (g === 'Geral') return 'geral'; if (g === 'Ponto') return 'abs'; if (g === 'C-SAT') return 'csat'; if (g === 'Qualidade') return 'qual'; if (g === 'Aceite' || g === 'Aceite reingresso') return 'aceite'; if (g === 'Matrícula' || g === 'Matrícula reingresso') return 'mat'; if (g === 'Medicina') return /inscri/.test(norm(m.ref || m.rotulo)) ? 'insMed' : 'matMed'; return ''; };
 function calcQuartis(dados, QDEF, iesTxt) {
   QMAP.clear(); dados.forEach(d => QMAP.set(qChave(d), { q: {}, r: {}, ies: iesDe(iesTxt(d)), op: opDaLinha(d) }));
   const porIes = {}; dados.filter(ativoDes).forEach(d => { const o = QMAP.get(qChave(d)), k = o.op + '|' + o.ies; // cada operação tem o seu ranking (como no relatório de cada uma)
  (porIes[k] = porIes[k] || []).push(d); });
-  Object.values(porIes).forEach(ls => {
+  Object.entries(porIes).forEach(([gk, ls]) => { const serv = gk.startsWith('Serviços|');
     const posDe = (xs, asc) => { const ord = xs.map(x => x.v).sort((a, b) => asc ? a - b : b - a), pos = new Map(); ord.forEach((v, i) => { if (!pos.has(v)) pos.set(v, i + 1); }); return pos; };
     QDEF.filter(q => q.mt).forEach(q => {
-      const xs = ls.map(d => ({ d, v: V(d, q.mt) })).filter(x => x.v !== null && x.v !== undefined && isFinite(x.v) && (!q.semZero || x.v > 0));
+      const mt = serv && q.alt ? q.alt : q.mt; // em Serviços, aceite e matrícula são os de reingresso
+      const xs = ls.map(d => ({ d, v: V(d, mt) })).filter(x => x.v !== null && x.v !== undefined && isFinite(x.v) && (!q.semZero || x.v > 0));
       const pos = posDe(xs, q.dir < 0);
       xs.forEach(x => { const r = pos.get(x.v), o = QMAP.get(qChave(x.d)); o.r[q.k] = r; o.q[q.k] = quartilPos(r, xs.length); });
     });
@@ -409,8 +425,13 @@ function dashboardDes(ctx) {
   let qg = todas.find(m => m.tipo === 'quartil' && m.grupo === 'Geral');
   let qCols = todas.filter(m => m.tipo === 'quartil' && m.grupo !== 'Geral');
   // quartil da base; se a base não trouxer, o calculado pela regra do Relatório Ranking
-  const qn = (d, m) => { const k = String(V(d, m) || '').match(/[1-4]/); if (k) return +k[0]; const qk = qkDe(m); const o = qk && QMAP.get(qChave(d)); return o ? o.q[qk] || 0 : 0; };
-  const cTot = M('Chamadas', 'total'), aTot = M('Aceite', 'total'), mTot = M('Matrícula', 'total');
+  const qBase = todas.filter(m => m.tipo === 'quartil');
+  const qn = (d, m) => { const k = String(V(d, m) || '').match(/[1-4]/); if (k) return +k[0]; const qk = qkDe(m);
+    // Admissão e Serviços guardam o quartil de aceite/matrícula em colunas diferentes
+    if (qk) for (const m2 of qBase) if (m2 !== m && qkDe(m2) === qk) { const k2 = String(V(d, m2) || '').match(/[1-4]/); if (k2) return +k2[0]; } const o = qk && QMAP.get(qChave(d)); return o ? o.q[qk] || 0 : 0; };
+  const reA = M('Aceite reingresso', 'aceites reingresso - total'), reM = M('Matrícula reingresso', 'matricula reingresso - total');
+  const soServ = est.opF === 'Serviços' || (!M('Aceite', 'total') && reA);
+  const cTot = M('Chamadas', 'total'), aTot = (soServ && reA) || M('Aceite', 'total'), mTot = (soServ && reM) || M('Matrícula', 'total');
   const ader = M('Aderência', 'aderencia'), abs = M('Ponto', 'abs'), csat = M('C-SAT', 'c-sat final'), nmon = M('Qualidade', 'nota monitor'), efet = M('Chamadas', 'efetividade'), pausa = M('Pausa', 'tempo em pausa');
   const conv = ls => { const a = ag(aTot, ls), m = ag(mTot, ls); return a ? m / a : null; };
   const mes = (linhas[0] || {}).mes || '';
@@ -457,19 +478,19 @@ function dashboardDes(ctx) {
     // destaques automáticos: maiores variações do mês
     const vari = todas.filter(m => m.tipo !== 'quartil' && m.tipo !== 'texto' && m.sentido).map(m => { const v = ag(m, linhas), va = ag(m, ant); if (v === null || va === null || !va) return null; const r = m.tipo === 'pct' ? (v - va) : (v - va) / Math.abs(va); return { m, v, va, r: r * m.sentido }; }).filter(Boolean).sort((a, b) => b.r - a.r);
     const insight = (x, bom) => `<li class="${bom ? 'bom' : 'ruim'}"><span>${bom ? '▲' : '▼'}</span><div><b>${esc(x.m.rotulo.replace(/ · Total$/, ''))}</b><small>${fmtTipo(x.m, x.va)} → <b>${fmtTipo(x.m, x.v)}</b></small></div></li>`;
-    const mix = (gr, subs) => subs.map((s, i) => { const mt = M(gr, s); return mt ? { rotulo: mt.sOrig || mt.sub, valor: ag(mt, linhas) || 0, cor: DB.PAL[i] } : null; }).filter(Boolean);
+    const mix = (gr, subs) => subs.map((s, i) => { const mt = M(gr, s); return mt ? { rotulo: String(mt.sOrig || mt.sub).replace(/^.*REINGRESSO\s*-\s*/i, ''), valor: ag(mt, linhas) || 0, cor: DB.PAL[i] } : null; }).filter(Boolean);
     const riscoAlto = perfil.filter(p => p.risco >= 50).length;
     corpo = `
     <div class="db-hero">
       <div class="db-hero-q cartao">${DB.anel({ pct: qTot ? (q_[0] + q_[1]) / qTot : 0, titulo: 'Q1 + Q2', centro: qTot ? fmt((q_[0] + q_[1]) / qTot * 100, 0) + '%' : '—', sub: `${q_[0] + q_[1]} de ${qTot} consultores`, cor: '#1baf7a' })}
         <div class="db-qleg">${q_.map((n, i) => `<div><span class="qt q${i + 1}">Q${i + 1}</span><b>${n}</b><small>${qTot ? fmt(n / qTot * 100, 0) + '%' : ''}</small></div>`).join('')}<p>Quartil geral · ${riscoAlto} consultor(es) com risco alto</p></div></div>
-      <div class="db-bigs">${cTot ? grande('Chamadas atendidas', cTot, 'headset', '#2a78d6') : ''}${aTot ? grande('Aceites', aTot, 'check', '#1baf7a') : ''}${mTot ? grande('Matrículas', mTot, 'award', '#8e44c9') : ''}${aTot && mTot ? grande('Conversão aceite → matrícula', null, 'target', '#eb6834', { v: conv(linhas), va: conv(ant), sp: mesesAsc.map(m => conv(base(m))), tipo: 'pct', txt: v => v === null ? '—' : fmt(v * 100, 1) + '%', em: 'matrículas ÷ aceites' }) : ''}</div>
+      <div class="db-bigs">${cTot ? grande('Chamadas atendidas', cTot, 'headset', '#2a78d6') : ''}${aTot ? grande(soServ ? 'Aceites reingresso' : 'Aceites', aTot, 'check', '#1baf7a') : ''}${mTot ? grande(soServ ? 'Matrículas reingresso' : 'Matrículas', mTot, 'award', '#8e44c9') : ''}${aTot && mTot ? grande('Conversão aceite → matrícula', null, 'target', '#eb6834', { v: conv(linhas), va: conv(ant), sp: mesesAsc.map(m => conv(base(m))), tipo: 'pct', txt: v => v === null ? '—' : fmt(v * 100, 1) + '%', em: 'matrículas ÷ aceites' }) : ''}</div>
     </div>
     ${gauges ? cardA('activity', 'Indicadores de qualidade e eficiência', `Operação no mês · ▲▼ contra ${mesAnt ? mesTxt(mesAnt) : 'o mês anterior (não importado)'}${Object.keys(D.metas).length ? ' · traço = meta' : ' · defina metas no botão Metas para colorir pelo atingimento'}`, `<div class="db-gauges">${gauges}</div>`) : ''}
     ${vari.length ? cardA('sparkles', 'O que mudou no mês', `Maiores melhoras e pioras contra ${mesTxt(mesAnt)}`, `<div class="db-ins"><div><h3 class="db-h3">Melhorou</h3><ul>${vari.filter(x => x.r > 0).slice(0, 6).map(x => insight(x, true)).join('') || '<li class="dica">—</li>'}</ul></div><div><h3 class="db-h3">Piorou</h3><ul>${vari.filter(x => x.r < 0).reverse().slice(0, 6).map(x => insight(x, false)).join('') || '<li class="dica">—</li>'}</ul></div></div>`) : ''}
     <div class="pn-grade">
       ${cardA('target', 'Funil de produção', 'Do volume de chamadas até a matrícula', DB.funil([[cTot, 'Chamadas atendidas'], [M('Chamadas', 'outbound finalizadas'), 'Outbound finalizadas'], [aTot, 'Aceites'], [mTot, 'Matrículas']].filter(x => x[0]).map(([mt, r], i) => ({ rotulo: r, valor: ag(mt, linhas) || 0, cor: ['#1d4f91', '#2a78d6', '#1baf7a', '#8e44c9'][i] }))))}
-      ${cardA('layers', 'Composição', 'De onde vêm as chamadas, aceites e matrículas', `<h3 class="db-h3">Chamadas por canal</h3>${DB.empilhada(mix('Chamadas', ['inbound', 'ligacao manual', 'botmaker', 'outbound']))}<h3 class="db-h3">Aceites por produto</h3>${DB.empilhada(mix('Aceite', ['gp', 'ead', 'gsp']))}<h3 class="db-h3">Matrículas por produto</h3>${DB.empilhada(mix('Matrícula', ['gp', 'ead', 'gsp', 'pead']))}`)}
+      ${cardA('layers', 'Composição', 'De onde vêm as chamadas, aceites e matrículas', `<h3 class="db-h3">Chamadas por canal</h3>${DB.empilhada(mix('Chamadas', ['inbound', 'ligacao manual', 'botmaker', 'outbound']))}<h3 class="db-h3">Aceites por produto</h3>${DB.empilhada((soServ ? mix('Aceite reingresso', ['aceites reingresso - gp', 'aceites reingresso - ead', 'aceites reingresso - gsp']) : mix('Aceite', ['gp', 'ead', 'gsp'])))}<h3 class="db-h3">Matrículas por produto</h3>${DB.empilhada((soServ ? mix('Matrícula reingresso', ['matricula reingresso - gp', 'matricula reingresso - ead', 'matricula reingresso - gsp']) : mix('Matrícula', ['gp', 'ead', 'gsp', 'pead'])))}`)}
     </div>`;
   }
 
@@ -788,8 +809,8 @@ function passo1() {
       const abas = await lerArquivo(file, XLSXLeitor.barra(msg)), mesNome = mesDoArquivo(file.name);
       arq = { fonte, mes: mesNome || document.getElementById('dsMes').value || hoje().slice(0, 7), mesDoNome: !!mesNome, nome: file.name, abas: abas.filter(a => a.linhas && a.linhas.length > 1) };
       if (!arq.abas.length) throw new Error('O arquivo não tem linhas.');
-      const det = acharConsolidado(arq.abas);
-      if (det) { arq.abas = [arq.abas[det.ia]]; return passoConsolidado({ ia: 0, iCab: det.iCab }); }
+      const dets = acharConsolidados(arq.abas);
+      if (dets.length) return passoConsolidado(dets);
       if (!fonte) { msg.textContent = 'Este arquivo não é o relatório de indicadores (uma linha por consultor). Dê um nome ao relatório para configurar as colunas.'; msg.className = 'msg erro'; return; }
       passo2(0);
     }
