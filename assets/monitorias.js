@@ -101,7 +101,7 @@ const iniciais = n => String(n || '?').split(' ').filter(Boolean).map(p => p[0])
 const corNota = n => n === null || n === undefined ? '#8a96a8' : n >= 95 ? '#0f9d58' : n >= 85 ? '#1baf7a' : n >= 70 ? '#eda100' : '#d03b3b';
 
 /* ---------- metas (quantidade de monitorias por consultor no mês) ---------- */
-const DEF_METAS = { n: {}, red: {}, op: {}, qtd: {}, extra: [], nota: META, totSup: null, totMon: null };
+const DEF_METAS = { n: {}, red: {}, op: {}, qtd: {}, extra: [], fora: [], nota: META, totSup: null, totMon: null };
 // como na planilha META: supervisor = Qtd × 4 − redução; monitor = Qtd × 2 − redução (o número é ajustável por pessoa)
 const PADRAO_N = { sup: 4, mon: 2 };
 const metasMon = () => Object.assign({}, DEF_METAS, ((ler(KEY_DES, {}) || {}).metasMon) || {});
@@ -138,6 +138,10 @@ function montarMetas(P, doMes, todasMon) {
   let monsP = gest.filter(g => /monitor|qualidade|auditor/i.test(g.cargo || '') && !/supervis|coorden|gerent/i.test(g.cargo || '')).map(g => ({ nome: g.nome, login: g.login, mat: g.mat }));
   if (!monsP.length) { const vistos = new Map(); todasMon.filter(m => m._t === 'Monitor' && pareceNome(m.avaliador) && !supsP.some(s => casaPessoa(m.avaliador, s))).forEach(m => { const k = limpaAval(m.avaliador); if (!vistos.has(k)) vistos.set(k, { nome: tituloNome(m.avaliador) }); }); monsP = [...vistos.values()]; }
   (mt.extra || []).forEach(x => { if (!monsP.some(p => mesmoNome(p.nome, x.nome))) monsP.push({ nome: x.nome, manual: true, opManual: x.op }); });
+  // pessoas excluídas da tela de metas (continuam na base; só saem das metas e do dashboard)
+  const fora = new Set(mt.fora || []);
+  supsP = supsP.filter(p => !fora.has('sup:' + norm(p.nome)));
+  monsP = monsP.filter(p => !fora.has('mon:' + norm(p.nome)));
   const dele = (p, xs) => xs.filter(m => casaPessoa(m.avaliador, p));
   const linhasSup = supsP.map(p => {
     const eq = vig.filter(c => c.supervisor && (norm(c.supervisor) === norm(p.nome) || mesmoNome(c.supervisor, p.nome)));
@@ -317,7 +321,7 @@ function abrirMetasMon(M) {
   const D0 = ler(KEY_DES, {}) || {}, mt = Object.assign({}, DEF_METAS, D0.metasMon || {});
   if (!document.getElementById('dlgMetaMon')) document.body.insertAdjacentHTML('beforeend', `<dialog class="dlg dlg-grande" id="dlgMetaMon"><form method="dialog" class="dlg-in" id="mmForm"></form></dialog>`);
   const f = document.getElementById('mmForm'), opsK = Object.keys(M.opsNome).sort();
-  const linha = (l, sup) => `<tr data-k="${esc(l.chave)}" data-q="${l.qtdBD}" data-p="${sup ? PADRAO_N.sup : PADRAO_N.mon}" data-f="${l.feitas}"><td><b>${esc(tituloNome(l.nome))}</b>${l.manual ? ' <button type="button" class="btn-icone mm-del" title="Remover">×</button>' : ''}</td>
+  const linha = (l, sup) => `<tr data-k="${esc(l.chave)}" data-pk="${esc((sup ? 'sup:' : 'mon:') + norm(l.nome))}" data-nome="${esc(l.nome)}"${l.manual ? ' data-manual="1"' : ''} data-q="${l.qtdBD}" data-p="${sup ? PADRAO_N.sup : PADRAO_N.mon}" data-f="${l.feitas}"><td><span class="mm-nome"><button type="button" class="mm-del" title="Excluir ${sup ? 'supervisor' : 'monitor'} das metas">×</button><b>${esc(tituloNome(l.nome))}</b></span></td>
     <td>${sup ? `<input class="mm-op" list="mmOps" value="${esc((mt.op || {})[l.chave] || '')}" placeholder="${esc(l.opAuto || '—')}">` : esc(l.op || '—')}</td>
     <td class="dir mm-qtd"><input type="number" min="0" class="mm-q" value="${(mt.qtd || {})[l.chave] ?? ''}" placeholder="${l.qtdBD}" title="Consultores pelo BD: ${l.qtdBD}. Digite só se quiser outro número."></td>
     <td><input type="number" min="0" step="0.5" class="mm-n" value="${(mt.n || {})[l.chave] ?? ''}" placeholder="${sup ? PADRAO_N.sup : PADRAO_N.mon}"></td>
@@ -332,6 +336,7 @@ function abrirMetasMon(M) {
     <h3 class="q-mm-t q-mm-sup">Meta supervisores</h3>
     <div class="tabela-wrap"><table class="tabela mm-tab" id="mmSup">${cab('Nome supervisor')}<tbody>${M.linhasSup.map(l => linha(l, true)).join('')}</tbody></table></div>
     ${M.naoId.length ? `<details class="mm-aj"><summary>${M.naoId.length} valor(es) da coluna de avaliador não batem com ninguém do ${M.temADM ? 'BD ADM' : 'BD'}</summary><p class="dica">${M.naoId.slice(0, 30).map(([v, n]) => `${esc(v)} (${n})`).join(' · ')}</p></details>` : ''}
+    <div id="mmFora"></div>
     <div class="mm-tot"><label class="campo"><span>Nota meta (%)</span><input type="number" min="0" max="100" id="mmNota" value="${mt.nota || META}"></label>
       <label class="campo"><span>META SUPER (total, opcional)</span><input type="number" min="0" id="mmTotSup" value="${mt.totSup ?? ''}" placeholder="soma: ${M.linhasSup.reduce((a, l) => a + l.meta, 0)}"></label>
       <label class="campo"><span>META MONITOR (total, opcional)</span><input type="number" min="0" id="mmTotMon" value="${mt.totMon ?? ''}" placeholder="soma: ${M.linhasMon.reduce((a, l) => a + l.meta, 0)}"></label></div>
@@ -341,7 +346,16 @@ function abrirMetasMon(M) {
   const ligar = tr => { tr.querySelectorAll('input').forEach(i => i.oninput = () => calc(tr)); calc(tr); };
   f.querySelectorAll('tr[data-k]').forEach(ligar);
   const extras = [...(mt.extra || [])];
-  f.querySelectorAll('.mm-del').forEach(bt => bt.onclick = () => { const tr = bt.closest('tr'), nome = tr.querySelector('b').textContent; const i = extras.findIndex(x => mesmoNome(x.nome, nome)); if (i >= 0) extras.splice(i, 1); tr.remove(); });
+  const fora = new Set(mt.fora || []);
+  const pintarFora = () => { const el = document.getElementById('mmFora'); if (!el) return; const xs = [...fora]; el.innerHTML = xs.length ? `<details class="mm-aj"><summary>${xs.length} pessoa(s) excluída(s) das metas</summary><div class="mm-fora">${xs.map(k => `<span>${esc(tituloNome((mt.foraNome || {})[k] || k.replace(/^(sup|mon):/, '')))} <small>${k.startsWith('sup:') ? 'supervisor' : 'monitor'}</small><button type="button" class="btn btn-sec btn-mini" data-volta="${esc(k)}">Restaurar</button></span>`).join('')}</div><p class="dica">Quem for restaurado volta para a tabela ao salvar.</p></details>` : ''; el.querySelectorAll('[data-volta]').forEach(b => b.onclick = () => { fora.delete(b.dataset.volta); pintarFora(); }); };
+  const nomesFora = Object.assign({}, mt.foraNome || {});
+  f.querySelectorAll('.mm-del').forEach(bt => bt.onclick = () => {
+    const tr = bt.closest('tr'), nome = tr.dataset.nome, pk = tr.dataset.pk;
+    if (tr.dataset.manual) { const i = extras.findIndex(x => mesmoNome(x.nome, nome)); if (i >= 0) extras.splice(i, 1); }
+    else { fora.add(pk); nomesFora[pk] = nome; }
+    f.querySelectorAll(`tr[data-pk="${CSS.escape(pk)}"]`).forEach(x => x.remove()); pintarFora();
+  });
+  pintarFora();
   document.getElementById('mmAdd').onclick = () => {
     const nome = document.getElementById('mmNovoNome').value.trim(), op = document.getElementById('mmNovoOp').value.trim();
     if (!nome || !op) { f.querySelector('.msg').textContent = 'Informe o nome do monitor e a operação.'; f.querySelector('.msg').className = 'msg erro'; return; }
@@ -352,7 +366,7 @@ function abrirMetasMon(M) {
   };
   document.getElementById('mmOk').onclick = () => {
     const v = el => { const t = (el && el.value || '').trim(); return t === '' ? null : +t; };
-    const novo = { nota: v(document.getElementById('mmNota')) || META, n: {}, red: {}, op: {}, qtd: {}, extra: extras, totSup: v(document.getElementById('mmTotSup')), totMon: v(document.getElementById('mmTotMon')) };
+    const novo = { nota: v(document.getElementById('mmNota')) || META, n: {}, red: {}, op: {}, qtd: {}, extra: extras, fora: [...fora], foraNome: Object.fromEntries([...fora].map(k => [k, nomesFora[k] || k])), totSup: v(document.getElementById('mmTotSup')), totMon: v(document.getElementById('mmTotMon')) };
     f.querySelectorAll('tr[data-k]').forEach(tr => { const k = tr.dataset.k, n = v(tr.querySelector('.mm-n')), r = v(tr.querySelector('.mm-r')), qq = v(tr.querySelector('.mm-q')), op = tr.querySelector('.mm-op'); if (n !== null) novo.n[k] = n; if (qq !== null) novo.qtd[k] = qq; if (r) novo.red[k] = r; if (op && op.value.trim()) novo.op[k] = op.value.trim(); });
     const D2 = ler(KEY_DES, {}) || {}; D2.metasMon = novo; gravar(KEY_DES, D2);
     document.getElementById('dlgMetaMon').close(); render(); toast('Metas de monitoria salvas');
