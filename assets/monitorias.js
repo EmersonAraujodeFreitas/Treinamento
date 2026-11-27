@@ -77,10 +77,18 @@ function perfilBase(xs) {
   const conf = Object.keys(critT).filter(k => !falha.includes(k));
   const q = ler('inovacao_treinamento_quadro_v1', {}) || {};
   const supsBD = [...new Set((q.itens || []).filter(c => c.status !== 'Desligado' && !c.supForaQuadro).map(c => c.supervisor).filter(Boolean))];
+  // supervisores do BD e do BD ADM: quem avaliou e é supervisor → Supervisor; os demais avaliadores → Monitor
+  const gestS = ((ler('inovacao_treinamento_gestao_v1', {}) || {}).itens || q.gestao || []).filter(g => /supervis/i.test(g.cargo || '')).map(g => ({ nome: g.nome, login: g.login, mat: g.mat }));
+  const supsP0 = gestS.concat(supsBD.filter(n => !gestS.some(g => mesmoNome(g.nome, n))).map(n => ({ nome: n })));
+  const monsG = ((ler('inovacao_treinamento_gestao_v1', {}) || {}).itens || q.gestao || []).filter(g => /monitor|qualidade|auditor/i.test(g.cargo || '') && !/supervis|coorden|gerent/i.test(g.cargo || '')).map(g => ({ nome: g.nome, login: g.login, mat: g.mat }));
+  const cacheT = new Map();
+  const pessoaTipo = a => { const k = limpaAval(a); if (cacheT.has(k)) return cacheT.get(k); const t = monsG.some(s => casaPessoa(a, s)) ? 'Monitor' : supsP0.some(s => casaPessoa(a, s)) ? 'Supervisor' : ''; cacheT.set(k, t); return t; };
   const tipoDe = m => {
-    if (tipoK) { const v = norm(m.campos[tipoK] || ''); return v.includes('supervis') ? 'Supervisor' : v ? 'Monitor' : ''; }
-    const a = norm(m.avaliador); if (!a) return '';
-    return supsBD.some(s => mesmoNome(a, s)) ? 'Supervisor' : 'Monitor';
+    // primeiro quem avaliou (monitor ou supervisor do BD ADM / BD); depois a coluna "Monitoria"; vazia = monitor
+    const a = m.avaliador; const pt = a && String(a).trim() ? pessoaTipo(a) : '';
+    if (pt) return pt;
+    if (tipoK) { const v = norm(m.campos[tipoK] || ''); if (v) return v.includes('supervis') ? 'Supervisor' : 'Monitor'; }
+    return a && String(a).trim() ? 'Monitor' : '';
   };
   const fbDe = m => { if (!fbK) return null; const v = m.campos[fbK]; if (v === undefined || v === null || v === '') return false; const c = confDe(v); return c === undefined ? true : c === null ? null : c > 0; };
   const fbN = m => { if (!fbK) return 0; const v = m.campos[fbK]; if (typeof v === 'number') return v; return fbDe(m) ? 1 : 0; };
@@ -173,6 +181,9 @@ function montarMetas(P, doMes, todasMon) {
   // operação de cada consultor: a mais frequente na base de qualidade; sem monitoria, a do BD
   const opCons = {}; todasMon.forEach(m => { const o = P.opDe(m); if (!o) return; const k = norm(m.nome); const c = opCons[k] = opCons[k] || {}; c[o] = (c[o] || 0) + 1; });
   const opDeCons = c => { const x = opCons[norm(c.nome)]; if (x) return Object.entries(x).sort((a, b) => b[1] - a[1])[0][0]; return operacaoBD(c); };
+  // célula da monitoria: a da base; se vier vazia, a do consultor no BD (Captação/Permanência + IES)
+  const bdNome = new Map(); (q.itens || []).concat(q.saidas || []).forEach(c => { if (c && c.nome) bdNome.set(norm(c.nome), c); if (c && c.mat) bdNome.set('m:' + c.mat, c); });
+  const opM = m => P.opDe(m) || (() => { const c = bdNome.get('m:' + m.matricula) || bdNome.get(norm(m.nome)); return c ? operacaoBD(c) : ''; })();
   const opsNome = {}; todasMon.forEach(m => { const o = P.opDe(m); if (o) opsNome[chaveOp(o)] = opsNome[chaveOp(o)] || o; });
   const consPorOp = {}; vig.forEach(c => { const o = opDeCons(c); if (o) { const k = chaveOp(o); opsNome[k] = opsNome[k] || o; consPorOp[k] = (consPorOp[k] || 0) + 1; } });
   // supervisores e monitores: BD ADM (cargo); sem BD ADM, o que aparece na base
@@ -200,7 +211,7 @@ function montarMetas(P, doMes, todasMon) {
   const linhasMon = [];
   monsP.forEach(p => {
     const todasDele = doTipo(dele(p, todasMon), 'Monitor'), porOp = {};
-    todasDele.forEach(m => { const o = P.opDe(m) || ''; if (o) porOp[chaveOp(o)] = porOp[chaveOp(o)] || o; });
+    todasDele.forEach(m => { const o = opM(m); if (o) porOp[chaveOp(o)] = porOp[chaveOp(o)] || o; });
     // operações acrescentadas à mão para este monitor (ex.: Brenda em Admissão UJ e Admissão Uva)
     (mt.extra || []).filter(x => x.op && mesmoNome(x.nome, p.nome)).forEach(x => { porOp[chaveOp(x.op)] = porOp[chaveOp(x.op)] || x.op; });
     if (p.opManual) porOp[chaveOp(p.opManual)] = porOp[chaveOp(p.opManual)] || p.opManual;
@@ -209,7 +220,7 @@ function montarMetas(P, doMes, todasMon) {
       const k = 'mon:' + norm(p.nome) + '|' + chaveOp(o); if (fora.has(k)) return;
       const opEf = (mt.op || {})[k] || o; // operação digitada na tela de metas vale mais que a da base
       const nSet = (mt.n || {})[k], n = nSet ?? PADRAO_N.mon, red = (mt.red || {})[k] || 0, qtdBD = opEf ? consPorOp[chaveOp(opEf)] || 0 : 0, qtd = (mt.qtd || {})[k] ?? qtdBD, meta = n ? Math.max(0, qtd * n - red) : 0;
-      const minhas = doTipo(dele(p, doMes), 'Monitor').filter(m => !o || chaveOp(P.opDe(m) || '') === chaveOp(o));
+      const minhas = doTipo(dele(p, doMes), 'Monitor').filter(m => !o || chaveOp(opM(m)) === chaveOp(o));
       linhasMon.push({ tipo: 'mon', chave: k, nome: p.nome, op: opEf, opAuto: o, manual: !!p.manual, qtd, qtdBD, n, nPadrao: nSet === undefined || nSet === null, red, meta, feitas: minhas.length, fb: minhas.reduce((a, m) => a + (m._fbN || 0), 0), notaDada: media_(minhas.map(m => m.nota)), minhas });
     });
   });
