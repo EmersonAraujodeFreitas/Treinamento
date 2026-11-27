@@ -61,7 +61,7 @@ function perfilBase(xs) {
   const ks = Object.keys(chaves);
   const tipoK = ks.find(k => { const vs = [...chaves[k].keys()].map(norm); return vs.length <= 8 && vs.some(v => v.includes('supervis')) && vs.some(v => v.includes('monitor') || v.includes('qualidade') || v.includes('analista')); });
   // operação/organização: a coluna cujos valores parecem operação (Admissão/Serviços, UVA/UJ…), nunca Sim/Não
-  const valOp = k => { const vs = [...chaves[k].keys()].map(norm); return vs.length >= 2 && vs.length <= 14 && vs.filter(v => /admiss|servic|uva|\buj\b|unijorge|capta|perman|receptivo|posvenda|pos venda|retenc/.test(v)).length >= Math.ceil(vs.length / 2) && !vs.every(v => /^(sim|nao|s|n|ok)$/.test(v)); };
+  const valOp = k => { const vs = [...chaves[k].keys()].map(norm); return vs.length >= (/celula|operac|organiza/.test(norm(k)) ? 1 : 2) && vs.length <= 14 && vs.filter(v => /admiss|servic|uva|\buj\b|unijorge|capta|perman|receptivo|posvenda|pos venda|retenc/.test(v)).length >= Math.ceil(vs.length / 2) && !vs.every(v => /^(sim|nao|s|n|ok)$/.test(v)); };
   const prodK = ks.find(k => k !== tipoK && valOp(k) && /organiza|celula|operac|produto|fila|campanha|segmento|unidade/.test(norm(k))) || ks.find(k => k !== tipoK && valOp(k));
   const respK = ks.find(k => k !== tipoK && /monitor respons|responsavel|monitor$/.test(norm(k)) && chaves[k].size <= 20);
   const fbK = ks.find(k => /feedback realizado|feedback aplicado/.test(norm(k))) || ks.find(k => /feedback|devolutiva/.test(norm(k)) && chaves[k].size <= 6);
@@ -186,17 +186,20 @@ function montarMetas(P, doMes, todasMon) {
   supsP = supsP.filter(p => !fora.has('sup:' + norm(p.nome)));
   monsP = monsP.filter(p => !fora.has('mon:' + norm(p.nome)));
   const dele = (p, xs) => xs.filter(m => casaPessoa(m.avaliador, p));
+  // como no Dash Qualidade: meta de supervisor conta só monitorias do tipo Supervisor e a de monitor só as do tipo Monitor
+  // (linhas com a coluna Monitoria vazia ficam fora, como na planilha)
+  const doTipo = (xs, t) => P.tipoK ? xs.filter(m => m._t === t) : xs;
   const linhasSup = supsP.map(p => {
     const eq = vig.filter(c => c.supervisor && (norm(c.supervisor) === norm(p.nome) || mesmoNome(c.supervisor, p.nome)));
     const opsEq = {}; eq.forEach(c => { const o = opDeCons(c); if (o) opsEq[o] = (opsEq[o] || 0) + 1; });
     const k = 'sup:' + norm(p.nome), opAuto = Object.entries(opsEq).sort((a, b) => b[1] - a[1])[0]?.[0] || operacaoBD(p), op = (mt.op || {})[k] || opAuto;
     const nSet = (mt.n || {})[k], n = nSet ?? PADRAO_N.sup, red = (mt.red || {})[k] || 0, qtdBD = eq.length, qtd = (mt.qtd || {})[k] ?? qtdBD, meta = n ? Math.max(0, qtd * n - red) : 0;
-    const minhas = dele(p, doMes), daEquipe = doMes.filter(m => norm(m.supervisor) === norm(p.nome) || mesmoNome(m.supervisor || '', p.nome) || eq.some(c => norm(c.nome) === norm(m.nome)));
+    const minhas = doTipo(dele(p, doMes), 'Supervisor'), daEquipe = doMes.filter(m => norm(m.supervisor) === norm(p.nome) || mesmoNome(m.supervisor || '', p.nome) || eq.some(c => norm(c.nome) === norm(m.nome)));
     return { tipo: 'sup', chave: k, nome: p.nome, op, opAuto, eq, qtd, qtdBD, n, nPadrao: nSet === undefined || nSet === null, red, meta, feitas: minhas.length, fb: minhas.reduce((a, m) => a + (m._fbN || 0), 0), notaDada: media_(minhas.map(m => m.nota)), mediaEquipe: media_(daEquipe.map(m => m.nota)), equipe: daEquipe };
   }).sort((a, b) => cmpTxt(a.op || 'zz', b.op || 'zz') || cmpTxt(a.nome, b.nome));
   const linhasMon = [];
   monsP.forEach(p => {
-    const todasDele = dele(p, todasMon), porOp = {};
+    const todasDele = doTipo(dele(p, todasMon), 'Monitor'), porOp = {};
     todasDele.forEach(m => { const o = P.opDe(m) || ''; if (o) porOp[chaveOp(o)] = porOp[chaveOp(o)] || o; });
     // operações acrescentadas à mão para este monitor (ex.: Brenda em Admissão UJ e Admissão Uva)
     (mt.extra || []).filter(x => x.op && mesmoNome(x.nome, p.nome)).forEach(x => { porOp[chaveOp(x.op)] = porOp[chaveOp(x.op)] || x.op; });
@@ -206,7 +209,7 @@ function montarMetas(P, doMes, todasMon) {
       const k = 'mon:' + norm(p.nome) + '|' + chaveOp(o); if (fora.has(k)) return;
       const opEf = (mt.op || {})[k] || o; // operação digitada na tela de metas vale mais que a da base
       const nSet = (mt.n || {})[k], n = nSet ?? PADRAO_N.mon, red = (mt.red || {})[k] || 0, qtdBD = opEf ? consPorOp[chaveOp(opEf)] || 0 : 0, qtd = (mt.qtd || {})[k] ?? qtdBD, meta = n ? Math.max(0, qtd * n - red) : 0;
-      const minhas = dele(p, doMes).filter(m => !o || chaveOp(P.opDe(m) || '') === chaveOp(o));
+      const minhas = doTipo(dele(p, doMes), 'Monitor').filter(m => !o || chaveOp(P.opDe(m) || '') === chaveOp(o));
       linhasMon.push({ tipo: 'mon', chave: k, nome: p.nome, op: opEf, opAuto: o, manual: !!p.manual, qtd, qtdBD, n, nPadrao: nSet === undefined || nSet === null, red, meta, feitas: minhas.length, fb: minhas.reduce((a, m) => a + (m._fbN || 0), 0), notaDada: media_(minhas.map(m => m.nota)), minhas });
     });
   });
@@ -643,7 +646,7 @@ function classificar(linhas, extras) {
     const vs = []; for (const { l } of linhas) { const v = l[i]; if (v !== null && v !== undefined && String(v).trim() !== '') vs.push(v); }
     if (!vs.length) return;
     const conf = vs.filter(v => confDe(v) !== undefined).length;
-    const soNum = vs.every(v => typeof v === 'number'), maior1 = soNum && vs.some(v => v > 1);
+    const soNum = vs.every(v => typeof v === 'number' || /^\d+([.,]\d+)?$/.test(String(v).trim())), maior1 = soNum && vs.some(v => +String(v).replace(',', '.') > 1); // "Feedback realizado" 0 a 3 (às vezes como texto)
     if (!maior1 && conf / vs.length >= .8 && new Set(vs.map(v => norm(String(v)))).size <= 6) crit.push([h, i]);
     else if (vs.every(v => typeof v === 'number' || (A.num(String(v).replace('%', '')) !== null && /^[\d.,%\s-]+$/.test(String(v))))) num_.push([h, i]);
     else if (new Set(vs.map(v => String(v).trim())).size <= 40) cat.push([h, i]);
