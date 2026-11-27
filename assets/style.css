@@ -1549,3 +1549,14 @@ html.menu-recolhido .btn-recolher svg{transform:rotate(180deg)}
 .q-aval .q-aval-g th{color:#fff;text-align:left;font-size:12px;letter-spacing:.5px;text-transform:uppercase;padding:6px 12px}
 .q-aval .q-aval-g.q-mm-sup th{background:#14325c}.q-aval .q-aval-g.q-mm-mon th{background:#6a2c91}.q-aval .q-aval-g:not(.q-mm-sup):not(.q-mm-mon) th{background:#55606e}
 .q-aval .q-aval-geral td{border-top:2px solid var(--borda-forte)}
+.q-pecg{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+.q-pecc{justify-content:space-between;padding:14px 10px 12px}
+.q-pecc>b{font-size:13px;line-height:1.25;min-height:34px;text-align:center}
+.q-pecc .db-anel{width:104px;height:104px;margin:6px 0}
+.q-pecc .db-a-txt b{font-size:18px;letter-spacing:-.3px}
+.q-pecc em{font-size:11.5px}.q-pecc em b{color:var(--tinta-2)}
+.ds-op-esc{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:4px 0 12px}
+.ds-op-esc label{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border:2px solid var(--borda);border-radius:12px;cursor:pointer;background:var(--superficie)}
+.ds-op-esc label.on{border-color:var(--marca);box-shadow:0 0 0 3px color-mix(in srgb,var(--marca) 18%,transparent)}
+.ds-op-esc input{position:absolute;opacity:0;pointer-events:none}.ds-op-esc b{font-size:15px}.ds-op-esc small{font-size:12px;color:var(--tinta-3)}
+.ds-cols summary{cursor:pointer;font-size:12.5px;color:var(--tinta-3);margin:8px 0}

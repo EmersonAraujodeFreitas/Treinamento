@@ -280,72 +280,56 @@ function remontarModelo(fonte, mets, substitui) {
   antigos.forEach(({ d, o }) => { d.v = cod(o); delete d.m; });
   return { md, cod };
 }
-function passoConsolidado(dets) {
-  // um arquivo pode trazer várias abas: ADM (Admissão) e SERV (Serviços), de um ou mais meses
-  if (!Array.isArray(dets)) dets = [dets];
-  const f = document.getElementById('desForm'), fonte = arq.fonte || FONTE_PADRAO;
-  // cada arquivo é um mês (reconhecido pelo nome do arquivo); cada aba é uma operação (ADM = Admissão, SERV = Serviços)
-  const mesBase = mesDoArquivo(arq.nome) || arq.mes;
-  const partes = dets.map(det => { const aba = arq.abas[det.ia] || arq.abas[0], info = lerConsolidado(aba, det.iCab); return { aba, det, info: { ...info }, op: opDaAba(aba.nome) || opNorm(arq.nome), mes: mesBase }; });
+function passoConsolidado(partes, op, avisos) {
+  // importação por operação: tudo o que entra aqui é da operação escolhida (Admissão OU Serviços) e só ela é substituída
+  const f = document.getElementById('desForm'), fonte = (partes[0] && partes[0].arq.fonte) || FONTE_PADRAO;
   const TT = { tempo: 'tempo', tempoMedio: 'tempo', pct: '%', quartil: 'quartil', texto: 'texto', somar: 'nº' };
-  const lerUI = () => { const m = document.getElementById('dsMesU'); partes.forEach((p, i) => { const o = document.getElementById('dsOp' + i); if (o) p.op = o.value; if (m && m.value) p.mes = m.value; }); };
-  // abas ignoradas ou sem nenhum consultor não entram nem apagam nada
-  const valem = rs => rs.filter(x => x.op !== '-' && x.r.dados.length);
-  const processar = () => partes.map(p => { p.info.op = p.op; const r = processarConsolidado(p.aba, p.det.iCab, p.info, p.mes); return { ...p, r }; });
+  const lerUI = () => partes.forEach((p, i) => { const m = document.getElementById('dsMes' + i); if (m) p.mes = m.value; });
+  const processar = () => partes.map(p => { p.info.op = op; const r = p.mes ? processarConsolidado(p.aba, p.det.iCab, p.info, p.mes) : { dados: [], fora: [], total: 0 }; return { ...p, r }; });
   const desenhar = () => {
-    lerUI(); const rs = valem(processar());
-    const tot = rs.reduce((a, x) => a + x.r.dados.length, 0), fora = rs.reduce((a, x) => a + x.r.fora.length, 0);
-    const reconh = rs.reduce((a, x) => a + x.info.reconhecidas, 0), mets = rs.reduce((a, x) => a + x.info.mets.length, 0);
-    const ja = rs.filter(x => D.dados.some(d => d.fonte === fonte && d.mes === x.mes && (!x.op || d.op === x.op)));
-    document.getElementById('dsResumo').innerHTML = `<div class="an-chips"><span><small>Abas</small><b>${rs.length}</b></span><span><small>Consultores</small><b>${tot}</b></span><span><small>Encontrados no BD</small><b>${tot - fora}</b></span><span><small>Fora do BD</small><b>${fora}</b></span><span><small>Indicadores reconhecidos</small><b>${reconh} de ${mets}</b></span></div>
-      ${fora ? `<details class="do-trein"><summary>${G.ic('alert', '')}Não estão no BD atual (${fora})</summary><p class="dica">Entram mesmo assim, com o nome e o supervisor do relatório.</p><ul class="aps-lidos">${rs.flatMap(x => x.r.fora).slice(0, 80).map(n => `<li>${esc(n)}</li>`).join('')}</ul></details>` : ''}
-      <p class="dica">${ja.length ? `<b>Já importado:</b> ${ja.map(x => `${x.op || 'consolidado'} ${mesTxt(x.mes)}`).join(', ')} — será substituído por este arquivo. ` : ''}Cada aba substitui só a sua operação no seu mês; a outra operação continua como está.</p>`;
-    G.icones(document.getElementById('dsResumo'));
-    processar().forEach((x, i) => { const el = document.getElementById('dsN' + i); if (el) el.textContent = x.op === '-' ? 'ignorada' : x.r.dados.length || 'vazia'; });
-    document.getElementById('dsSalvarC').disabled = !tot;
-    return rs;
+    lerUI(); const rs = processar();
+    rs.forEach((x, i) => { const el = document.getElementById('dsN' + i); if (el) el.textContent = x.mes ? x.r.dados.length : '—'; });
+    const ok = rs.filter(x => x.mes && x.r.dados.length), tot = ok.reduce((a, x) => a + x.r.dados.length, 0), fora = ok.reduce((a, x) => a + x.r.fora.length, 0);
+    const meses = [...new Set(ok.map(x => x.mes))].sort(), ja = meses.filter(m => D.dados.some(d => d.fonte === fonte && d.mes === m && opDaLinha(d) === op));
+    document.getElementById('dsResumo').innerHTML = `<div class="an-chips"><span><small>Arquivos</small><b>${ok.length}</b></span><span><small>Meses</small><b>${meses.map(mesTxt).join(', ') || '—'}</b></span><span><small>Consultores</small><b>${tot}</b></span><span><small>Fora do BD</small><b>${fora}</b></span></div>
+      ${ja.length ? `<p class="dica"><b>${op} já tem:</b> ${ja.map(mesTxt).join(', ')} — estes meses de ${op} serão substituídos. ${op === 'Admissão' ? 'Serviços' : 'Admissão'} não é alterado.</p>` : `<p class="dica">Entra só em ${op}. ${op === 'Admissão' ? 'Serviços' : 'Admissão'} não é alterado.</p>`}
+      ${partes.some(p => !p.mes) ? '<p class="aviso-fluxo">Informe o mês dos arquivos sem mês no nome.</p>' : ''}`;
+    document.getElementById('dsSalvarC').disabled = !tot || partes.some(p => !p.mes);
+    return ok;
   };
   const porGrupo = {}; partes.forEach(p => p.info.mets.forEach(m => { const g = porGrupo[m.grupo] = porGrupo[m.grupo] || new Map(); if (!g.has(m.rotulo)) g.set(m.rotulo, m); }));
-  f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('check')}</span><div><h2>Relatório de indicadores reconhecido</h2><p>${esc(arq.nome)} · ${partes.length} aba(s) · uma linha por consultor</p></div></header>
-    <div class="grade g3"><label class="campo"><span>Nome do relatório</span><input id="dsFonteC" value="${esc(fonte)}"></label>
-      <label class="campo"><span>Este arquivo é de <i class="obr">*</i></span><select id="dsTipoArq">${[['ambas', 'Admissão e Serviços (pelas abas)'], ['Admissão', 'Só Admissão'], ['Serviços', 'Só Serviços']].map(([k, t]) => `<option value="${k}"${k === (opNorm(arq.nome) || 'ambas') ? ' selected' : ''}>${t}</option>`).join('')}</select><small class="dica">Só Admissão: as abas de Serviços do arquivo são ignoradas (e vice-versa).</small></label>
-      <label class="campo"><span>Mês dos dados <i class="obr">*</i></span><input type="month" id="dsMesU" value="${mesBase}"><small class="dica">${mesDoArquivo(arq.nome) ? 'Lido do nome do arquivo.' : 'O nome do arquivo não tem o mês: escolha aqui.'}</small></label></div>
-    <div class="tabela-wrap"><table class="tabela ds-abas"><thead><tr><th>Aba</th><th>Operação</th><th class="dir">Consultores</th></tr></thead><tbody>
-      ${partes.map((p, i) => `<tr><td><b>${esc(p.aba.nome.trim())}</b></td><td><select id="dsOp${i}"><option value="">Pelo BD</option>${['Admissão', 'Serviços'].map(o => `<option${p.op === o ? ' selected' : ''}>${o}</option>`).join('')}<option value="-">Não importar</option></select></td><td class="dir" id="dsN${i}"></td></tr>`).join('')}
+  f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('check')}</span><div><h2>Importar ${esc(op)}</h2><p>${partes.length} arquivo(s) reconhecido(s) · o mês vem do nome de cada arquivo</p></div></header>
+    ${avisos.length ? `<div class="aviso-fluxo">${avisos.map(esc).join('<br>')}</div>` : ''}
+    <div class="tabela-wrap"><table class="tabela ds-abas"><thead><tr><th>Arquivo</th><th>Aba usada</th><th>Mês dos dados</th><th class="dir">Consultores</th></tr></thead><tbody>
+      ${partes.map((p, i) => `<tr><td><b>${esc(p.arq.nome)}</b></td><td>${esc(p.aba.nome.trim())}</td><td><input type="month" id="dsMes${i}" value="${p.mes}"></td><td class="dir" id="dsN${i}"></td></tr>`).join('')}
     </tbody></table></div>
-    <p class="dica">Diga a operação de cada aba (já vem pelo nome: ADM = Admissão, SERV = Serviços). Pode importar Admissão e Serviços em arquivos separados: um não apaga o outro.</p>
+    <input type="hidden" id="dsFonteC" value="${esc(fonte)}">
     <div id="dsResumo"></div>
-    <div class="ds-grupos">${Object.entries(porGrupo).map(([g, ms]) => { const l = [...ms.values()]; return `<div><b>${esc(l[0].gOrig || g)}</b><span>${l.map(m => `<small title="${esc(m.rotulo)}">${esc(m.sOrig || m.sub)} <i>${TT[m.tipo] || ''}</i></small>`).join('')}</span></div>`; }).join('')}</div>
-    <div class="dlg-rod"><small class="msg" id="dsMsg"></small><span><button type="button" class="btn btn-sec" id="dsVoltar">Voltar</button> <button type="button" class="btn btn-pri" id="dsSalvarC">${G.ic('check')}Salvar</button></span></div>`;
+    <details class="ds-cols"><summary>Indicadores reconhecidos</summary><div class="ds-grupos">${Object.entries(porGrupo).map(([g, ms]) => { const l = [...ms.values()]; return `<div><b>${esc(l[0].gOrig || g)}</b><span>${l.map(m => `<small title="${esc(m.rotulo)}">${esc(m.sOrig || m.sub)} <i>${TT[m.tipo] || ''}</i></small>`).join('')}</span></div>`; }).join('')}</div></details>
+    <div class="dlg-rod"><small class="msg" id="dsMsg"></small><span><button type="button" class="btn btn-sec" id="dsVoltar">Voltar</button> <button type="button" class="btn btn-pri" id="dsSalvarC">${G.ic('check')}Salvar em ${esc(op)}</button></span></div>`;
   G.icones(f);
-  partes.forEach((_, i) => { document.getElementById('dsOp' + i).onchange = desenhar; }); document.getElementById('dsMesU').onchange = desenhar;
-  const aplicarTipo = () => { const t = document.getElementById('dsTipoArq').value; partes.forEach((p, i) => { const da = opDaAba(p.aba.nome); document.getElementById('dsOp' + i).value = t === 'ambas' ? (da || '') : (da && da !== t ? '-' : t); }); desenhar(); };
-  document.getElementById('dsTipoArq').onchange = aplicarTipo;
+  partes.forEach((_, i) => { document.getElementById('dsMes' + i).onchange = desenhar; });
   document.getElementById('dsVoltar').onclick = passo1;
-  aplicarTipo();
+  desenhar();
   document.getElementById('dsSalvarC').onclick = () => {
-    const nomeF = document.getElementById('dsFonteC').value.trim() || FONTE_PADRAO, msg = document.getElementById('dsMsg');
-    lerUI(); if (partes.some(p => !p.mes)) { msg.textContent = 'Informe o mês dos dados.'; msg.className = 'msg erro'; return; }
-    const rs = valem(processar());
-    if (!rs.length) { msg.textContent = 'Nenhuma aba com consultores para importar.'; msg.className = 'msg erro'; return; }
+    const nomeF = fonte, msg = document.getElementById('dsMsg');
+    const rs = desenhar(); if (!rs.length) { msg.textContent = 'Nenhum arquivo com consultores para importar.'; msg.className = 'msg erro'; return; }
     D = Object.assign(vazio(), ler(KEY, {}) || {});
-    // indicadores de todas as abas (Serviços tem reingresso e retenção; Admissão tem medicina)
     const uniao = [], vistos = new Set(); rs.forEach(x => x.info.mets.forEach(m => { if (!vistos.has(m.rotulo)) { vistos.add(m.rotulo); uniao.push(m); } }));
-    const pk = d => d.mat || norm(d.nome);
-    const subst = rs.map(x => ({ mes: x.mes, op: x.op, chaves: new Set(x.r.dados.map(pk)) }));
-    const substitui = d => subst.some(x => d.mes === x.mes && (!x.op || d.op === x.op || x.chaves.has(pk(d))));
+    const meses = [...new Set(rs.map(x => x.mes))].sort();
+    // só esta operação, só estes meses
+    const substitui = d => meses.includes(d.mes) && opDaLinha(d) === op;
     const { md, cod } = remontarModelo(nomeF, uniao, substitui);
     D.modelos[nomeF] = md;
-    const novos = rs.flatMap(x => x.r.dados.map(d => ({ ...d, fonte: nomeF, v: cod(d.v) })));
+    const pk = d => d.mes + '|' + (d.mat || norm(d.nome)), ja = new Set(), novos = [];
+    rs.slice().reverse().forEach(x => x.r.dados.forEach(d => { const k = pk(d); if (ja.has(k)) return; ja.add(k); novos.push({ ...d, op, fonte: nomeF, v: cod(d.v) }); })); // o último arquivo do mesmo mês vale
     marcarGrupos(D.dados.filter(d => d.fonte === nomeF && substitui(d)), novos);
     D.dados = D.dados.filter(d => !(d.fonte === nomeF && substitui(d))).concat(novos);
-    // todo o histórico fica guardado (só o mesmo mês e operação é substituído)
-    const meses = [...new Set(rs.map(x => x.mes))].sort();
-    D.importacoes = [{ fonte: nomeF, arquivo: arq.nome, em: new Date().toISOString(), meses, linhas: rs.reduce((a, x) => a + x.r.total, 0), casados: novos.filter(d => !d.foraBD).length, naoAchados: novos.filter(d => d.foraBD).length }, ...(D.importacoes || [])].slice(0, 60);
+    D.importacoes = [{ fonte: nomeF, op, arquivo: rs.map(x => x.arq.nome).join(', '), em: new Date().toISOString(), meses, linhas: rs.reduce((a, x) => a + x.r.total, 0), casados: novos.filter(d => !d.foraBD).length, naoAchados: novos.filter(d => d.foraBD).length }, ...(D.importacoes || [])].slice(0, 80);
     const tamD = JSON.stringify(D).length;
-    if (tamD > 1800000) { msg.textContent = `O histórico ficaria grande demais para sincronizar (${fmt(tamD / 1048576, 1)} MB). Nada foi apagado; importe menos meses ou fale com o administrador.`; msg.className = 'msg erro'; D = Object.assign(vazio(), ler(KEY, {}) || {}); return; }
-    salvar(); dlg.close(); est.fonte = nomeF; est.mes = meses[meses.length - 1]; est.grupo = 'Dashboard'; render();
-    toast(`${nomeF}: ${novos.length} consultor(es) · ${rs.map(x => `${x.op || 'BD'} ${mesTxt(x.mes)}`).join(' · ')}`);
+    if (tamD > 30000000) { msg.textContent = `O histórico ficaria grande demais (${fmt(tamD / 1048576, 1)} MB). Nada foi apagado.`; msg.className = 'msg erro'; D = Object.assign(vazio(), ler(KEY, {}) || {}); return; }
+    salvar(); dlg.close(); est.fonte = nomeF; est.opF = op; est.mes = meses[meses.length - 1]; est.grupo = 'Dashboard'; render();
+    toast(`${op}: ${novos.length} consultor(es) · ${meses.map(mesTxt).join(', ')}`);
     if (window.NUVEM && NUVEM.ativo && NUVEM.ativo()) NUVEM.publicarAgora();
   };
 }
@@ -814,28 +798,38 @@ function abrirImportacao() {
 }
 function passo1() {
   const f = document.getElementById('desForm');
-  const fontes = Object.keys(D.modelos);
-  f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('upload')}</span><div><h2>Importar relatório de desempenho</h2><p>Planilha (.xlsx) ou CSV exportado do Olos, HubSpot ou outro sistema</p></div></header>
+  const op0 = ['Admissão', 'Serviços'].includes(est.opF) ? est.opF : 'Admissão';
+  f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('upload')}</span><div><h2>Importar relatório de desempenho</h2><p>Escolha a operação e um ou mais arquivos (um por mês). Cada operação é importada separada: uma nunca apaga a outra.</p></div></header>
+    <div class="ds-op-esc">${['Admissão', 'Serviços'].map(o => `<label class="${o === op0 ? 'on' : ''}"><input type="radio" name="dsOpImp" value="${o}"${o === op0 ? ' checked' : ''}><b>${o}</b><small>${o === 'Admissão' ? 'Captação · usa a aba ADM do arquivo' : 'Permanência · usa a aba SERV do arquivo'}</small></label>`).join('')}</div>
     <div class="grade g3">
-      <label class="campo c2"><span>Nome do relatório</span><input id="dsFonte" list="dsFontes" placeholder="Em branco para o relatório de indicadores"><datalist id="dsFontes">${fontes.map(x => `<option value="${esc(x)}">`).join('')}</datalist><small class="dica">O relatório de indicadores (uma linha por consultor) é reconhecido sozinho. Para outros relatórios, use sempre o mesmo nome: o site lembra as colunas.</small></label>
-      <label class="campo"><span>Mês de referência</span><input type="month" id="dsMes" value="${hoje().slice(0, 7)}"><small class="dica">Se o nome do arquivo tiver o mês (ex.: OUTUBRO), ele é usado.</small></label>
-      <label class="campo c3"><span>Arquivo <i class="obr">*</i></span><input type="file" id="dsArq" accept=".xlsx,.xlsm,.csv,.txt"></label>
+      <label class="campo c3"><span>Arquivos <i class="obr">*</i></span><input type="file" id="dsArq" accept=".xlsx,.xlsm,.csv,.txt" multiple><small class="dica">Pode escolher vários de uma vez (segure Ctrl). O mês vem do nome de cada arquivo (ex.: Fonte_Novembro).</small></label>
+      <label class="campo c2"><span>Nome do relatório</span><input id="dsFonte" placeholder="Em branco para o relatório de indicadores"><small class="dica">Só para outros relatórios (não o de indicadores).</small></label>
+      <label class="campo"><span>Mês (se o nome não tiver)</span><input type="month" id="dsMes" value=""></label>
     </div>
     <div class="dlg-rod"><small class="msg" id="dsMsg"></small><span><button class="btn btn-sec" value="cancelar" formnovalidate>Cancelar</button> <button type="button" class="btn btn-pri" id="dsLer">${G.ic('arrow-right')}Continuar</button></span></div>`;
+  f.querySelectorAll('input[name="dsOpImp"]').forEach(r => r.onchange = () => f.querySelectorAll('.ds-op-esc label').forEach(l => l.classList.toggle('on', l.querySelector('input').checked)));
   document.getElementById('dsLer').onclick = async () => {
-    const fonte = document.getElementById('dsFonte').value.trim(), file = document.getElementById('dsArq').files[0], msg = document.getElementById('dsMsg');
-    if (!file) { msg.textContent = 'Escolha o arquivo.'; msg.className = 'msg erro'; return; }
-    msg.textContent = 'Lendo o arquivo…'; msg.className = 'msg';
+    const fonte = document.getElementById('dsFonte').value.trim(), files = [...document.getElementById('dsArq').files], msg = document.getElementById('dsMsg');
+    const op = (f.querySelector('input[name="dsOpImp"]:checked') || {}).value || 'Admissão';
+    if (!files.length) { msg.textContent = 'Escolha o(s) arquivo(s).'; msg.className = 'msg erro'; return; }
+    const partes = [], avisos = []; let unico = null;
     try {
-      const abas = await lerArquivo(file, XLSXLeitor.barra(msg)), mesNome = mesDoArquivo(file.name);
-      arq = { fonte, mes: mesNome || document.getElementById('dsMes').value || hoje().slice(0, 7), mesDoNome: !!mesNome, nome: file.name, abas: abas.filter(a => a.linhas && a.linhas.length > 1) };
-      if (!arq.abas.length) throw new Error('O arquivo não tem linhas.');
-      const dets = acharConsolidados(arq.abas);
-      if (dets.length) return passoConsolidado(dets);
-      if (!fonte) { msg.textContent = 'Este arquivo não é o relatório de indicadores (uma linha por consultor). Dê um nome ao relatório para configurar as colunas.'; msg.className = 'msg erro'; return; }
-      passo2(0);
-    }
-    catch (e) { msg.textContent = 'Não consegui ler: ' + e.message; msg.className = 'msg erro'; }
+      for (let k = 0; k < files.length; k++) {
+        const file = files[k]; msg.textContent = `Lendo ${k + 1} de ${files.length}: ${file.name}…`; msg.className = 'msg';
+        const abas = (await lerArquivo(file, XLSXLeitor.barra(msg))).filter(a => a.linhas && a.linhas.length > 1), mesNome = mesDoArquivo(file.name);
+        const a0 = { fonte, mes: mesNome || document.getElementById('dsMes').value || '', mesDoNome: !!mesNome, nome: file.name, abas };
+        const dets = acharConsolidados(abas);
+        if (!dets.length) { if (files.length === 1) unico = a0; else avisos.push(`${file.name}: não é o relatório de indicadores (ignorado).`); continue; }
+        // a aba da operação escolhida (ADM / SERV); sem nome de operação, a(s) aba(s) sem identificação
+        let usar = dets.filter(d => opDaAba(abas[d.ia].nome) === op);
+        if (!usar.length) usar = dets.filter(d => !opDaAba(abas[d.ia].nome));
+        if (!usar.length) { avisos.push(`${file.name}: não tem aba de ${op} (só ${[...new Set(dets.map(d => opDaAba(abas[d.ia].nome)))].join(', ')}). Ignorado.`); continue; }
+        usar.forEach(d => { const aba = abas[d.ia]; partes.push({ arq: a0, aba, det: d, info: { ...lerConsolidado(aba, d.iCab) }, mes: a0.mes }); });
+      }
+    } catch (e) { msg.textContent = 'Não consegui ler: ' + e.message; msg.className = 'msg erro'; return; }
+    if (partes.length) return passoConsolidado(partes, op, avisos);
+    if (unico) { arq = { ...unico, mes: unico.mes || hoje().slice(0, 7) }; if (!fonte) { msg.textContent = 'Este arquivo não é o relatório de indicadores (uma linha por consultor). Dê um nome ao relatório para configurar as colunas.'; msg.className = 'msg erro'; return; } return passo2(0); }
+    msg.innerHTML = avisos.map(esc).join('<br>') || 'Nenhum arquivo reconhecido.'; msg.className = 'msg erro';
   };
 }
 const PALPITE_CONS = ['proprietario do negocio', 'proprietario', 'consultor', 'agente', 'atendente', 'operador', 'usuario', 'login', 'responsavel', 'owner', 'nome'];
