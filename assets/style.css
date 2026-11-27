@@ -1543,3 +1543,6 @@ html.menu-recolhido .btn-recolher svg{transform:rotate(180deg)}
 .mm-tab .mm-del:hover{opacity:1}
 .mm-tab select.mm-n{width:120px;min-height:32px}
 .mm-tab .mm-op{width:150px}
+.q-aval td small.q-tipo{font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:6px;margin-left:4px}
+.q-tipo.s{background:rgba(27,175,122,.15);color:#1baf7a}.q-tipo.m{background:rgba(176,106,217,.15);color:#b06ad9}
+.q-aval tr.q-aval-cont td{border-top-color:transparent}

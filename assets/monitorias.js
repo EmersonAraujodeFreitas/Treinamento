@@ -174,6 +174,7 @@ function metasDoFiltro(M) {
   }
   return { ...M, linhasSup: sup, linhasMon: mon, filtrado: true, consFiltro: C ? C.length : null };
 }
+let M_opM = null;
 function montarMetas(P, doMes, todasMon) {
   const mt = metasMon(), q = P.quadro;
   const gest = ((ler('inovacao_treinamento_gestao_v1', {}) || {}).itens || q.gestao || []).filter(g => !/deslig/i.test(g.status || ''));
@@ -199,11 +200,14 @@ function montarMetas(P, doMes, todasMon) {
   const dele = (p, xs) => xs.filter(m => casaPessoa(m.avaliador, p));
   // como no Dash Qualidade: meta de supervisor conta só monitorias do tipo Supervisor e a de monitor só as do tipo Monitor
   // (linhas com a coluna Monitoria vazia ficam fora, como na planilha)
-  const doTipo = (xs, t) => P.tipoK ? xs.filter(m => m._t === t) : xs;
+  // como na tabela dinâmica do Dash Qualidade (Nome × Célula): conta todas as monitorias lançadas pela pessoa, sem filtrar o tipo
+  const doTipo = xs => xs;
   const linhasSup = supsP.map(p => {
     const eq = vig.filter(c => c.supervisor && (norm(c.supervisor) === norm(p.nome) || mesmoNome(c.supervisor, p.nome)));
     const opsEq = {}; eq.forEach(c => { const o = opDeCons(c); if (o) opsEq[o] = (opsEq[o] || 0) + 1; });
-    const k = 'sup:' + norm(p.nome), opAuto = Object.entries(opsEq).sort((a, b) => b[1] - a[1])[0]?.[0] || operacaoBD(p), op = (mt.op || {})[k] || opAuto;
+    // operação do supervisor: a da equipe no BD; sem equipe, a célula onde ele mais monitorou (como na planilha)
+    const celsDele = {}; dele(p, todasMon).forEach(m => { const o = opM(m); if (o) celsDele[o] = (celsDele[o] || 0) + 1; });
+    const k = 'sup:' + norm(p.nome), opAuto = Object.entries(opsEq).sort((a, b) => b[1] - a[1])[0]?.[0] || Object.entries(celsDele).sort((a, b) => b[1] - a[1])[0]?.[0] || operacaoBD(p), op = (mt.op || {})[k] || opAuto;
     const nSet = (mt.n || {})[k], n = nSet ?? PADRAO_N.sup, red = (mt.red || {})[k] || 0, qtdBD = eq.length, qtd = (mt.qtd || {})[k] ?? qtdBD, meta = n ? Math.max(0, qtd * n - red) : 0;
     const minhas = doTipo(dele(p, doMes), 'Supervisor'), daEquipe = doMes.filter(m => norm(m.supervisor) === norm(p.nome) || mesmoNome(m.supervisor || '', p.nome) || eq.some(c => norm(c.nome) === norm(m.nome)));
     return { tipo: 'sup', chave: k, nome: p.nome, op, opAuto, eq, qtd, qtdBD, n, nPadrao: nSet === undefined || nSet === null, red, meta, feitas: minhas.length, fb: minhas.reduce((a, m) => a + (m._fbN || 0), 0), notaDada: media_(minhas.map(m => m.nota)), mediaEquipe: media_(daEquipe.map(m => m.nota)), equipe: daEquipe };
@@ -228,7 +232,8 @@ function montarMetas(P, doMes, todasMon) {
   // avaliadores da base que não batem com ninguém (aparecem como aviso)
   const todosP = supsP.concat(monsP), naoId = {};
   doMes.forEach(m => { if (m.avaliador && !todosP.some(p => casaPessoa(m.avaliador, p))) naoId[m.avaliador] = (naoId[m.avaliador] || 0) + 1; });
-  return { mt, vig, opDeCons, consPorOp, linhasSup, linhasMon, opsNome, naoId: Object.entries(naoId).sort((a, b) => b[1] - a[1]), temADM: gest.length > 0 };
+  M_opM = opM;
+  return { mt, vig, opDeCons, consPorOp, opM, linhasSup, linhasMon, opsNome, naoId: Object.entries(naoId).sort((a, b) => b[1] - a[1]), temADM: gest.length > 0 };
 }
 
 /* ---------- desenho ---------- */
@@ -270,6 +275,11 @@ function dashboardMon(filtro, ant, mesesAsc, porMes) {
   marcar(tudo); marcar(filtro); marcar(ant);
   const M0 = montarMetas(P, filtro, tudo), M = metasDoFiltro(M0), mt = M.mt, metaN = mt.nota || META;
   M.mes = est.mes; M.doMes = filtro; M.P = P;
+  // tabela Nome × Célula (pessoa reconhecida pelo BD ADM/BD; se não, o texto da base)
+  const pessoasM = M0.linhasSup.map(l => ({ nome: l.nome, tipo: 'Supervisor' })).concat(M0.linhasMon.map(l => ({ nome: l.nome, tipo: 'Monitor' })));
+  const quem = {}; const quemDe = a => { const k = limpaAval(a); if (k in quem) return quem[k]; const p = pessoasM.find(x => casaPessoa(a, x)); return (quem[k] = p ? { nome: tituloNome(p.nome), tipo: p.tipo } : { nome: tituloNome(limpaAval(a)), tipo: '' }); };
+  const agA = {}; filtro.forEach(m => { if (!m.avaliador || !String(m.avaliador).trim()) return; const q = quemDe(m.avaliador), cel = (M0.opM ? M0.opM(m) : P.opDe(m)) || ''; const k = q.nome + '|' + chaveOp(cel); const x = agA[k] = agA[k] || { nome: q.nome, tipo: q.tipo || m._t, cel, n: 0, fb: 0, notas: [] }; x.n++; x.fb += m._fbN || 0; if (m.nota !== null && m.nota !== undefined) x.notas.push(m.nota); });
+  const tabAval = Object.values(agA).map(x => ({ ...x, nota: media_(x.notas) })).sort((a, b) => cmpTxt(a.nome, b.nome) || cmpTxt(a.cel, b.cel));
   const respOp = o => { const r = respCelula(mt, est.mes, o, filtro, P); return r ? r.nome : ''; };
   const sup = filtro.filter(m => m._t === 'Supervisor'), mon = filtro.filter(m => m._t === 'Monitor');
   const notas = filtro.map(m => m.nota), md = media_(notas), mdAnt = media_(ant.map(m => m.nota));
@@ -349,6 +359,10 @@ function dashboardMon(filtro, ant, mesesAsc, porMes) {
     <div class="pn-grade"><div><h3 class="db-h3">Monitorias lançadas × feedback realizado</h3><div id="qMonFb"></div></div><div><h3 class="db-h3">Nota dada pelos monitores a cada equipe</h3><div id="qMonEq"></div></div></div>
     ${porOrganizacao(M.linhasMon, 'Organização')}
     <div class="tabela-wrap"><table class="tabela q-meta"><caption class="q-cap q-mm-mon">Meta monitores</caption>${cabMeta('Nome monitor', false)}<tbody>${M.linhasMon.map(l => linhaMeta(l, false)).join('') || '<tr><td colspan="10" class="dica">Nenhum monitor encontrado no BD ADM nem na base.</td></tr>'}</tbody></table></div></article>
+  ${tabAval.length ? `<article class="cartao"><header class="cab-card"><span class="icb">${G.ic('clipboard')}</span><div><h2>Monitorias por avaliador e célula</h2><p>Como a tabela dinâmica do Dash Qualidade: monitorias lançadas, soma de feedback realizado e média da nota final de quem avaliou, em cada célula</p></div></header>
+    <div class="tabela-wrap"><table class="tabela q-aval"><thead><tr><th>Avaliador</th><th>Célula</th><th class="dir">Monitorias lançadas</th><th class="dir">Soma de feedback realizado</th><th class="dir">Média de nota final</th></tr></thead><tbody>
+      ${tabAval.map((x, i) => `<tr${i && tabAval[i - 1].nome === x.nome ? ' class="q-aval-cont"' : ''}><td>${i && tabAval[i - 1].nome === x.nome ? '' : `<b>${esc(x.nome)}</b> <small class="q-tipo ${x.tipo === 'Supervisor' ? 's' : 'm'}">${x.tipo || ''}</small>`}</td><td>${esc(x.cel || '—')}</td><td class="dir">${x.n}</td><td class="dir">${x.fb}</td><td class="dir">${x.nota === null ? '—' : fmt(x.nota, 2) + '%'}</td></tr>`).join('')}
+      <tr class="des-tot"><td><b>Total</b></td><td></td><td class="dir"><b>${tabAval.reduce((a, x) => a + x.n, 0)}</b></td><td class="dir"><b>${tabAval.reduce((a, x) => a + x.fb, 0)}</b></td><td class="dir"><b>${md === null ? '—' : fmt(md, 2) + '%'}</b></td></tr></tbody></table></div></article>` : ''}
   ${pecs.length ? `<article class="cartao"><header class="cab-card"><span class="icb">${G.ic('target')}</span><div><h2>PEC</h2><p>${P.pecCols.length ? 'Média da nota final das monitorias em que o PEC ficou "Sim" (sem nenhuma, 100%) · como no Dash Qualidade' : 'Conformidade de cada PEC'}</p></div></header>
     <div class="q-pecg">${pecs.map(p_ => `<div class="q-pecc" style="--c:${COR_PEC[p_.k] || corNota(p_.v * 100)}"><small>PEC</small><b>${esc(p_.k)}</b>${DB.anel({ pct: Math.min(1, p_.v), centro: fmt(p_.v * 100, 1) + '%', cor: corNota(p_.v * 100) })}${p_.n !== undefined ? `<em>${p_.n} Sim · ${p_.nao} Não${p_.np !== null && p_.np !== undefined ? ` · nota do PEC ${fmt(p_.np * 100, 1)}%` : ''}</em>` : ''}</div>`).join('')}</div></article>` : ''}
   ${falhas.length || confs.length || Object.keys(histTri).length ? `<article class="cartao"><header class="cab-card"><span class="icb">${G.ic('alert')}</span><div><h2>Ofensores</h2><p>${totOc} falha(s) no mês, agrupadas no PEC · escolha o PEC, depois o item, para ver quem errou</p></div>
