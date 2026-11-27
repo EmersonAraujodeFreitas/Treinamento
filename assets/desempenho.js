@@ -9,7 +9,10 @@
 const A = window.APP;
 const { $, $$, norm, num, fmt, esc, hoje, dataBR, cmpTxt, toast, ler, gravar } = A;
 const KEY = 'inovacao_treinamento_desempenho_v1', KEY_Q = 'inovacao_treinamento_quadro_v1', KEY_OC = 'inovacao_treinamento_ocorrencias_v1', KEY_MON = 'inovacao_treinamento_monitorias_v1', KEY_AT = 'inovacao_treinamento_ativos_v1';
-const vazio = () => ({ modelos: {}, dados: [], metas: {}, importacoes: [] });
+const vazio = () => ({ modelos: {}, dados: [], metas: {}, importacoes: [], grupos: {} });
+// hora de importação de cada relatório · mês · operação (a sincronização usa para não perder nada)
+const grupoDe = d => d.fonte + '|' + d.mes + '|' + (d.op || '');
+function marcarGrupos(removidos, novos) { const t = new Date().toISOString(); D.grupos = D.grupos || {}; removidos.concat(novos).forEach(d => { D.grupos[grupoDe(d)] = t; }); }
 let D = Object.assign(vazio(), ler(KEY, {}) || {});
 const salvar = () => gravar(KEY, D);
 const pode = x => !window.NUVEM || !NUVEM.pode || NUVEM.pode(x);
@@ -333,6 +336,7 @@ function passoConsolidado(dets) {
     const { md, cod } = remontarModelo(nomeF, uniao, substitui);
     D.modelos[nomeF] = md;
     const novos = rs.flatMap(x => x.r.dados.map(d => ({ ...d, fonte: nomeF, v: cod(d.v) })));
+    marcarGrupos(D.dados.filter(d => d.fonte === nomeF && substitui(d)), novos);
     D.dados = D.dados.filter(d => !(d.fonte === nomeF && substitui(d))).concat(novos);
     // todo o histórico fica guardado (só o mesmo mês e operação é substituído)
     const meses = [...new Set(rs.map(x => x.mes))].sort();
@@ -890,6 +894,7 @@ function passo3(modelo, r) {
   document.getElementById('dsSalvar').onclick = () => {
     D = Object.assign(vazio(), ler(KEY, {}) || {});
     D.modelos[modelo.fonte] = modelo;
+    marcarGrupos(D.dados.filter(d => d.fonte === modelo.fonte && meses.includes(d.mes)), r.dados.map(d => ({ fonte: modelo.fonte, ...d })));
     D.dados = D.dados.filter(d => !(d.fonte === modelo.fonte && meses.includes(d.mes))).concat(r.dados);
     D.importacoes = [{ fonte: modelo.fonte, arquivo: arq.nome, em: new Date().toISOString(), meses, linhas: r.total, casados, naoAchados: r.naoAchados.length }, ...(D.importacoes || [])].slice(0, 60);
     salvar(); dlg.close(); est.fonte = modelo.fonte; est.mes = meses[meses.length - 1]; render();

@@ -12,6 +12,28 @@
    ========================================================= */
 
 const DATASETS_LISTA = ['formacao', 'ativos', 'analises', 'ocorrencias', 'monitorias', 'agenda', 'admissao'];
+/* Desempenho: junta duas cópias sem perder relatórios. Cada grupo (relatório · mês · operação) fica
+   com a cópia importada por último (D.grupos guarda a hora de cada um; grupo sem linhas = apagado de propósito).
+   "a" ganha nos empates e nos outros campos (metas etc.). */
+function mesclarDes(a, b) {
+  if (!b || !Array.isArray(b.dados)) return a; if (!a || !Array.isArray(a.dados)) return b;
+  const kOf = d => d.fonte + '|' + d.mes + '|' + (d.op || '');
+  const ga = a.grupos || {}, gb = b.grupos || {};
+  const temA = new Set(a.dados.map(kOf)), temB = new Set(b.dados.map(kOf));
+  const keys = new Set([...Object.keys(ga), ...Object.keys(gb), ...temA, ...temB]);
+  const lado = {}, grupos = {};
+  keys.forEach(k => { const ta = ga[k] || (temA.has(k) ? '0' : ''), tb = gb[k] || (temB.has(k) ? '0' : ''); lado[k] = tb > ta ? 'b' : 'a'; const t = tb > ta ? tb : ta; if (t && t !== '0') grupos[k] = t; });
+  // modelo de cada relatório: o de "a" mais os indicadores que só "b" tem
+  const fontes = new Set([...Object.keys(a.modelos || {}), ...Object.keys(b.modelos || {})]), modelos = {};
+  fontes.forEach(f => { const ma = (a.modelos || {})[f], mb = (b.modelos || {})[f]; if (!ma || !mb || !ma.consolidado || !mb.consolidado) { modelos[f] = ma || mb; return; } const ms = ma.metricas.map(m => ({ ...m })); mb.metricas.forEach(m => { if (!ms.some(x => x.rotulo === m.rotulo)) ms.push({ ...m }); }); modelos[f] = { ...ma, metricas: ms }; });
+  const objDe = (d, mods) => { const md = mods[d.fonte]; if (!md || !md.consolidado || !Array.isArray(d.v)) return null; const o = {}; md.metricas.forEach((m, i) => { const v = d.v[i]; if (v !== null && v !== undefined) o[m.rotulo] = v; }); return o; };
+  const cod = (o, f) => { const v = modelos[f].metricas.map(m => o[m.rotulo] ?? null); while (v.length && v[v.length - 1] === null) v.pop(); return v; };
+  const pega = (src, mods, quem) => src.dados.filter(d => lado[kOf(d)] === quem).map(d => { const o = objDe(d, mods); return o ? { ...d, v: cod(o, d.fonte) } : d; });
+  const dados = pega(a, a.modelos || {}, 'a').concat(pega(b, b.modelos || {}, 'b'));
+  const imps = [...(a.importacoes || []), ...(b.importacoes || [])], vistos = new Set();
+  const importacoes = imps.filter(i => { const k = (i.em || '') + '|' + (i.arquivo || ''); if (vistos.has(k)) return false; vistos.add(k); return true; }).sort((x, y) => String(y.em || '').localeCompare(String(x.em || ''))).slice(0, 80);
+  return { ...b, ...a, modelos, dados, grupos, importacoes };
+}
 const VALORES = ['quadro', 'gestao', 'supervisores', 'bairros', 'meta', 'desempenho', 'motivos'];
 const PERFIS = ['Treinamento', 'Supervisão', 'Gerência', 'Consulta', 'Administrador'];
 const TODAS_ABAS = ['cadastro', 'analise-trein', 'analise-sup', 'dashboard', 'base', 'at-cadastro', 'at-registros', 'at-dashboard', 'at-base', 'buscar', 'painel', 'at-gestao', 'desempenho', 'monitorias', 'agenda', 'admissao'];
@@ -286,6 +308,7 @@ async function rotaSincronizar(env, u, req) {
     if (!Object.prototype.hasOwnProperty.call(corpo.valores || {}, v)) continue;
     if (!ac.escrever[v]) { recusados.push({ ds: v, motivo: 'sem permissão' }); continue; }
     let dados = corpo.valores[v];
+    if (v === 'desempenho') { const atual = await lerValor(env, 'desempenho', null); if (atual) dados = mesclarDes(dados, atual); }
     if (v === 'bairros') { const atual = await lerValor(env, 'bairros', {}); for (const [c, bs] of Object.entries(dados || {})) atual[c] = [...new Set([...(atual[c] || []), ...(Array.isArray(bs) ? bs : [])])].slice(0, 2000); dados = atual; }
     const txt = JSON.stringify(dados);
     if (txt.length > 5e6) { recusados.push({ ds: v, motivo: 'grande demais' }); continue; }
@@ -366,7 +389,7 @@ async function rotaAdmin(env, u, req, partes) {
 
 /* ---------------- diagnóstico (não mostra nenhum valor secreto) ---------------- */
 async function diagnostico(env) {
-  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-27-v11', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
+  const d = { servico: 'treinamento-inovacao-casa', versao_codigo: '2026-11-28-v12', banco_ligado: !!(env.DB && env.DB.prepare), tabelas: [], segredo_sessao: !!(env.SEGREDO_SESSAO && env.SEGREDO_SESSAO.length >= 20), pimenta: !!env.PIMENTA, origens: String(env.ORIGENS || '') };
   if (d.banco_ligado) {
     try { await garantirTabelas(env); } catch (e) { d.erro_criar_tabelas = String(e.message || e).slice(0, 200); }
     for (const t of ['usuarios', 'registros', 'valores', 'tentativas', 'log']) {

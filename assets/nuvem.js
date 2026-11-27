@@ -65,6 +65,29 @@ async function api(metodo, caminho, corpo) {
 }
 
 /* ---------------- alterações locais → pendentes ---------------- */
+/* Desempenho: junta duas cópias sem perder relatórios. Cada grupo (relatório · mês · operação) fica
+   com a cópia importada por último (D.grupos guarda a hora de cada um; grupo sem linhas = apagado de propósito).
+   "a" ganha nos empates e nos outros campos (metas etc.). */
+function mesclarDes(a, b) {
+  if (!b || !Array.isArray(b.dados)) return a; if (!a || !Array.isArray(a.dados)) return b;
+  const kOf = d => d.fonte + '|' + d.mes + '|' + (d.op || '');
+  const ga = a.grupos || {}, gb = b.grupos || {};
+  const temA = new Set(a.dados.map(kOf)), temB = new Set(b.dados.map(kOf));
+  const keys = new Set([...Object.keys(ga), ...Object.keys(gb), ...temA, ...temB]);
+  const lado = {}, grupos = {};
+  keys.forEach(k => { const ta = ga[k] || (temA.has(k) ? '0' : ''), tb = gb[k] || (temB.has(k) ? '0' : ''); lado[k] = tb > ta ? 'b' : 'a'; const t = tb > ta ? tb : ta; if (t && t !== '0') grupos[k] = t; });
+  // modelo de cada relatório: o de "a" mais os indicadores que só "b" tem
+  const fontes = new Set([...Object.keys(a.modelos || {}), ...Object.keys(b.modelos || {})]), modelos = {};
+  fontes.forEach(f => { const ma = (a.modelos || {})[f], mb = (b.modelos || {})[f]; if (!ma || !mb || !ma.consolidado || !mb.consolidado) { modelos[f] = ma || mb; return; } const ms = ma.metricas.map(m => ({ ...m })); mb.metricas.forEach(m => { if (!ms.some(x => x.rotulo === m.rotulo)) ms.push({ ...m }); }); modelos[f] = { ...ma, metricas: ms }; });
+  const objDe = (d, mods) => { const md = mods[d.fonte]; if (!md || !md.consolidado || !Array.isArray(d.v)) return null; const o = {}; md.metricas.forEach((m, i) => { const v = d.v[i]; if (v !== null && v !== undefined) o[m.rotulo] = v; }); return o; };
+  const cod = (o, f) => { const v = modelos[f].metricas.map(m => o[m.rotulo] ?? null); while (v.length && v[v.length - 1] === null) v.pop(); return v; };
+  const pega = (src, mods, quem) => src.dados.filter(d => lado[kOf(d)] === quem).map(d => { const o = objDe(d, mods); return o ? { ...d, v: cod(o, d.fonte) } : d; });
+  const dados = pega(a, a.modelos || {}, 'a').concat(pega(b, b.modelos || {}, 'b'));
+  const imps = [...(a.importacoes || []), ...(b.importacoes || [])], vistos = new Set();
+  const importacoes = imps.filter(i => { const k = (i.em || '') + '|' + (i.arquivo || ''); if (vistos.has(k)) return false; vistos.add(k); return true; }).sort((x, y) => String(y.em || '').localeCompare(String(x.em || ''))).slice(0, 80);
+  return { ...b, ...a, modelos, dados, grupos, importacoes };
+}
+window.mesclarDes = mesclarDes;
 let carimbo = 0;
 const marca = v => typeof v === 'string' ? v : JSON.stringify(v); // pendentes antigos guardavam o registro inteiro
 function pendentes() { return lerJ(K_PEND, { listas: {}, valores: {} }); }
@@ -167,10 +190,19 @@ function aplicarEstado(est) {
     for (const v of VALORES) {
       if (Object.prototype.hasOwnProperty.call(p.valores || {}, v)) continue;
       const val = est.datasets[v];
+      if (v === 'desempenho' && val) {
+        // nunca troca o histórico local pelo do servidor: junta os dois (o que for mais novo em cada mês/operação fica)
+        let local = null; try { local = JSON.parse(localStorage.getItem(DS[v]) || 'null'); } catch (e) { /* segue */ }
+        const junto = mesclarDes(val, local), txt = JSON.stringify(junto);
+        setOrig.call(localStorage, DS[v], txt);
+        if (txt !== JSON.stringify(val)) p.valores[v] = ++carimbo + '-' + Date.now(); // o servidor não tinha tudo: envia de novo
+        continue;
+      }
       if (val === null || val === undefined) localStorage.removeItem(DS[v]); else setOrig.call(localStorage, DS[v], JSON.stringify(val));
     }
   } finally { aplicando = false; }
   gravarJ(K_PEND, p);
+  if (Object.prototype.hasOwnProperty.call(p.valores || {}, 'desempenho')) setTimeout(() => agendarEnvio(), 50);
   versaoLocal = est.versao;
   sessao.permissoes = est.permissoes; sessao.usuario = est.usuario; sessao.equipe = est.equipe || null; salvarSessao();
   window.dispatchEvent(new CustomEvent('dados-atualizados'));
