@@ -663,7 +663,7 @@ function dashboardDes(ctx) {
     };
   }
 
-  const html = `<div class="db-ops">${[['', 'Consolidado'], ['Admissão', 'Admissão'], ['Serviços', 'Serviços']].map(([k, t]) => `<button type="button" data-opf="${k}" class="${k === (est.opF || '') ? 'on' : ''}">${t}${k && !(ctx.opsMes || []).includes(k) ? ' <small>sem relatório</small>' : ''}</button>`).join('')}</div><div class="db-guias">${GUIAS.map(([k, t, ic]) => `<button type="button" data-guia="${k}" class="${k === g ? 'on' : ''}">${G.ic(ic, '')}${t}</button>`).join('')}</div>${corpo}`;
+  const html = `<div class="db-ops">${[['', 'Consolidado'], ['Admissão', 'Admissão'], ['Serviços', 'Serviços']].map(([k, t]) => `<button type="button" data-opf="${k}" class="${k === (est.opF || '') ? 'on' : ''}">${t}${k && !(ctx.opsTodas || []).includes(k) ? ' <small>sem relatório</small>' : k && !(ctx.opsMes || []).includes(k) ? ' <small>sem este mês</small>' : ''}</button>`).join('')}</div><div class="db-guias">${GUIAS.map(([k, t, ic]) => `<button type="button" data-guia="${k}" class="${k === g ? 'on' : ''}">${G.ic(ic, '')}${t}</button>`).join('')}</div>${corpo}`;
   const dep = () => {
     raiz.querySelectorAll('[data-guia]').forEach(x => x.onclick = () => { est.guia = x.dataset.guia; render(); window.scrollTo({ top: raiz.querySelector('.db-guias').offsetTop - 80, behavior: 'smooth' }); });
     raiz.querySelectorAll('[data-opf]').forEach(x => x.onclick = () => { est.opF = x.dataset.opf; est.sup = ''; render(); });
@@ -708,6 +708,9 @@ function render() {
   const gTit = g => { const m = todas.find(x => x.grupo === g); return m && m.gOrig ? m.gOrig : g; };
   let linhas = D.dados.filter(d => d.fonte === est.fonte && d.mes === est.mes);
   const opsMes = [...new Set(linhas.map(opDaLinha).filter(Boolean))].sort(cmpTxt);
+  // operação escolhida sem dados neste mês: vai para o último mês que tem relatório dela
+  if (est.opF && !opsMes.includes(est.opF)) { const mOp = meses.find(m => D.dados.some(d => d.fonte === est.fonte && d.mes === m && opDaLinha(d) === est.opF)); if (mOp && mOp !== est.mes) { est.mes = mOp; return render(); } }
+  const opsTodas = [...new Set(D.dados.filter(d => d.fonte === est.fonte).map(opDaLinha).filter(Boolean))];
   if (est.opF) linhas = linhas.filter(d => opDaLinha(d) === est.opF);
   const doMes = linhas;
   const sups = [...new Set(linhas.map(d => d.supervisor).filter(Boolean))].sort(cmpTxt);
@@ -743,7 +746,7 @@ function render() {
   const totLinha = cons && linhas.length > 1 ? `<tr class="des-tot"><td class="des-fixo des-c1"></td><td class="des-fixo des-c2"><b>OPERAÇÃO${est.sup ? ' · EQUIPE' : ''}</b></td><td>${linhas.length} consultor(es)</td>${mets.map(mt => `<td class="dir">${mt.tipo === 'quartil' ? '' : valorTxt(mt, agregar(mt, linhas, todas))}</td>`).join('')}${cruzar ? '<td colspan="5"></td>' : ''}</tr>` : '';
   const mesesAsc = [...meses].reverse().slice(-12);
   const baseMes = m => D.dados.filter(d => d.fonte === est.fonte && d.mes === m && (!est.opF || opDaLinha(d) === est.opF) && (!est.sup || d.supervisor === est.sup) && (!est.busca || norm(d.nome).includes(norm(est.busca)) || String(d.mat).includes(est.busca)));
-  const dash = cons && linhas.length ? dashboardDes({ todas, linhas, mesesAsc, opsMes, mesAnt: meses[meses.indexOf(est.mes) + 1] || '', base: baseMes }) : null;
+  const dash = cons && linhas.length ? dashboardDes({ todas, linhas, mesesAsc, opsMes, opsTodas, mesAnt: meses[meses.indexOf(est.mes) + 1] || '', base: baseMes }) : null;
   raiz.innerHTML = `
   <div class="cab-pagina"><div><h1>Desempenho</h1><p class="sub">Indicadores por consultor (relatório consolidado do Olos, HubSpot e ponto), cruzados com faltas, monitorias e treinamentos</p></div>
     <div class="cab-acoes">
