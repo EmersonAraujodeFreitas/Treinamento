@@ -1546,3 +1546,6 @@ html.menu-recolhido .btn-recolher svg{transform:rotate(180deg)}
 .q-aval td small.q-tipo{font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:6px;margin-left:4px}
 .q-tipo.s{background:rgba(27,175,122,.15);color:#1baf7a}.q-tipo.m{background:rgba(176,106,217,.15);color:#b06ad9}
 .q-aval tr.q-aval-cont td{border-top-color:transparent}
+.q-aval .q-aval-g th{color:#fff;text-align:left;font-size:12px;letter-spacing:.5px;text-transform:uppercase;padding:6px 12px}
+.q-aval .q-aval-g.q-mm-sup th{background:#14325c}.q-aval .q-aval-g.q-mm-mon th{background:#6a2c91}.q-aval .q-aval-g:not(.q-mm-sup):not(.q-mm-mon) th{background:#55606e}
+.q-aval .q-aval-geral td{border-top:2px solid var(--borda-forte)}
