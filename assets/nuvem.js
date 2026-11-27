@@ -90,6 +90,7 @@ function mesclarDes(a, b) {
 window.mesclarDes = mesclarDes;
 // só reenvia quando o navegador tem algum relatório/mês/operação mais novo (ou que o servidor não tem).
 // Comparar o texto inteiro fazia reenviar sempre (ordem dos campos) e a fila nunca terminava.
+let diagDes = null, versaoSrv = null;
 function localTemMais(srv, loc) {
   if (!loc || !Array.isArray(loc.dados)) return false; if (!srv || !Array.isArray(srv.dados)) return loc.dados.length > 0;
   const kOf = d => d.fonte + '|' + d.mes + '|' + (d.op || ''), gs = srv.grupos || {}, gl = loc.grupos || {};
@@ -201,8 +202,10 @@ function aplicarEstado(est) {
       setOrig.call(localStorage, DS[ds], JSON.stringify([...mapa.values()]));
     }
     for (const v of VALORES) {
+      if (v === 'desempenho' && Object.prototype.hasOwnProperty.call(p.valores || {}, v)) { const val = est.datasets[v]; diagDes = { em: new Date().toISOString(), servidor: val && Array.isArray(val.dados) ? val.dados.length : null, pendente: true }; }
       if (Object.prototype.hasOwnProperty.call(p.valores || {}, v)) continue;
       const val = est.datasets[v];
+      if (v === 'desempenho') diagDes = { em: new Date().toISOString(), servidor: val && Array.isArray(val.dados) ? val.dados.length : null, pendente: Object.prototype.hasOwnProperty.call(p.valores || {}, v) };
       if (v === 'desempenho' && (val === null || val === undefined || !Array.isArray(val.dados))) {
         // o servidor ainda não tem os relatórios (ou não conseguiu gravar): nunca apaga os do navegador; manda de novo
         let local = null; try { local = JSON.parse(localStorage.getItem(DS[v]) || 'null'); } catch (e) { /* segue */ }
@@ -652,7 +655,8 @@ async function importarAntigo(usuario, senha) {
 /* ---------------- API para os outros módulos ---------------- */
 window.NUVEM = {
   usuario: () => sessao && { ...sessao.usuario }, ehAdmin, pode, permissoes,
-  equipe: () => sessao && sessao.equipe || null, registrarAcesso: nome => { if (!modoLocal() && sessao) api('POST', '/acesso-ficha', { nome }).catch(() => {}); }, publicarAgora: () => enviar(), status: () => statusSinc, ativo: () => !modoLocal(), abrirAdmin, servidorDesatualizado: () => servidorDesatualizado
+  equipe: () => sessao && sessao.equipe || null, registrarAcesso: nome => { if (!modoLocal() && sessao) api('POST', '/acesso-ficha', { nome }).catch(() => {}); }, publicarAgora: () => enviar(), status: () => statusSinc, diagDesempenho: () => diagDes,
+  versaoServidor: async () => { if (versaoSrv !== null || modoLocal() || !API) return versaoSrv; try { const r = await fetch(API + '/saude'); const j = await r.json(); versaoSrv = j.versao_codigo || ''; } catch (e) { versaoSrv = ''; } return versaoSrv; }, ativo: () => !modoLocal(), abrirAdmin, servidorDesatualizado: () => servidorDesatualizado
 };
 
 /* ---------------- menu lateral e tema ---------------- */
