@@ -54,7 +54,8 @@ A.identificarConsultor = v => identificar(v, indiceCache());
 A.indiceConsultores = indiceCache; A.identificarCom = identificar;
 /* operação (Admissão = Captação · Serviços = Permanência): do relatório importado ou do BD */
 const opNorm = t => { const x = norm(t || ''); return /capta|admiss/.test(x) ? 'Admissão' : /perman|servic/.test(x) ? 'Serviços' : ''; };
-const opDaLinha = d => d.op || (() => { const c = identificar(d.mat, indiceCache()) || identificar(d.nome, indiceCache()); return c ? opNorm(c.operacao || c.grupo) : ''; })();
+// sem operação no relatório nem no BD: os relatórios antigos eram os de Admissão
+const opDaLinha = d => d.op || (() => { const c = identificar(d.mat, indiceCache()) || identificar(d.nome, indiceCache()); return c ? opNorm(c.operacao || c.grupo) : ''; })() || 'Admissão';
 const opCurta = o => o === 'Admissão' ? 'Adm.' : o === 'Serviços' ? 'Serv.' : '';
 A.opDesempenho = opDaLinha;
 
@@ -363,7 +364,7 @@ function mesDoArquivo(nome) {
 /* ---------------- leitura dos valores (formato novo e antigo) ---------------- */
 const V = (d, mt) => !d.v ? (d.m ? d.m[mt.rotulo] ?? null : null) : Array.isArray(d.v) ? d.v[mt.i] ?? null : d.v[mt.rotulo] ?? null;
 const comIndice = md => { const ms = (md && md.metricas) || []; ms.forEach((m, i) => { m.i = i; }); return ms; };
-const RESUMO = [['Geral', 'quartil geral'], ['Chamadas', 'total'], ['Chamadas', 'efetividade'], ['TMA', 'outbound'], ['Pós-chamada', 'total'], ['Carga horária', 'total'], ['Ponto', 'abs'], ['C-SAT', 'c-sat final'], ['Qualidade', 'nota monitor'], ['Aceite', 'total'], ['Matrícula', 'total'], ['Pausa', 'tempo em pausa'], ['HubSpot', 'criacao de lead'], ['Aderência', 'aderencia']];
+const RESUMO = [['Geral', 'quartil geral'], ['Chamadas', 'total'], ['Chamadas', 'efetividade'], ['TMA', 'outbound'], ['Pós-chamada', 'total'], ['Carga horária', 'total'], ['Ponto', 'abs'], ['C-SAT', 'c-sat final'], ['Qualidade', 'nota monitor'], ['Aceite', 'total'], ['Matrícula', 'total'], ['Aceite reingresso', 'aceites reingresso - total'], ['Matrícula reingresso', 'matricula reingresso - total'], ['Retenção', 'revertidos'], ['Retenção', 'cancelados'], ['Pausa', 'tempo em pausa'], ['HubSpot', 'criacao de lead'], ['Aderência', 'aderencia']];
 const achar = (mets, g, s) => mets.find(m => m.grupo === g && norm(m.sub).startsWith(s) && m.tipo !== 'quartil');
 const resumoDe = mets => RESUMO.map(([g, s]) => g === 'Geral' ? mets.find(m => m.grupo === 'Geral' && norm(m.sub).startsWith(s)) : achar(mets, g, s)).filter(Boolean);
 /* total da operação: soma para contagens; média ponderada para tempos médios e percentuais quando há base */
@@ -404,11 +405,12 @@ const GERAL_KS = ['abs', 'csat', 'qual', 'aceite', 'mat'];
 function quartisDef(M) {
   return [['geral', 'Geral', null, 0, 'Geral'], ['qual', 'Qualidade', M('Qualidade', 'nota monitor'), 1, 'Qualidade'], ['abs', 'ABS', M('Ponto', 'abs'), -1, 'Ponto'], ['aceite', 'Aceite', M('Aceite', 'total') || M('Aceite reingresso', 'aceites reingresso - total'), 1, 'Aceite', false, M('Aceite reingresso', 'aceites reingresso - total')],
     ['csat', 'Pesquisa de satisfação', M('C-SAT', 'c-sat final'), 1, 'C-SAT', true], ['mat', 'Matrícula', M('Matrícula', 'total') || M('Matrícula reingresso', 'matricula reingresso - total'), 1, 'Matrícula', false, M('Matrícula reingresso', 'matricula reingresso - total')],
-    ['insMed', 'Inscrição medicina', M('Medicina', 'inscricao medicina'), 1, 'Medicina', true], ['matMed', 'Matrícula medicina', M('Medicina', 'matricula medicina'), 1, 'Medicina', true]]
-    .filter(x => x[0] === 'geral' || x[2]).map(([k, rot, mt, dir, grupo, semZero, alt]) => ({ k, rot, mt, dir, grupo, semZero: !!semZero, alt: alt || null }))
+    ['insMed', 'Inscrição medicina', M('Medicina', 'inscricao medicina'), 1, 'Medicina', true], ['matMed', 'Matrícula medicina', M('Medicina', 'matricula medicina'), 1, 'Medicina', true],
+    ['rev', 'Revertidos', M('Retenção', 'revertidos'), 1, 'Retenção'], ['canc', 'Cancelados', M('Retenção', 'cancelados'), -1, 'Retenção']]
+    .filter(x => x[0] === 'geral' || x[2]).map(([k, rot, mt, dir, grupo, semZero, alt]) => ({ k, rot: mt && /reingresso/i.test(mt.grupo) ? rot + ' reingresso' : rot, mt, dir, grupo, semZero: !!semZero, alt: alt || null }))
     .filter((q, _, a) => q.k !== 'geral' || a.some(x => GERAL_KS.includes(x.k)));
 }
-const qkDe = m => { if (!m) return ''; if (m.qk) return m.qk; const g = m.grupo; if (g === 'Geral') return 'geral'; if (g === 'Ponto') return 'abs'; if (g === 'C-SAT') return 'csat'; if (g === 'Qualidade') return 'qual'; if (g === 'Aceite' || g === 'Aceite reingresso') return 'aceite'; if (g === 'Matrícula' || g === 'Matrícula reingresso') return 'mat'; if (g === 'Medicina') return /inscri/.test(norm(m.ref || m.rotulo)) ? 'insMed' : 'matMed'; return ''; };
+const qkDe = m => { if (!m) return ''; if (m.qk) return m.qk; const g = m.grupo; if (g === 'Geral') return 'geral'; if (g === 'Ponto') return 'abs'; if (g === 'C-SAT') return 'csat'; if (g === 'Qualidade') return 'qual'; if (g === 'Aceite' || g === 'Aceite reingresso') return 'aceite'; if (g === 'Matrícula' || g === 'Matrícula reingresso') return 'mat'; if (g === 'Medicina') return /inscri/.test(norm(m.ref || m.rotulo)) ? 'insMed' : 'matMed'; if (g === 'Retenção') return /cancel/.test(norm(m.ref || m.rotulo)) ? 'canc' : 'rev'; return ''; };
 function calcQuartis(dados, QDEF, iesTxt) {
   QMAP.clear(); dados.forEach(d => QMAP.set(qChave(d), { q: {}, r: {}, ies: iesDe(iesTxt(d)), op: opDaLinha(d) }));
   const porIes = {}; dados.filter(ativoDes).forEach(d => { const o = QMAP.get(qChave(d)), k = o.op + '|' + o.ies; // cada operação tem o seu ranking (como no relatório de cada uma)
@@ -498,12 +500,12 @@ function dashboardDes(ctx) {
     <div class="db-hero">
       <div class="db-hero-q cartao">${DB.anel({ pct: qTot ? (q_[0] + q_[1]) / qTot : 0, titulo: 'Q1 + Q2', centro: qTot ? fmt((q_[0] + q_[1]) / qTot * 100, 0) + '%' : '—', sub: `${q_[0] + q_[1]} de ${qTot} consultores`, cor: '#1baf7a' })}
         <div class="db-qleg">${q_.map((n, i) => `<div><span class="qt q${i + 1}">Q${i + 1}</span><b>${n}</b><small>${qTot ? fmt(n / qTot * 100, 0) + '%' : ''}</small></div>`).join('')}<p>Quartil geral · ${riscoAlto} consultor(es) com risco alto</p></div></div>
-      <div class="db-bigs">${cTot ? grande('Chamadas atendidas', cTot, 'headset', '#2a78d6') : ''}${aTot ? grande(soServ ? 'Aceites reingresso' : 'Aceites', aTot, 'check', '#1baf7a') : ''}${mTot ? grande(soServ ? 'Matrículas reingresso' : 'Matrículas', mTot, 'award', '#8e44c9') : ''}${aTot && mTot ? grande('Conversão aceite → matrícula', null, 'target', '#eb6834', { v: conv(linhas), va: conv(ant), sp: mesesAsc.map(m => conv(base(m))), tipo: 'pct', txt: v => v === null ? '—' : fmt(v * 100, 1) + '%', em: 'matrículas ÷ aceites' }) : ''}</div>
+      <div class="db-bigs">${cTot ? grande('Chamadas atendidas', cTot, 'headset', '#2a78d6') : ''}${M('Retenção', 'revertidos') ? grande('Revertidos', M('Retenção', 'revertidos'), 'check', '#0f9d58') : ''}${M('Retenção', 'cancelados') ? grande('Cancelados', M('Retenção', 'cancelados'), 'alert', '#d03b3b') : ''}${aTot ? grande(soServ ? 'Aceites reingresso' : 'Aceites', aTot, 'check', '#1baf7a') : ''}${mTot ? grande(soServ ? 'Matrículas reingresso' : 'Matrículas', mTot, 'award', '#8e44c9') : ''}${aTot && mTot ? grande('Conversão aceite → matrícula', null, 'target', '#eb6834', { v: conv(linhas), va: conv(ant), sp: mesesAsc.map(m => conv(base(m))), tipo: 'pct', txt: v => v === null ? '—' : fmt(v * 100, 1) + '%', em: 'matrículas ÷ aceites' }) : ''}</div>
     </div>
     ${gauges ? cardA('activity', 'Indicadores de qualidade e eficiência', `Operação no mês · ▲▼ contra ${mesAnt ? mesTxt(mesAnt) : 'o mês anterior (não importado)'}${Object.keys(D.metas).length ? ' · traço = meta' : ' · defina metas no botão Metas para colorir pelo atingimento'}`, `<div class="db-gauges">${gauges}</div>`) : ''}
     ${vari.length ? cardA('sparkles', 'O que mudou no mês', `Maiores melhoras e pioras contra ${mesTxt(mesAnt)}`, `<div class="db-ins"><div><h3 class="db-h3">Melhorou</h3><ul>${vari.filter(x => x.r > 0).slice(0, 6).map(x => insight(x, true)).join('') || '<li class="dica">—</li>'}</ul></div><div><h3 class="db-h3">Piorou</h3><ul>${vari.filter(x => x.r < 0).reverse().slice(0, 6).map(x => insight(x, false)).join('') || '<li class="dica">—</li>'}</ul></div></div>`) : ''}
     <div class="pn-grade">
-      ${cardA('target', 'Funil de produção', 'Do volume de chamadas até a matrícula', DB.funil([[cTot, 'Chamadas atendidas'], [M('Chamadas', 'outbound finalizadas'), 'Outbound finalizadas'], [aTot, 'Aceites'], [mTot, 'Matrículas']].filter(x => x[0]).map(([mt, r], i) => ({ rotulo: r, valor: ag(mt, linhas) || 0, cor: ['#1d4f91', '#2a78d6', '#1baf7a', '#8e44c9'][i] }))))}
+      ${cardA('target', 'Funil de produção', 'Do volume de chamadas até a matrícula', DB.funil([[cTot, 'Chamadas atendidas'], [M('Chamadas', 'outbound finalizadas'), 'Outbound finalizadas'], [aTot, soServ ? 'Aceites reingresso' : 'Aceites'], [mTot, soServ ? 'Matrículas reingresso' : 'Matrículas']].filter(x => x[0]).map(([mt, r], i) => ({ rotulo: r, valor: ag(mt, linhas) || 0, cor: ['#1d4f91', '#2a78d6', '#1baf7a', '#8e44c9'][i] }))))}
       ${cardA('layers', 'Composição', 'De onde vêm as chamadas, aceites e matrículas', `<h3 class="db-h3">Chamadas por canal</h3>${DB.empilhada(mix('Chamadas', ['inbound', 'ligacao manual', 'botmaker', 'outbound']))}<h3 class="db-h3">Aceites por produto</h3>${DB.empilhada((soServ ? mix('Aceite reingresso', ['aceites reingresso - gp', 'aceites reingresso - ead', 'aceites reingresso - gsp']) : mix('Aceite', ['gp', 'ead', 'gsp'])))}<h3 class="db-h3">Matrículas por produto</h3>${DB.empilhada((soServ ? mix('Matrícula reingresso', ['matricula reingresso - gp', 'matricula reingresso - ead', 'matricula reingresso - gsp']) : mix('Matrícula', ['gp', 'ead', 'gsp', 'pead'])))}`)}
     </div>`;
   }
@@ -667,7 +669,7 @@ function dashboardDes(ctx) {
     };
   }
 
-  const html = `<div class="db-ops">${[['', 'Consolidado'], ['Admissão', 'Admissão'], ['Serviços', 'Serviços']].map(([k, t]) => `<button type="button" data-opf="${k}" class="${k === (est.opF || '') ? 'on' : ''}">${t}${k && !(ctx.opsTodas || []).includes(k) ? ' <small>sem relatório</small>' : k && !(ctx.opsMes || []).includes(k) ? ' <small>sem este mês</small>' : ''}</button>`).join('')}</div><div class="db-guias">${GUIAS.map(([k, t, ic]) => `<button type="button" data-guia="${k}" class="${k === g ? 'on' : ''}">${G.ic(ic, '')}${t}</button>`).join('')}</div>${corpo}`;
+  const html = `<div class="db-ops">${[['Admissão', 'Admissão'], ['Serviços', 'Serviços']].map(([k, t]) => `<button type="button" data-opf="${k}" class="${k === (est.opF || '') ? 'on' : ''}">${t}${!(ctx.opsTodas || []).includes(k) ? ' <small>sem relatório</small>' : ''}</button>`).join('')}</div><div class="db-guias">${GUIAS.map(([k, t, ic]) => `<button type="button" data-guia="${k}" class="${k === g ? 'on' : ''}">${G.ic(ic, '')}${t}</button>`).join('')}</div>${corpo}`;
   const dep = () => {
     raiz.querySelectorAll('[data-guia]').forEach(x => x.onclick = () => { est.guia = x.dataset.guia; render(); window.scrollTo({ top: raiz.querySelector('.db-guias').offsetTop - 80, behavior: 'smooth' }); });
     raiz.querySelectorAll('[data-opf]').forEach(x => x.onclick = () => { est.opF = x.dataset.opf; est.sup = ''; render(); });
@@ -701,9 +703,14 @@ function render() {
   const fontes = Object.keys(D.modelos).sort(cmpTxt);
   if (!est.fonte || !fontes.includes(est.fonte)) est.fonte = fontes.find(f => D.modelos[f].consolidado) || fontes[0] || '';
   const md = D.modelos[est.fonte] || {}, cons = !!md.consolidado;
-  const meses = [...new Set(D.dados.filter(d => d.fonte === est.fonte).map(d => d.mes))].sort().reverse();
+  // Admissão e Serviços têm critérios diferentes: cada uma tem o seu painel (não há consolidado)
+  const opsTodas = [...new Set(D.dados.filter(d => d.fonte === est.fonte).map(opDaLinha))];
+  if (!['Admissão', 'Serviços'].includes(est.opF)) est.opF = opsTodas.includes('Admissão') || !opsTodas.length ? 'Admissão' : opsTodas[0];
+  const meses = [...new Set(D.dados.filter(d => d.fonte === est.fonte && opDaLinha(d) === est.opF).map(d => d.mes))].sort().reverse();
   if (!est.mes || !meses.includes(est.mes)) est.mes = meses[0] || '';
-  const todas = metricasDe(est.fonte);
+  // só os indicadores que existem no relatório desta operação (Serviços: reingresso e retenção; Admissão: aceite, matrícula, medicina…)
+  const linhasOp = D.dados.filter(d => d.fonte === est.fonte && opDaLinha(d) === est.opF);
+  const todas = metricasDe(est.fonte).filter(m => !cons || linhasOp.some(d => { const v = V(d, m); return v !== null && v !== undefined && v !== '' && !(m.tipo === 'quartil' && /^na$/i.test(String(v))); }));
   const blocos = cons ? [...new Set(todas.map(m => m.grupo))].filter(g => g !== 'Geral') : [];
   if (cons && est.bloco && est.bloco !== 'Resumo' && est.bloco !== 'Tudo' && !blocos.includes(est.bloco)) est.bloco = 'Resumo';
   est.grupo = est.bloco || 'Resumo';
@@ -711,11 +718,8 @@ function render() {
   const cruzar = false; // faltas/monitorias do site ficam na ficha do consultor
   const gTit = g => { const m = todas.find(x => x.grupo === g); return m && m.gOrig ? m.gOrig : g; };
   let linhas = D.dados.filter(d => d.fonte === est.fonte && d.mes === est.mes);
-  const opsMes = [...new Set(linhas.map(opDaLinha).filter(Boolean))].sort(cmpTxt);
-  // operação escolhida sem dados neste mês: vai para o último mês que tem relatório dela
-  if (est.opF && !opsMes.includes(est.opF)) { const mOp = meses.find(m => D.dados.some(d => d.fonte === est.fonte && d.mes === m && opDaLinha(d) === est.opF)); if (mOp && mOp !== est.mes) { est.mes = mOp; return render(); } }
-  const opsTodas = [...new Set(D.dados.filter(d => d.fonte === est.fonte).map(opDaLinha).filter(Boolean))];
-  if (est.opF) linhas = linhas.filter(d => opDaLinha(d) === est.opF);
+  const opsMes = [...new Set(linhas.map(opDaLinha))].sort(cmpTxt);
+  linhas = linhas.filter(d => opDaLinha(d) === est.opF);
   const doMes = linhas;
   const sups = [...new Set(linhas.map(d => d.supervisor).filter(Boolean))].sort(cmpTxt);
   if (est.sup) linhas = linhas.filter(d => d.supervisor === est.sup);
@@ -761,15 +765,15 @@ function render() {
   <div class="des-filtros cartao">
     ${fontes.length > 1 ? `<label class="mini">Relatório <select id="desFonte">${fontes.map(f => `<option${f === est.fonte ? ' selected' : ''}>${esc(f)}</option>`).join('')}</select></label>` : ''}
     <label class="mini">Mês <select id="desMes">${meses.map(m => `<option value="${m}"${m === est.mes ? ' selected' : ''}>${mesTxt(m)}</option>`).join('')}</select></label>
-    ${cons ? `<label class="mini">Operação <select id="desOp"><option value="">Consolidado</option>${['Admissão', 'Serviços'].map(o => `<option${o === est.opF ? ' selected' : ''}>${o}</option>`).join('')}</select></label>` : ''}
+    ${cons ? `<label class="mini">Operação <select id="desOp">${['Admissão', 'Serviços'].map(o => `<option${o === est.opF ? ' selected' : ''}>${o}</option>`).join('')}</select></label>` : ''}
     <label class="mini">Supervisor <select id="desSup"><option value="">Todos</option>${sups.map(s => `<option${s === est.sup ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
     <label class="mini">Consultor <input type="search" id="desBusca" placeholder="Nome ou matrícula" value="${esc(est.busca)}"></label>
     <span class="dica">${ult ? `Última importação: ${esc(ult.arquivo)} · ${new Date(ult.em).toLocaleDateString('pt-BR')} · ${ult.casados} no BD${ult.naoAchados ? ` · ${ult.naoAchados} fora do BD` : ''}` : ''}</span>
   </div>
   ${cons && todas.length && todas.filter(m => m.grupo === 'Outros').length / todas.length > .5 ? `<div class="aviso-fluxo db-aviso">${G.ic('alert', '')}<span><b>Este relatório foi lido pela versão anterior do site</b>, que não reconhecia as colunas da base (tudo caiu em OUTROS e os quartis se perderam). Clique em <b>Importar relatório</b> e envie o mesmo arquivo de novo: o mês é substituído e os blocos, tempos, percentuais e quartis aparecem certos.</span></div>` : ''}
   ${dash ? '' : `<div class="kpis pn-kpis">${kpis}</div>`}
-  ${!dash && cons && est.opF ? `<div class="db-ops">${[['', 'Consolidado'], ['Admissão', 'Admissão'], ['Serviços', 'Serviços']].map(([k, t]) => `<button type="button" data-opf="${k}" class="${k === est.opF ? 'on' : ''}">${t}</button>`).join('')}</div><div class="vazio"><b>Sem relatório de ${esc(est.opF)} em ${mesTxt(est.mes)}</b><p>Importe o relatório de ${esc(est.opF)} em <b>Importar relatório</b> e escolha a operação <b>${esc(est.opF)}</b>. Ele entra junto com o da outra operação, sem apagar nada.</p></div>` : ''}
-  ${dash ? dash.html : ''}${!dash || dash.tabela ? `  <article class="cartao" id="desDetalhe">
+  ${!dash && cons && est.opF ? `<div class="db-ops">${[['Admissão', 'Admissão'], ['Serviços', 'Serviços']].map(([k, t]) => `<button type="button" data-opf="${k}" class="${k === est.opF ? 'on' : ''}">${t}</button>`).join('')}</div><div class="vazio"><b>${est.mes ? `Sem relatório de ${esc(est.opF)} em ${mesTxt(est.mes)}` : `Nenhum relatório de ${esc(est.opF)} importado`}</b><p>Importe o relatório de ${esc(est.opF)} em <b>Importar relatório</b> e escolha a operação <b>${esc(est.opF)}</b>. Cada operação tem o seu painel; importar uma não apaga a outra.</p></div>` : ''}
+  ${dash ? dash.html : ''}${(!dash && !(cons && !linhas.length)) || (dash && dash.tabela) ? `  <article class="cartao" id="desDetalhe">
     <header class="cab-card cab-tabela"><span class="icb">${G.ic('clipboard')}</span><div><h2>${cons ? 'Detalhe por consultor' : esc(est.fonte)} · ${mesTxt(est.mes)}</h2><p>${cons ? 'Escolha o bloco · clique no título da coluna para ordenar · clique no nome para abrir a ficha' : 'Clique no título da coluna para ordenar. A porcentagem pequena é o atingimento da meta.'}</p></div>
       <div class="cab-acoes">${cons ? `<select id="desBloco" class="db-sel"><option value="Resumo"${est.grupo === 'Resumo' ? ' selected' : ''}>Resumo (principais)</option>${blocos.map(g => `<option value="${esc(g)}"${g === est.grupo ? ' selected' : ''}>${esc(gTit(g).toUpperCase())}</option>`).join('')}<option value="Tudo"${est.grupo === 'Tudo' ? ' selected' : ''}>Todas as colunas</option></select>` : ''}<button type="button" class="btn btn-sec" id="desExp" data-perm="exportar">${G.ic('download')}Exportar</button></div></header>
     <div class="tabela-wrap des-wrap"><table class="tabela des-tab${cons ? ' des-base' : ''}" id="desTab"><thead>${cabecalho()}</thead><tbody>
@@ -936,7 +940,9 @@ A.pulsoDesempenho = () => {
   const f = Object.keys(DD.modelos || {}).find(k => DD.modelos[k].consolidado); if (!f) return null;
   const md = DD.modelos[f], ms = comIndice(md);
   const meses = [...new Set((DD.dados || []).filter(d => d.fonte === f).map(d => d.mes))].sort(); const mes = meses[meses.length - 1]; if (!mes) return null;
-  const ls = DD.dados.filter(d => d.fonte === f && d.mes === mes), ant = DD.dados.filter(d => d.fonte === f && d.mes === meses[meses.length - 2]);
+  // Admissão e Serviços têm critérios diferentes: o pulso usa Admissão (ou Serviços, se só houver ela)
+  const opP = DD.dados.some(d => d.fonte === f && d.mes === mes && opDaLinha(d) === 'Admissão') ? 'Admissão' : 'Serviços';
+  const ls = DD.dados.filter(d => d.fonte === f && d.mes === mes && opDaLinha(d) === opP), ant = DD.dados.filter(d => d.fonte === f && d.mes === meses[meses.length - 2] && opDaLinha(d) === opP);
   const itens = [['Aceite', 'total', 'Aceites'], ['Matrícula', 'total', 'Matrículas'], ['Aderência', 'aderencia', 'Aderência'], ['Ponto', 'abs', 'ABS'], ['C-SAT', 'c-sat final', 'C-SAT'], ['Qualidade', 'nota monitor', 'Nota monitor']].map(([g, s_, r]) => { const mt = achar(ms, g, s_); if (!mt) return null; const v = agregar(mt, ls, ms); return v === null ? null : { r, txt: valorTxt(mt, v), delta: typeof DB !== 'undefined' ? DB.delta(v, agregar(mt, ant, ms), mt.sentido ?? 1, mt.tipo === 'pct' ? 'pct' : 'n') : '' }; }).filter(Boolean);
   const qg = ms.find(m => m.tipo === 'quartil' && m.grupo === 'Geral');
   const q = [1, 2, 3, 4].map(n => qg ? ls.filter(d => String(V(d, qg) || '').includes(String(n))).length : 0);
