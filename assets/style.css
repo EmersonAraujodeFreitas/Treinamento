@@ -1223,3 +1223,4 @@ html.menu-recolhido .btn-recolher svg{transform:rotate(180deg)}
 .des-tot td.des-fixo{background:var(--sup-3)!important}
 .des-base .qt{min-width:34px}
 .des-gfix{left:0;box-shadow:2px 0 0 rgba(255,255,255,.2)}
+.mon-campos th{width:34%;text-align:left;background:var(--sup-2);font-weight:600;white-space:normal}.mon-campos td{white-space:pre-wrap}

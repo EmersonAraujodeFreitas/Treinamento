@@ -47,14 +47,32 @@ async function lerPlanilha(arrayBuffer) {
   [...rels.getElementsByTagName('Relationship')].forEach(r => alvo[r.getAttribute('Id')] = r.getAttribute('Target'));
   const ssTxt = await zip.texto('xl/sharedStrings.xml');
   const strings = ssTxt ? [...xml(ssTxt).getElementsByTagName('si')].map(si => [...si.getElementsByTagName('t')].map(t => t.textContent).join('')) : [];
+  // formato de número de cada estilo: 'pct' (0,00%), 'tempo' (h:mm:ss) ou 'data'
+  const tipoEstilo = [];
+  try {
+    const stTxt = await zip.texto('xl/styles.xml');
+    if (stTxt) {
+      const st = xml(stTxt), codigos = {};
+      [...st.getElementsByTagName('numFmt')].forEach(n => { codigos[n.getAttribute('numFmtId')] = n.getAttribute('formatCode') || ''; });
+      const cx = st.getElementsByTagName('cellXfs')[0];
+      if (cx) [...cx.getElementsByTagName('xf')].forEach((xf, i) => {
+        const id = +xf.getAttribute('numFmtId') || 0, cod = (codigos[id] || '').replace(/"[^"]*"|\[(?![hms]\])[^\]]*\]/gi, '');
+        let t = '';
+        if (id === 9 || id === 10 || /%/.test(cod)) t = 'pct';
+        else if ([18, 19, 20, 21, 45, 46, 47].includes(id) || /(^|[^a-z])(h|\[h\])+:mm|mm:ss/i.test(cod)) t = 'tempo';
+        else if ([14, 15, 16, 17, 22].includes(id) || /d+[\/.-]m+|y{2,}/i.test(cod)) t = 'data';
+        tipoEstilo[i] = t;
+      });
+    }
+  } catch (e) { /* sem estilos: segue sem formatos */ }
   const abas = [];
   for (const s of wb.getElementsByTagName('sheet')) {
     const rid = s.getAttribute('r:id') || s.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id');
     let caminho = alvo[rid] || ''; caminho = caminho.startsWith('/') ? caminho.slice(1) : 'xl/' + caminho.replace(/^\.\//, '');
     const txt = await zip.texto(caminho); if (!txt) continue;
-    const doc = xml(txt), linhas = [];
+    const doc = xml(txt), linhas = [], formatos = [];
     for (const row of doc.getElementsByTagName('row')) {
-      const r = +row.getAttribute('r') - 1, vals = [];
+      const r = +row.getAttribute('r') - 1, vals = [], fm = [];
       for (const c of row.getElementsByTagName('c')) {
         const t = c.getAttribute('t'), v = c.getElementsByTagName('v')[0];
         let val = null;
@@ -63,11 +81,13 @@ async function lerPlanilha(arrayBuffer) {
         else if (t === 'str' || t === 'e') val = v ? v.textContent : null;
         else if (t === 'b') val = v ? v.textContent === '1' : null;
         else if (v) { const n = Number(v.textContent); val = isFinite(n) ? n : v.textContent; }
-        vals[col(c.getAttribute('r') || '')] = val;
+        const ci = col(c.getAttribute('r') || '');
+        vals[ci] = val;
+        if (typeof val === 'number' && c.getAttribute('s')) { const te = tipoEstilo[+c.getAttribute('s')]; if (te) fm[ci] = te; }
       }
-      linhas[r] = vals;
+      linhas[r] = vals; if (fm.length) formatos[r] = fm;
     }
-    abas.push({ nome: s.getAttribute('name'), linhas });
+    abas.push({ nome: s.getAttribute('name'), linhas, formatos });
   }
   return abas;
 }

@@ -118,7 +118,7 @@ function acharConsolidado(abas) {
   for (let ia = 0; ia < abas.length; ia++) {
     const ls = abas[ia].linhas;
     for (let i = 0; i < Math.min(25, ls.length); i++) {
-      const l = (ls[i] || []).map(c => norm(String(c ?? '')));
+      const l = (ls[i] || []).map(c => chaveCab(c));
       if (l.includes('matricula') && l.includes('consultor') && l.filter(Boolean).length >= 8) return { ia, iCab: i };
     }
   }
@@ -152,26 +152,71 @@ function converter(tipo, v) {
   }
   const n = typeof v === 'number' ? v : num(v); return n === null || !isFinite(n) ? null : +n.toFixed(4);
 }
+/* modelo conhecido da base de indicadores: [grupo, título na base, [coluna, tipo, sentido]]
+   sentido: 1 = quanto maior melhor · -1 = quanto menor melhor · 0 = neutro */
+const OF = ['inbound', 'ligacao manual', 'botmaker', 'outbound', 'outbound finalizadas', 'outbound n finalizadas'];
+const MODELO_BASE = [
+  ['Geral', 'VIEW GERAL', [['quartil geral', 'quartil', -1]]],
+  ['Chamadas', 'CHAMADAS ATENDIDAS', [['total', 'somar', 1], ...OF.map(x => [x, 'somar', x === 'outbound n finalizadas' ? 0 : 1]), ['efetividade', 'pct', 1]]],
+  ['Shortcall', 'SHORTCALL', [['outbound', 'pct', -1], ['inbound', 'pct', -1]]],
+  ['TMA', 'TEMPO MÉDIO DE ATENDIMENTO - TMA', OF.map(x => [x, 'tempoMedio', 0])],
+  ['Pós-chamada', 'TEMPO DE TABULAÇÃO - PÓS CHAMADA', [['total', 'tempoMedio', -1], ...OF.filter(x => x !== 'botmaker').map(x => [x, 'tempoMedio', -1])]],
+  ['Carga horária', 'CARGA HORÁRIA', [['media', 'tempoMedio', 1], ['total', 'tempo', 1], ['esperado', 'tempo', 0], ['dias esperados', 'somar', 0]]],
+  ['Ponto', 'FORPONTO', [['abs', 'pct', -1], ['quartil', 'quartil', -1]]],
+  ['C-SAT', 'PESQUISA DE SATISFAÇÃO', [['c-sat envio', 'pct', 1], ['c-sat nota', 'pct', 1], ['c-sat final', 'pct', 1], ['quartil', 'quartil', -1]]],
+  ['Qualidade', 'QUALIDADE', [['nota supervisor', 'pct', 1], ['nota monitor', 'pct', 1], ['quartil', 'quartil', -1]]],
+  ['Aceite', 'ACEITE', [['total', 'somar', 1], ['quartil', 'quartil', -1], ['gp', 'somar', 1], ['ead', 'somar', 1], ['gsp', 'somar', 1]]],
+  ['Matrícula', 'MATRÍCULA', [['total', 'somar', 1], ['quartil', 'quartil', -1], ['gp', 'somar', 1], ['ead', 'somar', 1], ['gsp', 'somar', 1], ['pead', 'somar', 1]]],
+  ['Pausa', 'PAUSA', [['tempo em pausa', 'pct', -1], ['media almoco', 'tempoMedio', 0], ['media banheiro', 'tempoMedio', -1], ['media canais digitais', 'tempoMedio', 0], ['media falha sistemica', 'tempoMedio', -1], ['media feedback', 'tempoMedio', 0], ['ginastica laboral', 'tempoMedio', 0], ['media lanche', 'tempoMedio', -1], ['media particular', 'tempoMedio', -1], ['media descanso', 'tempoMedio', -1], ['media treinamento', 'tempoMedio', 0]]],
+  ['HubSpot', 'HUBSPOT', [['criacao de lead', 'pct', 1]]],
+  ['Medicina', 'MEDICINA', [['inscricao medicina', 'somar', 1], ['quartil', 'quartil', -1], ['matricula medicina', 'somar', 1], ['quartil', 'quartil', -1]]],
+  ['Aderência', 'ADERÊNCIA', [['aderencia', 'pct', 1], ['quartil', 'quartil', -1]]],
+  ['Reingresso', 'REINGRESSO', [['matricula gp', 'somar', 1], ['matricula ead|gsp', 'somar', 1]]]
+];
+const SEQ = []; MODELO_BASE.forEach(([g, t, cs]) => cs.forEach(([s, tipo, sentido]) => SEQ.push({ g, t, s, tipo, sentido })));
+// nome da coluna sem o sufixo que o Excel/Power Pivot põe nas repetidas (BOTMAKER_5, QUARTIL_16, INBOUND2…)
+const limparCab = t => String(t ?? '').replace(/\s+/g, ' ').trim().replace(/[_ ]\d+$/, '').replace(/(?<=[A-Za-zÀ-ú])\d+$/, '').trim();
+const chaveCab = t => norm(limparCab(t)).replace(/ñ/g, 'n').replace(/\s*\|\s*/g, '|').replace(/\s+/g, ' ');
 function lerConsolidado(aba, iCab) {
-  const cab = aba.linhas[iCab] || [], grp = aba.linhas[iCab - 1] || [], n = Math.max(cab.length, grp.length);
-  const ixId = {}, mets = []; let g = '';
+  const cab = aba.linhas[iCab] || [];
+  // linha dos grupos: a de cima (ou até 3 acima) que mais cita os blocos conhecidos
+  let grp = [], melhor = 0;
+  for (let k = 1; k <= 3 && iCab - k >= 0; k++) {
+    const l = aba.linhas[iCab - k] || [];
+    const n = l.filter(c => c && GRUPOS.some(([x]) => norm(String(c)).includes(x))).length;
+    if (n > melhor) { melhor = n; grp = l; }
+  }
+  const usarLinhaGrupo = melhor >= 3;
+  const n = Math.max(cab.length, grp.length);
+  const ixId = {}, mets = []; let g = '', ptr = 0;
+  const fmtCol = j => { const c = {}; for (let r = iCab + 1; r < Math.min(aba.linhas.length, iCab + 400); r++) { const t = aba.formatos && aba.formatos[r] && aba.formatos[r][j]; if (t) c[t] = (c[t] || 0) + 1; } const e = Object.entries(c).sort((a, b) => b[1] - a[1])[0]; return e ? e[0] : ''; };
   for (let j = 0; j < n; j++) {
-    const sRaw = String(cab[j] ?? '').trim(), s = norm(sRaw), gRaw = String(grp[j] ?? '').trim();
+    const sRaw = String(cab[j] ?? '').trim(), gRaw = usarLinhaGrupo ? String(grp[j] ?? '').trim() : '';
     if (gRaw) g = gRaw;
     if (!sRaw) continue;
-    if (!mets.length && ID_COLS.includes(s) && ixId[s] === undefined) { ixId[s] = j; continue; }
-    const grupo = grupoNome(g) || 'Outros', sub = subNome(sRaw);
-    const ant = mets.length && mets[mets.length - 1].grupo === grupo ? mets.filter(m => m.grupo === grupo && m.tipo !== 'quartil').pop() : null;
-    mets.push({ coluna: j, grupo, sub, gOrig: g || grupo, sOrig: sRaw.replace(/\s+/g, ' '), ref: ant ? ant.sub : '', tipo: tipoDe(grupo, s, aba.linhas.slice(iCab + 1, iCab + 400).map(l => l && l[j])) });
+    const sOrig = limparCab(sRaw), sk = chaveCab(sRaw);
+    if (!mets.length && ID_COLS.includes(sk) && ixId[sk] === undefined) { ixId[sk] = j; continue; }
+    // acha a coluna no modelo conhecido (pelo grupo da planilha, se houver, ou pela ordem)
+    let tpl = null;
+    if (usarLinhaGrupo && g) { const gn = grupoNome(g); const i = SEQ.findIndex((x, i2) => i2 >= ptr && x.g === gn && x.s === sk); const i3 = i >= 0 ? i : SEQ.findIndex(x => x.g === gn && x.s === sk); if (i3 >= 0) { tpl = SEQ[i3]; ptr = i3 + 1; } }
+    else { for (let i = ptr; i < Math.min(SEQ.length, ptr + 8); i++) if (SEQ[i].s === sk) { tpl = SEQ[i]; ptr = i + 1; break; } }
+    const grupo = tpl ? tpl.g : (usarLinhaGrupo && g ? grupoNome(g) : 'Outros');
+    const fm = fmtCol(j);
+    let tipo = tpl ? tpl.tipo : /^quartil/.test(sk) ? 'quartil' : fm === 'pct' ? 'pct' : fm === 'tempo' ? 'tempoMedio' : tipoDe(grupo, sk, aba.linhas.slice(iCab + 1, iCab + 400).map(l => l && l[j]));
+    if (tpl && fm === 'pct' && tipo === 'somar') tipo = 'pct'; // o formato da célula manda
+    if (tpl && fm === 'tempo' && tipo === 'somar') tipo = 'tempoMedio';
+    const ant = mets.filter(m => m.grupo === grupo && m.tipo !== 'quartil').pop();
+    mets.push({ coluna: j, grupo, sub: subNome(sOrig), gOrig: tpl ? tpl.t : (usarLinhaGrupo && g ? g : 'OUTROS'), sOrig: sOrig.toUpperCase(), ref: ant ? ant.sub : '', tipo, sentido: tpl ? tpl.sentido : (tipo === 'quartil' ? -1 : 0) });
   }
   const qPorGrupo = {}; mets.forEach(m => { if (m.tipo === 'quartil') qPorGrupo[m.grupo] = (qPorGrupo[m.grupo] || 0) + 1; });
   const usados = new Set();
   mets.forEach(m => {
     let r = m.grupo === 'Geral' ? m.sub : `${m.grupo} · ${m.tipo === 'quartil' && qPorGrupo[m.grupo] > 1 && m.ref ? 'Quartil ' + m.ref.toLowerCase() : m.sub}`;
+    if (m.tipo === 'quartil' && qPorGrupo[m.grupo] > 1 && m.ref) m.sOrig = 'QUARTIL ' + m.ref.toUpperCase();
     if (usados.has(r)) { let k = 2; while (usados.has(r + ' ' + k)) k++; r = r + ' ' + k; }
     usados.add(r); m.rotulo = r;
   });
-  return { ixId, mets };
+  return { ixId, mets, reconhecidas: mets.filter(m => m.grupo !== 'Outros').length };
 }
 function processarConsolidado(aba, iCab, info, mes) {
   const idx = indice(), dados = [], fora = [], vistos = new Set(); let total = 0;
@@ -192,10 +237,19 @@ function processarConsolidado(aba, iCab, info, mes) {
   return { dados, total, fora };
 }
 /* modelo do consolidado: a lista de indicadores só cresce (índices estáveis para os meses antigos) */
-function mesclarModelo(fonte, mets) {
-  const md = D.modelos[fonte] && D.modelos[fonte].consolidado ? D.modelos[fonte] : { fonte, consolidado: true, metricas: [] };
-  mets.forEach(m => { const o = { grupo: m.grupo, sub: m.sub, gOrig: m.gOrig, sOrig: m.sOrig, tipo: m.tipo }; const ex = md.metricas.find(x => x.rotulo === m.rotulo); if (ex) Object.assign(ex, o); else md.metricas.push({ rotulo: m.rotulo, ...o }); });
-  return md;
+/* modelo do consolidado: as colunas do arquivo novo, na ordem dele, mais as antigas que ainda têm dados em outros meses.
+   Os meses já guardados são regravados na nova ordem. */
+function remontarModelo(fonte, mets, mesNovo) {
+  const velho = D.modelos[fonte] && D.modelos[fonte].consolidado ? comIndice(D.modelos[fonte]) : [];
+  const outros = D.dados.filter(d => d.fonte === fonte && d.mes !== mesNovo);
+  const obj = d => { const o = {}; velho.forEach(m => { const v = V(d, m); if (v !== null && v !== undefined) o[m.rotulo] = v; }); return o; };
+  const antigos = outros.map(d => ({ d, o: obj(d) }));
+  const novos = mets.map(m => ({ rotulo: m.rotulo, grupo: m.grupo, sub: m.sub, gOrig: m.gOrig, sOrig: m.sOrig, tipo: m.tipo, sentido: m.sentido }));
+  velho.forEach(m => { if (!novos.some(x => x.rotulo === m.rotulo) && antigos.some(a => a.o[m.rotulo] !== undefined)) novos.push({ ...m }); });
+  const md = { fonte, consolidado: true, metricas: novos }; comIndice(md);
+  const cod = o => { const v = md.metricas.map(m => o[m.rotulo] ?? null); while (v.length && v[v.length - 1] === null) v.pop(); return v; };
+  antigos.forEach(({ d, o }) => { d.v = cod(o); delete d.m; });
+  return { md, cod };
 }
 function passoConsolidado(det) {
   const f = document.getElementById('desForm'), aba = arq.abas[det.ia] || arq.abas[0];
@@ -207,7 +261,7 @@ function passoConsolidado(det) {
     const mes = document.getElementById('dsMesC') ? document.getElementById('dsMesC').value : arq.mes;
     const r = processarConsolidado(aba, det.iCab, info, mes);
     const ja = D.dados.some(d => d.fonte === fonte && d.mes === mes);
-    document.getElementById('dsResumo').innerHTML = `<div class="an-chips"><span><small>Consultores no arquivo</small><b>${r.dados.length}</b></span><span><small>Encontrados no BD</small><b>${r.dados.length - r.fora.length}</b></span><span><small>Fora do BD</small><b>${r.fora.length}</b></span><span><small>Indicadores</small><b>${info.mets.length}</b></span></div>
+    document.getElementById('dsResumo').innerHTML = `<div class="an-chips"><span><small>Consultores no arquivo</small><b>${r.dados.length}</b></span><span><small>Encontrados no BD</small><b>${r.dados.length - r.fora.length}</b></span><span><small>Fora do BD</small><b>${r.fora.length}</b></span><span><small>Indicadores</small><b>${info.mets.length}</b></span><span><small>Reconhecidos no modelo</small><b>${info.reconhecidas}</b></span></div>${info.reconhecidas < info.mets.length ? `<p class="aviso-fluxo">${info.mets.length - info.reconhecidas} coluna(s) não batem com o modelo da base e ficam no bloco OUTROS.</p>` : ''}
       ${r.fora.length ? `<details class="do-trein"><summary>${G.ic('alert', '')}Não estão no BD atual (${r.fora.length})</summary><p class="dica">Entram mesmo assim, com o nome e o supervisor do relatório (normalmente são desligados ou matrícula diferente).</p><ul class="aps-lidos">${r.fora.slice(0, 80).map(n => `<li>${esc(n)}</li>`).join('')}</ul></details>` : ''}
       <p class="dica">${ja ? `<b>${mesTxt(mes)} já foi importado:</b> os dados deste mês serão substituídos por estes.` : `Os dados ficam guardados como <b>${mesTxt(mes)}</b>.`}</p>`;
     G.icones(document.getElementById('dsResumo'));
@@ -231,10 +285,10 @@ function passoConsolidado(det) {
     if (!mes) { msg.textContent = 'Informe o mês dos dados.'; msg.className = 'msg erro'; return; }
     const r = processarConsolidado(aba, det.iCab, info, mes);
     D = Object.assign(vazio(), ler(KEY, {}) || {});
-    D.modelos[nomeF] = mesclarModelo(nomeF, info.mets);
-    const ms = comIndice(D.modelos[nomeF]);
+    const { md, cod } = remontarModelo(nomeF, info.mets, mes);
+    D.modelos[nomeF] = md;
     // valores guardados em lista na ordem dos indicadores do modelo (bem mais leve)
-    const novos = r.dados.map(d => { const v = ms.map(m => d.v[m.rotulo] ?? null); while (v.length && v[v.length - 1] === null) v.pop(); return { ...d, fonte: nomeF, v }; });
+    const novos = r.dados.map(d => ({ ...d, fonte: nomeF, v: cod(d.v) }));
     D.dados = D.dados.filter(d => !(d.fonte === nomeF && d.mes === mes)).concat(novos);
     // guarda 12 meses de cada relatório consolidado (o arquivo fica leve para sincronizar)
     const mesesF = [...new Set(D.dados.filter(d => d.fonte === nomeF).map(d => d.mes))].sort().reverse();
