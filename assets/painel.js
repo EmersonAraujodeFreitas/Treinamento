@@ -193,7 +193,7 @@ function render() {
     ${kp('Em formação', Fu.emTrein, 'turmas em treinamento', '#2a78d6', 'exam')}
     ${kp('Em experiência', Fu.emExp, 'acompanhados pela supervisão', '#6250d6', 'headset')}
     ${kp('Turnover do mês', I.turnover === null ? '—' : fmt(I.turnover * 100, 1) + '%', `${I.deslMes} desligamento(s) em ${mesTxt(hoje().slice(0, 7))}`, '#d03b3b', 'down')}
-    ${kp('Absenteísmo 30 dias', I.absente === null ? '—' : fmt(I.absente * 100, 2) + '%', `${I.diasPerdidos} dia(s) perdidos · faltas e atestados lançados`, '#eda100', 'alert')}
+    ${(() => { const DS = (ler('inovacao_treinamento_desempenho_v1', {}) || {}).dados || []; const ms = [...new Set(DS.map(d => d.mes))].sort(); const um = ms[ms.length - 1]; const ab = um && A.indicadorMes ? A.indicadorMes(um, 'Ponto', 'abs') : null; return ab ? kp('Absenteísmo (ponto)', ab.txt, `ABS de ${['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][+um.slice(5, 7) - 1]}/${um.slice(0, 4)} · relatório de indicadores`, '#eda100', 'alert') : kp('Absenteísmo 30 dias', I.absente === null ? '—' : fmt(I.absente * 100, 2) + '%', `${I.diasPerdidos} dia(s) perdidos · faltas e atestados lançados`, '#eda100', 'alert'); })()}
     ${kp('Pendências', urg + aten, `${urg} urgente(s) · ${aten} de atenção${total - urg - aten ? ` · ${total - urg - aten} para planejar` : ''}`, urg + aten ? '#ec835a' : '#1baf7a', 'flag')}
   </div>
 

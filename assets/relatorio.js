@@ -25,6 +25,7 @@ function montar(mes) {
   const diasAt = ocM.filter(o => o.tipo === 'Atestado').reduce((s, o) => s + (o.dias || 0), 0);
   const uteis = A.diasUteis ? A.diasUteis(mes + '-01', mes + '-' + new Date(+mes.slice(0, 4), +mes.slice(5, 7), 0).getDate()) : 22;
   const abs = ativos.length && uteis ? (cnt('Falta') + diasAt) / (ativos.length * uteis) : null;
+  const absP = A.indicadorMes ? A.indicadorMes(mes, 'Ponto', 'abs') : null;
   const form = (A.vista ? A.vista() : A.formacao());
   const turmasMes = [...new Set(form.filter(r => doMes(r.dataInicio)).map(r => r.turma).filter(Boolean))];
   const enviadosMes = form.filter(r => doMes(r.enviadoSupEm)).length;
@@ -45,7 +46,7 @@ function montar(mes) {
     <section class="rel-kpis">
       <div><small>Headcount</small><b>${ativos.length}</b><em>${emAtiv} em atividade · ${ativos.length - emAtiv} férias/afastados</em></div>
       <div><small>Desligamentos</small><b>${saidas.length}</b><em>turnover ${ativos.length + saidas.length ? fmt(saidas.length / (ativos.length + saidas.length) * 100, 1) + '%' : '—'} · ${vol} voluntário(s)${semMot ? ` · ${semMot} sem motivo` : ''}</em></div>
-      <div><small>Absenteísmo</small><b>${abs === null ? '—' : fmt(abs * 100, 2) + '%'}</b><em>${cnt('Falta')} falta(s) · ${diasAt} dia(s) de atestado</em></div>
+      <div><small>Absenteísmo</small><b>${absP ? absP.txt : abs === null ? '—' : fmt(abs * 100, 2) + '%'}</b><em>${absP ? 'ABS do ponto (relatório de indicadores) · ' : ''}${cnt('Falta')} falta(s) e ${diasAt} dia(s) de atestado lançados</em></div>
       <div><small>Qualidade</small><b>${notas.length ? fmt(media(notas), 1) + '%' : '—'}</b><em>${monM.length} monitoria(s) · ${notas.filter(n => n >= 85).length} na meta</em></div>
     </section>
     <section class="rel-2">
@@ -54,7 +55,7 @@ function montar(mes) {
       <div><h2>Formação inicial</h2><table class="tabela">${linha('Turmas iniciadas', turmasMes.length ? turmasMes.join(', ') : '0')}${linha('Treinandos dessas turmas', form.filter(r => doMes(r.dataInicio)).length)}${linha('Enviados para a supervisão', enviadosMes)}${linha('Experiências concluídas', sup.length)}${linha('Efetivados', sup.filter(a => a.resultadoFinal === 'Efetivado').length)}</table></div>
       <div><h2>Treinamentos de ativos</h2><table class="tabela">${Object.entries(porTipo).map(([t, n]) => linha(esc(t), n)).join('') || linha('Nenhum', 0)}${linha('Presentes', atM.filter(r => r.presenca === 'Presente').length)}${linha('Pendentes / reagendados', atM.filter(r => r.status === 'Pendente' || r.status === 'Reagendado').length)}</table></div>
     </section>
-    ${fontes.length ? `<section><h2>Desempenho</h2>${fontes.map(f => { const md = des.modelos[f], dd = (des.dados || []).filter(d => d.fonte === f && d.mes === mes); if (!dd.length) return ''; const m0 = md.metricas[0]; const top = [...dd].sort((a, b) => (b.m[m0.rotulo] || 0) - (a.m[m0.rotulo] || 0)).slice(0, 5); return `<h3>${esc(f)} · ${dd.length} consultor(es)</h3><table class="tabela"><thead><tr><th>Top 5 por ${esc(m0.rotulo)}</th><th>Supervisor</th>${md.metricas.slice(0, 4).map(m => `<th class="dir">${esc(m.rotulo)}</th>`).join('')}</tr></thead><tbody>${top.map(d => `<tr><td>${esc(d.nome)}</td><td>${esc(d.supervisor)}</td>${md.metricas.slice(0, 4).map(m => `<td class="dir">${d.m[m.rotulo] === null || d.m[m.rotulo] === undefined ? '—' : fmt(d.m[m.rotulo], m.tipo === 'pct' ? 3 : 0)}</td>`).join('')}</tr>`).join('')}</tbody></table>`; }).join('')}</section>` : ''}
+    ${A.relatorioDesempenho ? A.relatorioDesempenho(mes) : ''}
     <section><h2>Por supervisor</h2><table class="tabela"><thead><tr><th>Supervisor</th><th class="dir">Equipe</th><th class="dir">Desligados</th><th class="dir">Faltas</th><th class="dir">Atestado (dias)</th><th class="dir">Medidas</th><th class="dir">Monitoria</th></tr></thead><tbody>
       ${Object.entries(supMap).sort((a, b) => cmpTxt(a[0], b[0])).map(([s, x]) => `<tr><td>${esc(s)}</td><td class="dir">${x.hc}</td><td class="dir">${x.desl}</td><td class="dir">${x.faltas}</td><td class="dir">${x.atest}</td><td class="dir">${x.medidas}</td><td class="dir">${x.notas.length ? fmt(media(x.notas), 1) + '%' : '—'}</td></tr>`).join('')}</tbody></table></section>
     <footer class="rel-rod">Documento interno · contém dados de colaboradores · não compartilhe fora da gestão</footer>

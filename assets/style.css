@@ -1182,3 +1182,44 @@ html.menu-recolhido .btn-recolher svg{transform:rotate(180deg)}
   @page{size:A4;margin:14mm}
 }
 @media (max-width:900px){.ag-grade{grid-template-columns:1fr}.ret-marcos,.rel-kpis{grid-template-columns:1fr 1fr}.rel-2{grid-template-columns:1fr}.mon-item{flex-direction:column;align-items:flex-start}.ds-met{grid-template-columns:1fr 1fr}}
+/* relatório consolidado de indicadores */
+.des-grupos{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 14px}
+.des-grupos button{border:1px solid var(--borda);background:var(--superficie);color:var(--tinta-2);border-radius:999px;padding:6px 13px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.des-grupos button:hover{border-color:var(--marca);color:var(--marca)}
+.des-grupos button.on{background:var(--marca);border-color:var(--marca);color:#fff}
+.des-q{margin-left:auto;font-size:12.5px;color:var(--tinta-3);display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap}
+.qt{display:inline-block;min-width:30px;text-align:center;font-size:11.5px;font-weight:800;padding:2px 7px;border-radius:6px;color:#fff;background:#8a96a8}
+.qt.q1{background:#0f9d58}.qt.q2{background:#8bc34a}.qt.q3{background:#f2a900}.qt.q4{background:#d32f2f}
+.des-tot td{background:var(--sup-2);font-weight:700;border-bottom:2px solid var(--borda)}
+.des-tab td .tag{margin-left:4px}
+.ds-grupos{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;max-height:280px;overflow:auto;padding:2px}
+.ds-grupos>div{border:1px solid var(--borda);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.ds-grupos b{font-size:12.5px;color:var(--marca)}
+.ds-grupos span{display:flex;flex-wrap:wrap;gap:4px}
+.ds-grupos small{font-size:11px;background:var(--sup-2);border-radius:6px;padding:2px 6px;color:var(--tinta-2)}
+.ds-grupos small i{font-style:normal;color:var(--tinta-3);font-size:10px}
+.des-filtros input[type=search]{min-width:200px}
+/* tabela no mesmo formato da base de indicadores */
+.des-wrap{max-height:70vh;overflow:auto}
+.des-base{font-size:12.5px}
+.des-base thead th{position:sticky;top:0;z-index:2;background:#14325c;color:#fff;text-transform:none;font-weight:800;font-size:11px;letter-spacing:.2px;white-space:nowrap;border-right:1px solid rgba(255,255,255,.12);text-align:center}
+.des-base thead tr.des-g th{background:#24527f;font-size:11.5px;letter-spacing:.6px;text-align:center;border-right:2px solid #fff}
+.des-base thead tr.des-g th{height:32px;padding-top:0;padding-bottom:0}
+.des-base thead tr:nth-child(2) th{top:32px}
+.des-base tbody td.dir{text-align:center}
+.des-base thead th.des-qcol{background:#c0201f}
+.des-base thead th.des-g-site,.des-base thead tr:nth-child(2) th[data-k^="x."]{background:#4a5568}
+.des-base td{white-space:nowrap}
+.des-base tbody td{text-align:center}
+.des-base tbody td.des-c2,.des-base tbody td:nth-child(3){text-align:left}
+.des-fixo{position:sticky;z-index:1;background:var(--superficie)}
+.des-c1{left:0;min-width:92px;max-width:92px}
+.des-c2{left:92px;min-width:240px;box-shadow:2px 0 0 var(--borda)}
+.des-base thead th.des-fixo{z-index:3;background:#14325c}
+.des-base thead tr.des-g th.des-fixo{background:#24527f}
+.des-base tbody tr:nth-child(even) td{background:var(--sup-2)}
+.des-base tbody tr:nth-child(even) td.des-fixo{background:var(--sup-2)}
+.des-base tbody tr:hover td{background:var(--marca-clara)}
+.des-tot td.des-fixo{background:var(--sup-3)!important}
+.des-base .qt{min-width:34px}
+.des-gfix{left:0;box-shadow:2px 0 0 rgba(255,255,255,.2)}
