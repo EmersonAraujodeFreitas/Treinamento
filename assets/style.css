@@ -1339,8 +1339,8 @@ html.menu-recolhido .btn-recolher svg{transform:rotate(180deg)}
 .db-qmapa th span{display:block;max-width:86px;margin:auto;line-height:1.2;white-space:normal;text-align:center}
 .db-qmapa th:first-child,.db-qmapa td:first-child{position:sticky;left:0;z-index:1;background:var(--superficie);text-align:left;min-width:230px;padding:6px 10px}
 .db-qmapa th:first-child{z-index:3}
-.db-qmapa tr.db-qres td{position:sticky;top:44px;z-index:2;background:var(--sup-2);font-weight:800;font-size:11px;color:var(--ruim);text-align:center;border-bottom:1px solid var(--borda)}
-.db-qmapa tr.db-qres td:first-child{color:var(--tinta-3);z-index:3}
+.db-qmapa tr.db-qres td{position:static;background:var(--sup-2);font-weight:800;font-size:11px;color:var(--ruim);text-align:center;border-bottom:1px solid var(--borda)}
+.db-qmapa tr.db-qres td:first-child{color:var(--tinta-3);position:sticky;left:0;z-index:1}
 .db-qmapa td{padding:3px 3px;text-align:center;border-bottom:1px solid color-mix(in srgb,var(--borda) 60%,transparent)}
 .db-qmapa td:first-child{cursor:pointer}
 .db-qmapa td:first-child b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
@@ -1428,3 +1428,9 @@ html.menu-recolhido .btn-recolher svg{transform:rotate(180deg)}
 .mm-tab input{width:90px;min-height:32px}.mm-tab td small{display:block;font-size:11px;color:var(--tinta-3)}
 .mm-aj{margin-top:10px}.mm-aj summary{cursor:pointer;font-size:13px;color:var(--marca);font-weight:600}
 @media (max-width:1100px){.q-placar{grid-template-columns:1fr}.q-kpis{grid-template-columns:repeat(2,1fr)}.q-of{grid-template-columns:1fr}.q-of-d{border:0;padding:0}}
+
+.db-top{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.db-top>div,.db-top ol,.db-top li div{min-width:0}
+.db-top li{min-width:0}
+.db-top li em{flex:0 0 auto}
+@media (max-width:1300px){.db-top{grid-template-columns:minmax(0,1fr)}}

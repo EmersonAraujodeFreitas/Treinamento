@@ -390,10 +390,11 @@ function dashboardDes(ctx) {
   const ord = ind ? linhas.filter(d => V(d, ind) !== null).sort((a, b) => (V(b, ind) - V(a, ind)) * (ind.sentido < 0 ? -1 : 1)) : [];
   const card = (d, i, ruim) => `<li class="${ruim ? 'ruim' : 'bom'}" data-nome="${esc(d.nome)}"><span>${i + 1}</span><div><b>${esc(d.nome)}</b><small>${esc(d.supervisor)}</small></div><em>${fmtTipo(ind, V(d, ind))}</em></li>`;
   // mapa de quartis
-  const qTodas = (qg ? [qg] : []).concat(qCols);
+  // só colunas de quartil que têm dado no mês
+  const qTodas = (qg ? [qg] : []).concat(qCols).filter(m => linhas.some(d => /[1-4]/.test(String(V(d, m) || ''))));
   const qn = (d, m) => { const t = String(V(d, m) || ''); const k = t.match(/[1-4]/); return k ? +k[0] : 0; };
   const qOrd = [...linhas].map(d => ({ d, qs: qTodas.map(m => qn(d, m)) })).sort((a, b) => est.qord === 'q4' ? b.qs.filter(x => x === 4).length - a.qs.filter(x => x === 4).length : est.qord === 'q1' ? b.qs.filter(x => x === 1).length - a.qs.filter(x => x === 1).length : ((a.qs[0] || 9) - (b.qs[0] || 9)) || cmpTxt(a.d.nome, b.d.nome));
-  const rotQ = m => m.grupo === 'Geral' ? 'GERAL' : (m.gOrig || m.grupo).replace(/TEMPO MÉDIO DE ATENDIMENTO - /, '').replace(/PESQUISA DE SATISFAÇÃO/, 'C-SAT').toUpperCase() + (/quartil /i.test(m.sOrig || '') ? ' · ' + (m.sOrig || '').replace(/^QUARTIL /i, '').toLowerCase() : '');
+  const rotQ = m => m.grupo === 'Geral' ? 'GERAL' : m.grupo === 'Outros' ? String(m.sOrig || m.sub).toUpperCase() : (m.gOrig || m.grupo).replace(/TEMPO MÉDIO DE ATENDIMENTO - /, '').replace(/PESQUISA DE SATISFAÇÃO/, 'C-SAT').toUpperCase() + (/quartil /i.test(m.sOrig || '') ? ' · ' + (m.sOrig || '').replace(/^QUARTIL /i, '').toLowerCase() : '');
   const qMapa = qTodas.length > 1 ? `<div class="tabela-wrap db-qmapa"><table><thead><tr><th>Consultor</th>${qTodas.map(m => `<th title="${esc(m.rotulo)}"><span>${esc(rotQ(m))}</span></th>`).join('')}<th>Q1</th><th>Q4</th></tr>
     <tr class="db-qres"><td>% em Q4</td>${qTodas.map(m => { const v = linhas.filter(d => qn(d, m)).length; const q4 = linhas.filter(d => qn(d, m) === 4).length; return `<td>${v ? fmt(q4 / v * 100, 0) + '%' : '—'}</td>`; }).join('')}<td></td><td></td></tr></thead>
     <tbody>${qOrd.map(({ d, qs }) => `<tr><td data-nome="${esc(d.nome)}"><b>${esc(d.nome)}</b><small>${esc(d.supervisor)}</small></td>${qs.map(q => `<td><i class="qc q${q}">${q ? 'Q' + q : '–'}</i></td>`).join('')}<td class="db-qn">${qs.filter(x => x === 1).length}</td><td class="db-qn r">${qs.filter(x => x === 4).length}</td></tr>`).join('')}</tbody></table></div>` : '';
