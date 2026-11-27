@@ -87,10 +87,18 @@ function perfilBase(xs) {
   const opDe = m => (prodK && m.campos[prodK]) || '';
   return { tipoK, prodK, respK, fbK, pecK, pecCols, notaPec, falha, conf, tipoDe, fbDe, fbN, opDe, supsBD, quadro: q };
 }
+// no máximo uma letra a mais, a menos ou trocada
+function dist1(a, b) { if (a === b) return true; if (Math.abs(a.length - b.length) > 1) return false; let i = 0, j = 0, d = 0; while (i < a.length && j < b.length) { if (a[i] === b[j]) { i++; j++; continue; } if (++d > 1) return false; if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; } } return d + (a.length - i) + (b.length - j) <= 1; }
 // "Kelly" / "KELLY DOS SANTOS" / "Kelly Santos" são a mesma pessoa
 function mesmoNome(a, b) {
   const x = norm(a).split(' ').filter(t => t.length > 1 && !['de', 'da', 'do', 'dos', 'das', 'e'].includes(t)), y = norm(b).split(' ').filter(t => t.length > 1 && !['de', 'da', 'do', 'dos', 'das', 'e'].includes(t));
-  if (!x.length || !y.length || x[0] !== y[0]) return false;
+  if (!x.length || !y.length) return false;
+  if (x[0] !== y[0]) {
+    // grafia diferente do primeiro nome (Michele/Michelle, Debora/Débora já some no norm): aceita 1 letra de diferença
+    // desde que outro nome também bata (evita juntar pessoas diferentes)
+    if (!(x[0].length >= 4 && y[0].length >= 4 && dist1(x[0], y[0]) && (x.length === 1 || y.length === 1 || x.slice(1).some(t => t.length > 2 && y.slice(1).includes(t))))) return false;
+    return true;
+  }
   if (x.length === 1 || y.length === 1) return true;
   return x[x.length - 1] === y[y.length - 1] || y.includes(x[x.length - 1]) || x.includes(y[y.length - 1]);
 }
