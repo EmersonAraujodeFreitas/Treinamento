@@ -163,7 +163,9 @@ async function enviar() {
         gravarJ(K_PEND, p);
         for (const id of Object.keys(l.apagar || {})) { if (n >= MAX_LOTE) break; (lote.listas[ds] = lote.listas[ds] || { salvar: [], apagar: [] }).apagar.push(id); n++; }
       }
+      if (lote.valores.desempenho) logN('enviando ao servidor', { linhas: (lote.valores.desempenho.dados || []).length, tamanho: JSON.stringify(lote.valores.desempenho).length });
       const r = await api('POST', '/sincronizar', lote);
+      if (lote.valores.desempenho) logN('servidor respondeu', { recusados: (r.recusados || []).filter(x => x.ds === 'desempenho') });
       (r.recusados || []).forEach(x => recusados.push(x));
       // tira do pendente o que foi enviado (mesmo se recusado: o servidor manda a versão correta depois)
       p = pendentes();
@@ -183,6 +185,7 @@ async function enviar() {
     return true;
   } catch (e) {
     if (!sessao) return false;
+    if (contarPendentes() && (pendentes().valores || {}).desempenho) logN('erro ao enviar', { erro: e.message, status: e.status || null });
     setStatus('erro', e.message); return false;
   } finally { enviando = false; if (contarPendentes()) agendarEnvio(); }
 }
@@ -202,7 +205,7 @@ function aplicarEstado(est) {
       setOrig.call(localStorage, DS[ds], JSON.stringify([...mapa.values()]));
     }
     for (const v of VALORES) {
-      if (v === 'desempenho' && Object.prototype.hasOwnProperty.call(p.valores || {}, v)) { const val = est.datasets[v]; diagDes = { em: new Date().toISOString(), servidor: val && Array.isArray(val.dados) ? val.dados.length : null, pendente: true }; }
+      if (v === 'desempenho' && Object.prototype.hasOwnProperty.call(p.valores || {}, v)) { const val = est.datasets[v]; diagDes = { em: new Date().toISOString(), servidor: val && Array.isArray(val.dados) ? val.dados.length : null, pendente: true }; logN('servidor lido (navegador com envio pendente: mantido)', { servidor: diagDes.servidor }); }
       if (Object.prototype.hasOwnProperty.call(p.valores || {}, v)) continue;
       const val = est.datasets[v];
       if (v === 'desempenho') diagDes = { em: new Date().toISOString(), servidor: val && Array.isArray(val.dados) ? val.dados.length : null, pendente: Object.prototype.hasOwnProperty.call(p.valores || {}, v) };
@@ -210,6 +213,7 @@ function aplicarEstado(est) {
         // o servidor ainda não tem os relatórios (ou não conseguiu gravar): nunca apaga os do navegador; manda de novo
         let local = null; try { local = JSON.parse(localStorage.getItem(DS[v]) || 'null'); } catch (e) { /* segue */ }
         if (local && Array.isArray(local.dados) && local.dados.length) p.valores[v] = ++carimbo + '-' + Date.now();
+        logN('servidor sem desempenho (navegador mantido)');
         continue;
       }
       if (v === 'desempenho' && val) {
@@ -330,7 +334,7 @@ function fimCarregamento() {
   const el = document.getElementById('carregamento'); carregando(null, 100);
   setTimeout(() => { document.body.classList.remove('carregando'); if (el) el.classList.add('saindo'); setTimeout(() => el && el.remove(), 450); }, 180);
 }
-function logN(ev, x) { try { if (window.APP && APP.logDesempenho) APP.logDesempenho(ev, x); } catch (e) { /* segue */ } }
+function logN(ev, x) { try { const K = 'inovacao_treinamento_zlog_desempenho'; const l = JSON.parse(localStorage.getItem(K) || '[]'); let g = {}; try { const d0 = JSON.parse(localStorage.getItem(DS.desempenho) || 'null'); (d0 && d0.dados || []).forEach(d => { const k = d.mes + '·' + (d.op || 'sem op'); g[k] = (g[k] || 0) + 1; }); } catch (e) { g = null; } l.push({ t: new Date().toLocaleString('pt-BR'), ev, extra: x || null, grupos: g }); localStorage.setItem(K, JSON.stringify(l.slice(-80))); } catch (e) { /* segue */ } }
 function limparDadosLocais() {
   logN('dados locais apagados (saída/sessão)');
   Object.values(DS).forEach(k => localStorage.removeItem(k));
