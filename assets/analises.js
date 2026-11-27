@@ -177,6 +177,7 @@ function montar(raiz) {
         <legend><span class="icb">${G.ic(T.icone)}</span>${TR ? 'Provas aplicadas nos dias de treinamento' : 'Notas da qualidade (monitorias)'}<span class="passo">${n()}</span><small>${TR ? 'nota de 0 a 10' : 'em %, ex.: 87,50%'}</small></legend>
         <div class="sub-bloco"><div class="sub-cab"><b class="com-ic">${G.ic(T.icone)}${TR ? 'Provas' : 'Monitorias'}</b><button type="button" class="btn btn-link" id="${id('AddNota')}">${G.ic('plus')}adicionar</button></div>
           <div class="linhas" id="${id('Notas')}"></div></div>
+        <div class="an-monbase" id="${id('MonBase')}"></div>
       </fieldset>
 
       <fieldset class="bloco">
@@ -257,7 +258,7 @@ function montar(raiz) {
     limpar(); treinando = r; F('Nome').value = r.nome;
     const a = anDe(tipo, r.id);
     if (a) preencher(a); else padroes();
-    F('Corpo').hidden = false; resumo(); estadoBotoes(); calcular();
+    F('Corpo').hidden = false; resumo(); estadoBotoes(); calcular(); monBase();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   function resumo() {
@@ -325,7 +326,8 @@ function montar(raiz) {
     ['Faltas'].forEach(x => F(x).addEventListener('input', frequencia));
   } else {
     F('ExpIni').addEventListener('change', () => { if (F('ExpIni').value) F('ExpFim').value = somaDias(F('ExpIni').value, EXPERIENCIA_DIAS); calcular(); });
-    F('ExpFim').addEventListener('change', calcular);
+    F('ExpFim').addEventListener('change', () => { calcular(); monBase(); });
+    F('ExpIni').addEventListener('change', () => monBase());
   }
   function addAt(a = {}) {
     const l = F('Ats'); const i = $$('.linha', l).length + 1;
@@ -400,6 +402,24 @@ function montar(raiz) {
     }
   }
   function setCrit(c) { Object.entries(c || {}).forEach(([k, v]) => { const e = $(`.escala[data-k="${k}"]`, F('Criterios')); if (e) { e.dataset.v = String(v); $$('button', e).forEach(b => b.classList.toggle('on', b.dataset.n === String(v))); } }); }
+  // monitorias da base de qualidade no período (cruzadas com o BD pelo nome/matrícula)
+  function monBase() {
+    const el = F('MonBase'); if (!el) return;
+    if (!treinando || !A.analiseMonitorias) { el.innerHTML = ''; return; }
+    const ini = TR ? (treinando.criadoEm || '').slice(0, 10) || '2000-01-01' : F('ExpIni').value || (treinando.enviadoSupEm || '').slice(0, 10);
+    const fim = TR ? hoje() : F('ExpFim').value || hoje();
+    const r = A.analiseMonitorias(treinando.nome, treinando.matricula, ini, fim);
+    if (!r) { el.innerHTML = ''; return; }
+    if (!r.lista.length) { el.innerHTML = `<p class="dica">${G.ic('headset', '')} Nenhuma monitoria de ${esc((treinando.nome || '').split(' ')[0])} na base de qualidade ${TR ? 'desde o cadastro' : 'no período de experiência'}.${r.bd ? '' : ' (nome não encontrado no BD: confira se está igual)'}</p>`; G.icones(el); return; }
+    const pct = v => v === null || v === undefined ? '—' : fmt(v, 2) + '%';
+    el.innerHTML = `<div class="an-mb-cab"><b>${G.ic('headset', '')}Base de qualidade · ${r.lista.length} monitoria(s) ${TR ? 'desde o cadastro' : 'no período'}</b><button type="button" class="btn btn-sec btn-mini" id="${id('UsarMon')}">${G.ic('check', '')}Usar estas notas</button></div>
+      <div class="an-mb-num"><div><small>Média</small><b>${pct(r.media)}</b></div><div><small>Supervisor</small><b>${pct(r.sup)}</b><em>${r.nSup}</em></div><div><small>Monitor</small><b>${pct(r.mon)}</b><em>${r.nMon}</em></div><div><small>Feedback</small><b>${r.fb}</b><em>de ${r.lista.length}</em></div></div>
+      ${r.falhas.length ? `<div class="an-mb-falhas"><small>Falhas mais frequentes</small>${r.falhas.slice(0, 6).map(([k, n]) => `<span class="tag ruim">${esc(k)} · ${n}</span>`).join(' ')}</div>` : '<div class="an-mb-falhas"><small>Sem falhas marcadas nas monitorias.</small></div>'}
+      <div class="an-mb-lista">${r.lista.slice(-12).reverse().map(m => `<span title="${esc((m.avaliador || '') + (m._t ? ' · ' + m._t : ''))}">${dataBR(m.data)} <b style="color:${m.nota >= 85 ? '#1baf7a' : m.nota >= 70 ? '#eda100' : '#d03b3b'}">${m.nota === null ? '—' : fmt(m.nota, 1) + '%'}</b>${m._t ? ` <i>${m._t === 'Supervisor' ? 'S' : 'M'}</i>` : ''}</span>`).join('')}</div>`;
+    G.icones(el);
+    F('UsarMon').onclick = () => { F('Notas').innerHTML = ''; r.lista.filter(m => m.nota !== null).forEach(m => addNota(TR ? { nome: 'Monitoria ' + (m._t || ''), data: m.data, nota: m.nota / 10 } : { data: m.data, nota: m.nota })); calcular(); msg(`${r.lista.length} nota(s) da base de qualidade aplicadas.`, 'ok'); };
+  }
+  window.addEventListener('dados-atualizados', () => { if (treinando) monBase(); });
   function preencher(a) {
     F('Id').value = a.id;
     setSeg(F('Perfil'), a.perfil); F('Indicacao').value = a.indicacao || ''; F('Potencial').value = a.potencial || '';

@@ -303,7 +303,12 @@ function render() {
   if (!meses.includes(est.mes)) est.mes = meses[0];
   const doMes = porMes[est.mes] || [];
   const sups = [...new Set(doMes.map(m => m.supervisor).filter(Boolean))].sort(cmpTxt);
-  const f_ = m => (!est.sup || m.supervisor === est.sup) && (!est.q || norm(m.nome + ' ' + m.avaliador).includes(norm(est.q)));
+  // busca: nome, matrícula, supervisor, avaliador e campos da planilha; cruza com o BD (matrícula, login, nome completo)
+  const qn = norm(est.q || '').trim();
+  let alvoBD = null;
+  if (qn && A.identificarConsultor) { const c = A.identificarConsultor(est.q.trim()); if (c) alvoBD = c; }
+  const casa = m => { if (!qn) return true; const t = norm([m.nome, m.matricula, m.supervisor, m.avaliador, m.canal, m.atendimento, ...Object.values(m.campos || {})].join(' ')); if (qn.split(' ').every(p => t.includes(p))) return true; return !!alvoBD && (norm(m.nome) === norm(alvoBD.nome) || (alvoBD.mat && String(m.matricula) === String(alvoBD.mat)) || mesmoNome(m.nome, alvoBD.nome)); };
+  const f_ = m => (!est.sup || m.supervisor === est.sup) && casa(m);
   const filtro = doMes.filter(f_).sort((a, b) => b.data.localeCompare(a.data) || (b.criadoEm || '').localeCompare(a.criadoEm || ''));
   const mesAnt = meses[meses.indexOf(est.mes) + 1];
   const ant = (porMes[mesAnt] || []).filter(f_);
@@ -320,9 +325,10 @@ function render() {
   <div class="des-filtros cartao">
     <label class="mini">Mês <select id="monMes">${meses.map(m => `<option value="${m}"${m === est.mes ? ' selected' : ''}>${mesTxt(m)}${porMes[m] ? ` (${porMes[m].length})` : ''}</option>`).join('')}</select></label>
     <label class="mini">Supervisor <select id="monSup"><option value="">Todos</option>${sups.map(s => `<option${s === est.sup ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
-    <label class="mini">Consultor ou avaliador <input type="search" id="monBusca" placeholder="Buscar" value="${esc(est.q)}"></label>
+    <label class="mini">Consultor ou avaliador <input type="search" id="monBusca" list="monSug" placeholder="Nome, matrícula, supervisor…" value="${esc(est.q)}"></label>
+    <datalist id="monSug">${[...new Set(tudo.map(m => m.nome).concat(tudo.map(m => m.avaliador)).concat(((ler('inovacao_treinamento_quadro_v1', {}) || {}).itens || []).map(c => c.nome)).filter(Boolean).map(n => tituloNome(n)))].sort(cmpTxt).slice(0, 800).map(n => `<option value="${esc(n)}">`).join('')}</datalist>
   </div>
-  ${dash ? dash.html : `<div class="vazio"><b>Nenhuma monitoria em ${mesTxt(est.mes)}.</b><p>Lance uma monitoria ou importe a planilha da qualidade.</p></div>`}
+  ${dash ? dash.html : (() => { if (!qn) return `<div class="vazio"><b>Nenhuma monitoria em ${mesTxt(est.mes)}.</b><p>Lance uma monitoria ou importe a planilha da qualidade.</p></div>`; const outros = meses.filter(k => k !== est.mes && (porMes[k] || []).some(f_)).map(k => [k, porMes[k].filter(f_).length]); return `<div class="vazio"><b>Nada encontrado para “${esc(est.q)}” em ${mesTxt(est.mes)}.</b>${alvoBD ? `<p>No BD: <b>${esc(alvoBD.nome)}</b>${alvoBD.supervisor ? ' · ' + esc(alvoBD.supervisor) : ''}${alvoBD.status ? ' · ' + esc(alvoBD.status) : ''}</p>` : ''}${outros.length ? `<p>Encontrado em: ${outros.map(([k, n]) => `<button type="button" class="chip-f mon-ir-mes" data-mes="${k}">${mesTxt(k)} · ${n}</button>`).join(' ')}</p>` : '<p>Sem monitorias com esse nome em nenhum mês.</p>'}</div>`; })()}
   <article class="cartao"><header class="cab-card"><span class="icb">${G.ic('clipboard')}</span><div><h2>Monitorias do mês</h2><p>${filtro.length.toLocaleString('pt-BR')} registro(s)${filtro.length > vis.length ? ` · mostrando ${vis.length}` : ''}</p></div></header>
     <div class="tabela-wrap"><table class="tabela"><thead><tr><th>Data</th><th>Consultor</th><th>Supervisor</th><th>Canal</th><th>Atendimento</th><th class="dir">Nota</th><th>Avaliador</th><th></th></tr></thead><tbody>
     ${vis.map(m => `<tr><td>${dataBR(m.data)}</td><td><b>${esc(m.nome)}</b></td><td>${esc(m.supervisor)}</td><td>${esc(m.canal)}</td><td>${esc(m.atendimento || '—')}</td><td class="dir">${tagNota(m.nota)}${(m.criticas || []).length ? ' <span class="tag ruim" title="' + esc(m.criticas.join(', ')) + '">crítica</span>' : ''}</td><td>${esc(m.avaliador)}${m.origem === 'importada' ? ' <small class="tag neutro" title="' + esc(m.arquivo || '') + '">planilha</small>' : ''}</td>
@@ -335,6 +341,7 @@ function render() {
   b('monNova').onclick = () => { est.editando = null; est.form = true; formulario(); };
   b('monImp').onclick = abrirImportMon;
   b('monMetas').onclick = () => abrirMetasMon(est._M);
+  raiz.querySelectorAll('.mon-ir-mes').forEach(x => x.onclick = () => { est.mes = x.dataset.mes; est.pag = 1; render(); });
   if (b('monMais')) b('monMais').onclick = () => { est.pag++; render(); };
   b('monMes').onchange = e => { est.mes = e.target.value; est.pag = 1; render(); };
   b('monSup').onchange = e => { est.sup = e.target.value; est.pag = 1; render(); };
@@ -610,6 +617,17 @@ function todas() {
   cacheTxt = t; cacheTodas = out; return out;
 }
 A.monitorias = todas;
+/* monitorias de uma pessoa num período (para as análises de treinamento e supervisão) */
+A.analiseMonitorias = (nome, mat, ini, fim) => {
+  const tudo = todas(); if (!tudo.length) return null;
+  const c = A.identificarConsultor ? (mat && A.identificarConsultor(String(mat))) || A.identificarConsultor(nome) : null;
+  const nomes = [nome, c && c.nome].filter(Boolean);
+  const xs = tudo.filter(m => (m.data || '') >= (ini || '0') && (m.data || '') <= (fim || '9') && ((mat && String(m.matricula) === String(mat)) || nomes.some(n => norm(m.nome) === norm(n) || mesmoNome(m.nome, n)))).sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+  const P = perfilBase(tudo);
+  xs.forEach(m => { if (m._t === undefined) { m._t = P.tipoDe(m); m._fb = P.fbDe(m); } });
+  const falhas = {}; xs.forEach(m => P.falha.forEach(k => { if ((m.crit || {})[k] >= .5) falhas[k] = (falhas[k] || 0) + 1; }));
+  return { lista: xs, media: media_(xs.map(m => m.nota)), sup: media_(xs.filter(m => m._t === 'Supervisor').map(m => m.nota)), mon: media_(xs.filter(m => m._t === 'Monitor').map(m => m.nota)), nSup: xs.filter(m => m._t === 'Supervisor').length, nMon: xs.filter(m => m._t === 'Monitor').length, fb: xs.filter(m => m._fb).length, falhas: Object.entries(falhas).sort((a, b) => b[1] - a[1]), bd: c };
+};
 function excluirImportada(m) {
   lista = ler(KEY, []) || [];
   const lt = lista.find(x => x.id === m.loteId); if (!lt) return;
