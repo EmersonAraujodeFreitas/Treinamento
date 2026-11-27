@@ -104,8 +104,9 @@ function matriz(el, pts, o = {}) {
 }
 /* funil horizontal */
 function funil(itens) {
+  // uma linha por etapa: rótulo, barra (escala raiz para as etapas pequenas continuarem visíveis), valor e conversão
   const max = Math.max(...itens.map(i => i.valor || 0), 1);
-  return `<div class="db-funil">${itens.map((it, i) => { const ant = i ? itens[i - 1].valor : null; return `<div class="db-f-et" style="--w:${Math.max(6, (it.valor || 0) / max * 100)}%;--c:${it.cor || PAL[i]};--d:${i * 90}ms"><div class="db-f-bar"><b>${fmt(it.valor || 0, 0)}</b><span>${esc(it.rotulo)}</span></div>${ant ? `<em>${fmt((it.valor || 0) / ant * 100, 1)}% da etapa anterior</em>` : '<em>&nbsp;</em>'}</div>`; }).join('')}</div>`;
+  return `<div class="db-funil2">${itens.map((it, i) => { const ant = i ? itens[i - 1].valor : null, w = Math.max(3, Math.sqrt((it.valor || 0) / max) * 100); return `<div class="db-f2" style="--c:${it.cor || PAL[i]};--d:${i * 90}ms"><span class="db-f2-rot">${esc(it.rotulo)}</span><div class="db-f2-tr"><i style="width:${w}%"></i></div><b>${fmt(it.valor || 0, 0)}</b><em>${ant ? `${fmt((it.valor || 0) / ant * 100, 1)}%<small>da etapa anterior</small>` : '<small>início</small>'}</em></div>`; }).join('')}</div>`;
 }
 /* barra 100% empilhada com legenda */
 function empilhada(segs, o = {}) {

@@ -123,6 +123,17 @@ function casaPessoa(txt, p) {
   return mesmoNome(t, p.nome);
 }
 const pareceNome = t => { const x = String(t || '').trim(); return /^[A-Za-zÀ-ú]+( [A-Za-zÀ-ú]+){1,6}$/.test(x) && !/^(gravacao|lado a lado|redes sociais|ligacao|audio|whatsapp)$/i.test(norm(x)); };
+/* monitor responsável por célula (Admissão UJ, Serviços Uva…), mês a mês:
+   o que for definido num mês vale dali para a frente, até ser trocado de novo; os meses anteriores não mudam */
+function respCelula(mt, mes, cel, doMes, P) {
+  const k = chaveOp(cel), r = mt.resp || {};
+  const ms = Object.keys(r).filter(m => m <= mes && r[m] && Object.prototype.hasOwnProperty.call(r[m], k)).sort();
+  if (ms.length && r[ms[ms.length - 1]][k] && r[ms[ms.length - 1]][k] !== '*auto') { const m = ms[ms.length - 1]; return { nome: r[m][k], de: m, auto: false }; }
+  // automático: quem mais monitorou a célula no mês (só monitor)
+  const c = {}; (doMes || []).filter(m => m._t === 'Monitor' && chaveOp(P.opDe(m) || '') === k && m.avaliador).forEach(m => { const n = tituloNome(limpaAval(m.avaliador)); c[n] = (c[n] || 0) + 1; });
+  const top = Object.entries(c).sort((a, b) => b[1] - a[1])[0];
+  return top ? { nome: top[0], auto: true } : null;
+}
 function montarMetas(P, doMes, todasMon) {
   const mt = metasMon(), q = P.quadro;
   const gest = ((ler('inovacao_treinamento_gestao_v1', {}) || {}).itens || q.gestao || []).filter(g => !/deslig/i.test(g.status || ''));
@@ -207,6 +218,8 @@ function dashboardMon(filtro, ant, mesesAsc, porMes) {
   const marcar = xs => xs.forEach(m => { if (m._t === undefined) { m._t = P.tipoDe(m); m._fb = P.fbDe(m); m._fbN = P.fbN(m); } });
   marcar(tudo); marcar(filtro); marcar(ant);
   const M = montarMetas(P, filtro, tudo), mt = M.mt, metaN = mt.nota || META;
+  M.mes = est.mes; M.doMes = filtro; M.P = P;
+  const respOp = o => { const r = respCelula(mt, est.mes, o, filtro, P); return r ? r.nome : ''; };
   const sup = filtro.filter(m => m._t === 'Supervisor'), mon = filtro.filter(m => m._t === 'Monitor');
   const notas = filtro.map(m => m.nota), md = media_(notas), mdAnt = media_(ant.map(m => m.nota));
   // atingimento como na planilha META: feitas das pessoas listadas ÷ meta (o total pode ser digitado à mão)
@@ -228,7 +241,7 @@ function dashboardMon(filtro, ant, mesesAsc, porMes) {
     const serie = mesesAsc.map(k => media_((porMes[k] || []).filter(m => P.opDe(m) === o).map(m => m.nota)));
     const notaAno = media_(tudo.filter(m => P.opDe(m) === o && (m.data || '').startsWith(ano)).map(m => m.nota));
     const tri = mesesAsc.slice(-3);
-    return `<div class="q-op"><div class="q-op-cab"><b>${esc(o)}</b><span class="q-op-ano" style="--c:${corNota(notaAno)}">${notaAno === null ? '—' : fmt(notaAno, 1) + '%'}<small>nota ${ano}</small></span></div>
+    return `<div class="q-op"><div class="q-op-cab"><b>${esc(o)}${respOp(o) ? `<small class="q-op-resp">${G.ic('headset', '')} ${esc(respOp(o))}</small>` : ''}</b><span class="q-op-ano" style="--c:${corNota(notaAno)}">${notaAno === null ? '—' : fmt(notaAno, 1) + '%'}<small>nota ${ano}</small></span></div>
       <div class="q-op-num"><div><small>Mês</small><b style="color:${corNota(media_(xs.map(m => m.nota)))}">${xs.length ? fmt(media_(xs.map(m => m.nota)), 1) + '%' : '—'}</b><em>${xs.length} monitoria(s)</em></div><div>${DB.spark(serie, '#2a78d6')}<em>últimos ${serie.filter(v => v !== null).length} meses</em></div></div>
       <table class="q-tri"><thead><tr><th></th>${tri.map(k => `<th>${mesTxt(k)}</th>`).join('')}</tr></thead><tbody>${[['Supervisor', 'Supervisor'], ['Monitor', 'Monitor']].map(([t, r]) => `<tr><td>${r}</td>${tri.map(k => { const v = media_((porMes[k] || []).filter(m => P.opDe(m) === o && m._t === t).map(m => m.nota)); return `<td><span style="background:${v === null ? 'transparent' : corNota(v)}" class="q-cel${v === null ? ' vazio' : ''}">${v === null ? '–' : fmt(v, 1)}</span></td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`;
   };
@@ -255,7 +268,7 @@ function dashboardMon(filtro, ant, mesesAsc, porMes) {
   const reinc = Object.values(rein).filter(x => x.n >= 2).sort((a, b) => b.n - a.n || cmpTxt(a.m.nome, b.m.nome));
   // ranking de consultores
   const pc = {}; filtro.forEach(m => { const k = norm(m.nome); (pc[k] = pc[k] || []).push(m); });
-  const rk = Object.values(pc).map(xs => ({ nome: xs[0].nome, sup: xs[0].supervisor, op: P.opDe(xs[0]), resp: P.respK ? xs[0].campos[P.respK] : String(tituloNome(limpaAval((xs.find(m => m._t === 'Monitor') || {}).avaliador || ''))).split(' ')[0], v: media_(xs.map(m => m.nota)), q: xs.length })).filter(x => x.v !== null);
+  const rk = Object.values(pc).map(xs => ({ nome: xs[0].nome, sup: xs[0].supervisor, op: P.opDe(xs[0]), resp: respOp(P.opDe(xs[0])) ? String(respOp(P.opDe(xs[0]))).split(' ')[0] : P.respK ? xs[0].campos[P.respK] : String(tituloNome(limpaAval((xs.find(m => m._t === 'Monitor') || {}).avaliador || ''))).split(' ')[0], v: media_(xs.map(m => m.nota)), q: xs.length })).filter(x => x.v !== null);
   const cem = rk.filter(x => x.v >= 99.995), top = cem.length >= 15 ? [...cem].sort((a, b) => b.q - a.q || cmpTxt(a.nome, b.nome)) : [...rk].sort((a, b) => b.v - a.v || b.q - a.q).slice(0, 15), ofe = [...rk].sort((a, b) => a.v - b.v || b.q - a.q).slice(0, 15);
   const pessoa = (x, i, ruim) => `<li data-nome="${esc(x.nome)}"><span class="q-pos ${ruim ? 'r' : ''}">${i + 1}</span><span class="q-av" style="--c:${corNota(x.v)}">${esc(iniciais(x.nome))}</span><div><b>${esc(tituloNome(x.nome))}</b><small>${esc(tituloNome(x.sup))}${x.op ? ' · ' + esc(x.op) : ''}${x.resp ? ' · ' + esc(tituloNome(x.resp)) : ''}</small></div><em style="--c:${corNota(x.v)}">${fmt(x.v, 1)}%</em></li>`;
   const html = `
@@ -302,8 +315,8 @@ function dashboardMon(filtro, ant, mesesAsc, porMes) {
   const depois = () => {
     const el = id => document.getElementById(id);
     const sl = M.linhasSup.filter(l => l.feitas || l.meta);
-    if (el('qSupFb')) DB.agrupadas(el('qSupFb'), sl.map(l => curto(tituloNome(l.nome))), [{ nome: 'Lançadas', cor: '#1d4f91', valores: sl.map(l => l.feitas) }, { nome: 'Feedback realizado', cor: '#1baf7a', valores: sl.map(l => l.fb) }, { nome: 'Meta', cor: '#c9d3df', valores: sl.map(l => l.meta || null) }], { fmt: v => fmt(v, 0) });
-    if (el('qSupEq')) DB.agrupadas(el('qSupEq'), M.linhasSup.map(l => curto(tituloNome(l.nome))), [{ nome: 'Média da equipe', cor: '#1baf7a', valores: M.linhasSup.map(l => l.mediaEquipe) }], { fmt: v => fmt(v, 1) + '%', meta: metaN, max: 105 });
+    if (el('qSupFb')) DB.agrupadas(el('qSupFb'), sl.map(l => curto(tituloNome(l.nome)) + (l.op ? ' · ' + String(l.op).replace(/Admiss[ãa]o/i, 'Adm.').replace(/Servi[çc]os/i, 'Serv.') : '')), [{ nome: 'Lançadas', cor: '#1d4f91', valores: sl.map(l => l.feitas) }, { nome: 'Feedback realizado', cor: '#1baf7a', valores: sl.map(l => l.fb) }, { nome: 'Meta', cor: '#c9d3df', valores: sl.map(l => l.meta || null) }], { fmt: v => fmt(v, 0) });
+    if (el('qSupEq')) DB.agrupadas(el('qSupEq'), M.linhasSup.map(l => curto(tituloNome(l.nome)) + (l.op ? ' · ' + String(l.op).replace(/Admiss[ãa]o/i, 'Adm.').replace(/Servi[çc]os/i, 'Serv.') : '')), [{ nome: 'Média da equipe', cor: '#1baf7a', valores: M.linhasSup.map(l => l.mediaEquipe) }], { fmt: v => fmt(v, 1) + '%', meta: metaN, max: 105 });
     const ml = M.linhasMon;
     if (el('qMonFb')) DB.agrupadas(el('qMonFb'), ml.map(l => tituloNome(l.nome).split(' ')[0] + ' · ' + String(l.op).replace(/Admiss[ãa]o/i, 'Adm.').replace(/Servi[çc]os/i, 'Serv.')), [{ nome: 'Lançadas', cor: '#6a2c91', valores: ml.map(l => l.feitas) }, { nome: 'Feedback realizado', cor: '#d58ae8', valores: ml.map(l => l.fb) }, { nome: 'Meta', cor: '#c9d3df', valores: ml.map(l => l.meta || null) }], { fmt: v => fmt(v, 0) });
     if (el('qMonEq')) { const eqs = [...new Set(mon.map(m => m.supervisor).filter(Boolean))].sort(cmpTxt); DB.agrupadas(el('qMonEq'), eqs.map(s => curto(tituloNome(s))), [{ nome: 'Nota dos monitores', cor: '#b06ad9', valores: eqs.map(s => media_(mon.filter(m => m.supervisor === s).map(m => m.nota))) }], { fmt: v => fmt(v, 1) + '%', meta: metaN, max: 105 }); }
@@ -330,6 +343,9 @@ function abrirMetasMon(M) {
   const cab = t => `<thead><tr><th>${t}</th><th>Operação</th><th class="dir">Qtd</th><th>Monitorias por consultor</th><th>Redução</th><th class="dir">Meta</th><th class="dir">M. feitas</th><th class="dir">Entrega</th><th>Status</th></tr></thead>`;
   f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('target')}</span><div><h2>Metas de monitoria</h2><p>Como na planilha META: <b>Meta = Qtd × monitorias por consultor − redução</b>. Sem número digitado vale ${PADRAO_N.sup} para supervisor e ${PADRAO_N.mon} para monitor. Qtd = consultores ativos da equipe (supervisor) ou da operação (monitor), pelo BD; clique no número para trocar.</p></div></header>
     <datalist id="mmOps">${opsK.map(k => `<option value="${esc(M.opsNome[k])}">`).join('')}</datalist>
+    <h3 class="q-mm-t q-mm-resp">Monitor responsável por célula · ${mesTxt(M.mes)}</h3>
+    <p class="dica">Vale de ${mesTxt(M.mes)} em diante, até você trocar de novo. Os meses anteriores continuam com quem estava.</p>
+    <div class="mm-resp">${opsK.map(k => { const cel = M.opsNome[k], r = respCelula(mt, M.mes, cel, M.doMes, M.P), nomes = [...new Set(M.linhasMon.map(l => tituloNome(l.nome)).concat(r && !r.auto ? [r.nome] : []))].sort(cmpTxt); return `<label class="campo"><span>${esc(cel)}</span><select data-resp="${esc(k)}"><option value="">Automático${r && r.auto ? ' (' + esc(r.nome) + ')' : ''}</option>${nomes.map(n => `<option${r && !r.auto && n === r.nome ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select><small class="dica">${r && !r.auto ? (r.de === M.mes ? 'definido neste mês' : 'desde ' + mesTxt(r.de)) : 'quem mais monitorou a célula no mês'}</small></label>`; }).join('')}</div>
     <h3 class="q-mm-t q-mm-mon">Meta monitores</h3>
     <div class="tabela-wrap"><table class="tabela mm-tab" id="mmMon">${cab('Nome monitor')}<tbody>${M.linhasMon.map(l => linha(l, false)).join('') || `<tr><td colspan="9" class="dica">Nenhum monitor encontrado ${M.temADM ? 'no BD ADM (cargo com MONITOR ou QUALIDADE)' : 'na base'}.</td></tr>`}</tbody></table></div>
     <div class="mm-add"><input id="mmNovoNome" placeholder="Nome do monitor"><input id="mmNovoOp" list="mmOps" placeholder="Operação"><button type="button" class="btn btn-sec btn-mini" id="mmAdd">${G.ic('plus', '')}Adicionar monitor</button></div>
@@ -368,6 +384,9 @@ function abrirMetasMon(M) {
     const v = el => { const t = (el && el.value || '').trim(); return t === '' ? null : +t; };
     const novo = { nota: v(document.getElementById('mmNota')) || META, n: {}, red: {}, op: {}, qtd: {}, extra: extras, fora: [...fora], foraNome: Object.fromEntries([...fora].map(k => [k, nomesFora[k] || k])), totSup: v(document.getElementById('mmTotSup')), totMon: v(document.getElementById('mmTotMon')) };
     f.querySelectorAll('tr[data-k]').forEach(tr => { const k = tr.dataset.k, n = v(tr.querySelector('.mm-n')), r = v(tr.querySelector('.mm-r')), qq = v(tr.querySelector('.mm-q')), op = tr.querySelector('.mm-op'); if (n !== null) novo.n[k] = n; if (qq !== null) novo.qtd[k] = qq; if (r) novo.red[k] = r; if (op && op.value.trim()) novo.op[k] = op.value.trim(); });
+    // responsável: grava só no mês aberto o que mudou em relação ao que valia
+    novo.resp = JSON.parse(JSON.stringify(mt.resp || {}));
+    f.querySelectorAll('[data-resp]').forEach(sel => { const k = sel.dataset.resp, atual = respCelula(mt, M.mes, M.opsNome[k], [], M.P), v = sel.value; const antes = atual && !atual.auto ? atual.nome : ''; if (v === antes) return; const m = novo.resp[M.mes] = novo.resp[M.mes] || {}; if (v) m[k] = v; else { delete m[k]; const prev = Object.keys(novo.resp).filter(x => x < M.mes && novo.resp[x] && novo.resp[x][k] && novo.resp[x][k] !== '*auto'); if (prev.length) m[k] = '*auto'; } });
     const D2 = ler(KEY_DES, {}) || {}; D2.metasMon = novo; gravar(KEY_DES, D2);
     document.getElementById('dlgMetaMon').close(); render(); toast('Metas de monitoria salvas');
     if (window.NUVEM && NUVEM.ativo && NUVEM.ativo()) NUVEM.publicarAgora();
