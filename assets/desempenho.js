@@ -255,7 +255,7 @@ function processarConsolidado(aba, iCab, info, mes) {
     const reg = { mat: (c && c.mat) || mat, nome: c ? c.nome : nome.toUpperCase(), supervisor: String(cel(l, 'supervisor') ?? '').trim().toUpperCase() || (c && c.supervisor) || '', ies: String(cel(l, 'ies') ?? '').trim(), status: String(cel(l, 'status') ?? '').trim(), mes, op: info.op || (c ? opNorm(c.operacao || c.grupo) : ''), v: {} };
     if (!c) { reg.foraBD = true; fora.push(reg.nome); }
     const k = reg.mat || norm(reg.nome); if (vistos.has(k)) continue; vistos.add(k);
-    info.mets.forEach(mt => { const v = converter(mt.tipo, l[mt.coluna]); if (v !== null) reg.v[mt.rotulo] = v; });
+    info.mets.forEach(mt => { let v = converter(mt.tipo, l[mt.coluna]); if (typeof v === 'number' && isFinite(v)) v = +v.toPrecision(7); /* menos dígitos: o histórico ocupa menos espaço */ if (v !== null) reg.v[mt.rotulo] = v; });
     dados.push(reg);
   }
   return { dados, total, fora };
@@ -328,10 +328,11 @@ function passoConsolidado(dets) {
     D.modelos[nomeF] = md;
     const novos = rs.flatMap(x => x.r.dados.map(d => ({ ...d, fonte: nomeF, v: cod(d.v) })));
     D.dados = D.dados.filter(d => !(d.fonte === nomeF && substitui(d))).concat(novos);
-    const mesesF = [...new Set(D.dados.filter(d => d.fonte === nomeF).map(d => d.mes))].sort().reverse();
-    if (mesesF.length > 12) { const corte = mesesF[11]; D.dados = D.dados.filter(d => d.fonte !== nomeF || d.mes >= corte); }
+    // todo o histórico fica guardado (só o mesmo mês e operação é substituído)
     const meses = [...new Set(rs.map(x => x.mes))].sort();
     D.importacoes = [{ fonte: nomeF, arquivo: arq.nome, em: new Date().toISOString(), meses, linhas: rs.reduce((a, x) => a + x.r.total, 0), casados: novos.filter(d => !d.foraBD).length, naoAchados: novos.filter(d => d.foraBD).length }, ...(D.importacoes || [])].slice(0, 60);
+    const tamD = JSON.stringify(D).length;
+    if (tamD > 1800000) { msg.textContent = `O histórico ficaria grande demais para sincronizar (${fmt(tamD / 1048576, 1)} MB). Nada foi apagado; importe menos meses ou fale com o administrador.`; msg.className = 'msg erro'; D = Object.assign(vazio(), ler(KEY, {}) || {}); return; }
     salvar(); dlg.close(); est.fonte = nomeF; est.mes = meses[meses.length - 1]; est.grupo = 'Dashboard'; render();
     toast(`${nomeF}: ${novos.length} consultor(es) · ${rs.map(x => `${x.op || 'BD'} ${mesTxt(x.mes)}`).join(' · ')}`);
     if (window.NUVEM && NUVEM.ativo && NUVEM.ativo()) NUVEM.publicarAgora();
