@@ -180,7 +180,7 @@ const MODELO_BASE = [
 const SEQ = []; MODELO_BASE.forEach(([g, t, cs]) => cs.forEach(([s, tipo, sentido]) => SEQ.push({ g, t, s, tipo, sentido })));
 // nome da coluna sem o sufixo que o Excel/Power Pivot põe nas repetidas (BOTMAKER_5, QUARTIL_16, INBOUND2…)
 const limparCab = t => String(t ?? '').replace(/\s+/g, ' ').trim().replace(/[_ ]\d+$/, '').replace(/(?<=[A-Za-zÀ-ú])\d+$/, '').trim();
-const chaveCab = t => norm(limparCab(t)).replace(/ñ/g, 'n').replace(/\s*\|\s*/g, '|').replace(/\s+/g, ' ');
+const chaveCab = t => norm(limparCab(t)).replace(/ñ/g, 'n').replace(/\s*\|\s*/g, '|').replace(/[^a-z0-9|% -]/g, ' ').replace(/\s+/g, ' ').trim();
 function lerConsolidado(aba, iCab) {
   const cab = aba.linhas[iCab] || [];
   // linha dos grupos: a de cima (ou até 3 acima) que mais cita os blocos conhecidos
@@ -192,7 +192,7 @@ function lerConsolidado(aba, iCab) {
   }
   const usarLinhaGrupo = melhor >= 3;
   const n = Math.max(cab.length, grp.length);
-  const ixId = {}, mets = []; let g = '', ptr = 0;
+  const ixId = {}, mets = [], usadasSeq = new Set(); let g = '', ptr = 0;
   const fmtCol = j => { const c = {}; for (let r = iCab + 1; r < Math.min(aba.linhas.length, iCab + 400); r++) { const t = aba.formatos && aba.formatos[r] && aba.formatos[r][j]; if (t) c[t] = (c[t] || 0) + 1; } const e = Object.entries(c).sort((a, b) => b[1] - a[1])[0]; return e ? e[0] : ''; };
   for (let j = 0; j < n; j++) {
     const sRaw = String(cab[j] ?? '').trim(), gRaw = usarLinhaGrupo ? String(grp[j] ?? '').trim() : '';
@@ -203,7 +203,12 @@ function lerConsolidado(aba, iCab) {
     // acha a coluna no modelo conhecido (pelo grupo da planilha, se houver, ou pela ordem)
     let tpl = null;
     if (usarLinhaGrupo && g) { const gn = grupoNome(g); const i = SEQ.findIndex((x, i2) => i2 >= ptr && x.g === gn && x.s === sk); const i3 = i >= 0 ? i : SEQ.findIndex(x => x.g === gn && x.s === sk); if (i3 >= 0) { tpl = SEQ[i3]; ptr = i3 + 1; } }
-    else { for (let i = ptr; i < Math.min(SEQ.length, ptr + 8); i++) if (SEQ[i].s === sk) { tpl = SEQ[i]; ptr = i + 1; break; } }
+    else {
+      // pela ordem do modelo; se a coluna estiver fora de ordem, procura no modelo inteiro uma ainda não usada
+      let i = SEQ.findIndex((x, k) => k >= ptr && !usadasSeq.has(k) && x.s === sk);
+      if (i < 0) i = SEQ.findIndex((x, k) => !usadasSeq.has(k) && x.s === sk);
+      if (i >= 0) { tpl = SEQ[i]; usadasSeq.add(i); ptr = i + 1; }
+    }
     const grupo = tpl ? tpl.g : (usarLinhaGrupo && g ? grupoNome(g) : 'Outros');
     const fm = fmtCol(j);
     let tipo = tpl ? tpl.tipo : /^quartil/.test(sk) ? 'quartil' : fm === 'pct' ? 'pct' : fm === 'tempo' ? 'tempoMedio' : tipoDe(grupo, sk, aba.linhas.slice(iCab + 1, iCab + 400).map(l => l && l[j]));
@@ -515,6 +520,7 @@ function render() {
     <label class="mini">Consultor <input type="search" id="desBusca" placeholder="Nome ou matrícula" value="${esc(est.busca)}"></label>
     <span class="dica">${ult ? `Última importação: ${esc(ult.arquivo)} · ${new Date(ult.em).toLocaleDateString('pt-BR')} · ${ult.casados} no BD${ult.naoAchados ? ` · ${ult.naoAchados} fora do BD` : ''}` : ''}</span>
   </div>
+  ${cons && todas.length && todas.filter(m => m.grupo === 'Outros').length / todas.length > .5 ? `<div class="aviso-fluxo db-aviso">${G.ic('alert', '')}<span><b>Este relatório foi lido pela versão anterior do site</b>, que não reconhecia as colunas da base (tudo caiu em OUTROS e os quartis se perderam). Clique em <b>Importar relatório</b> e envie o mesmo arquivo de novo: o mês é substituído e os blocos, tempos, percentuais e quartis aparecem certos.</span></div>` : ''}
   ${dash ? '' : `<div class="kpis pn-kpis">${kpis}</div>`}
   ${cons ? `<div class="des-grupos">${grupos.map(g => `<button type="button" data-g="${esc(g)}" class="${g === est.grupo ? 'on' : ''}">${g === 'Dashboard' ? G.ic('chart', '') + 'Dashboard' : esc(g === 'Completo' ? 'Tabela completa' : g === 'Resumo' ? 'Resumo' : gTit(g).toUpperCase())}</button>`).join('')}${distQ ? `<span class="des-q">Quartil geral: ${distQ.map(([n, q]) => `<span class="qt q${n}">Q${n}</span> ${q}`).join(' ')}</span>` : ''}</div>` : ''}
   ${dash ? dash.html : `  <article class="cartao">
