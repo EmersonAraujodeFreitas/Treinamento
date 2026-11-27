@@ -285,9 +285,11 @@ function passoConsolidado(dets) {
   const partes = dets.map(det => { const aba = arq.abas[det.ia] || arq.abas[0], info = lerConsolidado(aba, det.iCab); return { aba, det, info: { ...info }, op: opDaAba(aba.nome) || opNorm(arq.nome), mes: mesBase }; });
   const TT = { tempo: 'tempo', tempoMedio: 'tempo', pct: '%', quartil: 'quartil', texto: 'texto', somar: 'nº' };
   const lerUI = () => { const m = document.getElementById('dsMesU'); partes.forEach((p, i) => { const o = document.getElementById('dsOp' + i); if (o) p.op = o.value; if (m && m.value) p.mes = m.value; }); };
+  // abas ignoradas ou sem nenhum consultor não entram nem apagam nada
+  const valem = rs => rs.filter(x => x.op !== '-' && x.r.dados.length);
   const processar = () => partes.map(p => { p.info.op = p.op; const r = processarConsolidado(p.aba, p.det.iCab, p.info, p.mes); return { ...p, r }; });
   const desenhar = () => {
-    lerUI(); const rs = processar();
+    lerUI(); const rs = valem(processar());
     const tot = rs.reduce((a, x) => a + x.r.dados.length, 0), fora = rs.reduce((a, x) => a + x.r.fora.length, 0);
     const reconh = rs.reduce((a, x) => a + x.info.reconhecidas, 0), mets = rs.reduce((a, x) => a + x.info.mets.length, 0);
     const ja = rs.filter(x => D.dados.some(d => d.fonte === fonte && d.mes === x.mes && (!x.op || d.op === x.op)));
@@ -295,16 +297,17 @@ function passoConsolidado(dets) {
       ${fora ? `<details class="do-trein"><summary>${G.ic('alert', '')}Não estão no BD atual (${fora})</summary><p class="dica">Entram mesmo assim, com o nome e o supervisor do relatório.</p><ul class="aps-lidos">${rs.flatMap(x => x.r.fora).slice(0, 80).map(n => `<li>${esc(n)}</li>`).join('')}</ul></details>` : ''}
       <p class="dica">${ja.length ? `<b>Já importado:</b> ${ja.map(x => `${x.op || 'consolidado'} ${mesTxt(x.mes)}`).join(', ')} — será substituído por este arquivo. ` : ''}Cada aba substitui só a sua operação no seu mês; a outra operação continua como está.</p>`;
     G.icones(document.getElementById('dsResumo'));
-    rs.forEach((x, i) => { const el = document.getElementById('dsN' + i); if (el) el.textContent = x.r.dados.length; });
+    processar().forEach((x, i) => { const el = document.getElementById('dsN' + i); if (el) el.textContent = x.op === '-' ? 'ignorada' : x.r.dados.length || 'vazia'; });
     document.getElementById('dsSalvarC').disabled = !tot;
     return rs;
   };
   const porGrupo = {}; partes.forEach(p => p.info.mets.forEach(m => { const g = porGrupo[m.grupo] = porGrupo[m.grupo] || new Map(); if (!g.has(m.rotulo)) g.set(m.rotulo, m); }));
   f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('check')}</span><div><h2>Relatório de indicadores reconhecido</h2><p>${esc(arq.nome)} · ${partes.length} aba(s) · uma linha por consultor</p></div></header>
     <div class="grade g3"><label class="campo"><span>Nome do relatório</span><input id="dsFonteC" value="${esc(fonte)}"></label>
+      <label class="campo"><span>Este arquivo é de <i class="obr">*</i></span><select id="dsTipoArq">${[['ambas', 'Admissão e Serviços (pelas abas)'], ['Admissão', 'Só Admissão'], ['Serviços', 'Só Serviços']].map(([k, t]) => `<option value="${k}"${k === (opNorm(arq.nome) || 'ambas') ? ' selected' : ''}>${t}</option>`).join('')}</select><small class="dica">Só Admissão: as abas de Serviços do arquivo são ignoradas (e vice-versa).</small></label>
       <label class="campo"><span>Mês dos dados <i class="obr">*</i></span><input type="month" id="dsMesU" value="${mesBase}"><small class="dica">${mesDoArquivo(arq.nome) ? 'Lido do nome do arquivo.' : 'O nome do arquivo não tem o mês: escolha aqui.'}</small></label></div>
     <div class="tabela-wrap"><table class="tabela ds-abas"><thead><tr><th>Aba</th><th>Operação</th><th class="dir">Consultores</th></tr></thead><tbody>
-      ${partes.map((p, i) => `<tr><td><b>${esc(p.aba.nome.trim())}</b></td><td><select id="dsOp${i}"><option value="">Pelo BD</option>${['Admissão', 'Serviços'].map(o => `<option${p.op === o ? ' selected' : ''}>${o}</option>`).join('')}</select></td><td class="dir" id="dsN${i}"></td></tr>`).join('')}
+      ${partes.map((p, i) => `<tr><td><b>${esc(p.aba.nome.trim())}</b></td><td><select id="dsOp${i}"><option value="">Pelo BD</option>${['Admissão', 'Serviços'].map(o => `<option${p.op === o ? ' selected' : ''}>${o}</option>`).join('')}<option value="-">Não importar</option></select></td><td class="dir" id="dsN${i}"></td></tr>`).join('')}
     </tbody></table></div>
     <p class="dica">Diga a operação de cada aba (já vem pelo nome: ADM = Admissão, SERV = Serviços). Pode importar Admissão e Serviços em arquivos separados: um não apaga o outro.</p>
     <div id="dsResumo"></div>
@@ -312,12 +315,15 @@ function passoConsolidado(dets) {
     <div class="dlg-rod"><small class="msg" id="dsMsg"></small><span><button type="button" class="btn btn-sec" id="dsVoltar">Voltar</button> <button type="button" class="btn btn-pri" id="dsSalvarC">${G.ic('check')}Salvar</button></span></div>`;
   G.icones(f);
   partes.forEach((_, i) => { document.getElementById('dsOp' + i).onchange = desenhar; }); document.getElementById('dsMesU').onchange = desenhar;
+  const aplicarTipo = () => { const t = document.getElementById('dsTipoArq').value; partes.forEach((p, i) => { const da = opDaAba(p.aba.nome); document.getElementById('dsOp' + i).value = t === 'ambas' ? (da || '') : (da && da !== t ? '-' : t); }); desenhar(); };
+  document.getElementById('dsTipoArq').onchange = aplicarTipo;
   document.getElementById('dsVoltar').onclick = passo1;
-  desenhar();
+  aplicarTipo();
   document.getElementById('dsSalvarC').onclick = () => {
     const nomeF = document.getElementById('dsFonteC').value.trim() || FONTE_PADRAO, msg = document.getElementById('dsMsg');
     lerUI(); if (partes.some(p => !p.mes)) { msg.textContent = 'Informe o mês dos dados.'; msg.className = 'msg erro'; return; }
-    const rs = processar();
+    const rs = valem(processar());
+    if (!rs.length) { msg.textContent = 'Nenhuma aba com consultores para importar.'; msg.className = 'msg erro'; return; }
     D = Object.assign(vazio(), ler(KEY, {}) || {});
     // indicadores de todas as abas (Serviços tem reingresso e retenção; Admissão tem medicina)
     const uniao = [], vistos = new Set(); rs.forEach(x => x.info.mets.forEach(m => { if (!vistos.has(m.rotulo)) { vistos.add(m.rotulo); uniao.push(m); } }));
