@@ -1538,3 +1538,8 @@ html.menu-recolhido .btn-recolher svg{transform:rotate(180deg)}
 .q-mm-resp{background:#9a6a00}
 .q-op-resp{display:flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;color:var(--tinta-3);margin-top:2px}.q-op-resp svg{width:13px;height:13px}
 .q-filtro-meta{display:flex;align-items:center;gap:6px;margin:0 0 10px;padding:8px 12px;border-radius:10px;background:var(--sup-2);color:var(--tinta-2);font-size:12.5px}.q-filtro-meta svg{width:14px;height:14px}
+.mm-tab .mm-del{width:32px;height:32px;border-radius:8px;opacity:.8;display:grid;place-items:center;font-size:0}
+.mm-tab .mm-del svg{width:16px;height:16px}
+.mm-tab .mm-del:hover{opacity:1}
+.mm-tab select.mm-n{width:120px;min-height:32px}
+.mm-tab .mm-op{width:150px}
