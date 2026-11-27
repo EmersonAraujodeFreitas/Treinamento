@@ -88,6 +88,19 @@ function mesclarDes(a, b) {
   return { ...b, ...a, modelos, dados, grupos, importacoes };
 }
 window.mesclarDes = mesclarDes;
+// só reenvia quando o navegador tem algum relatório/mês/operação mais novo (ou que o servidor não tem).
+// Comparar o texto inteiro fazia reenviar sempre (ordem dos campos) e a fila nunca terminava.
+function localTemMais(srv, loc) {
+  if (!loc || !Array.isArray(loc.dados)) return false; if (!srv || !Array.isArray(srv.dados)) return loc.dados.length > 0;
+  const kOf = d => d.fonte + '|' + d.mes + '|' + (d.op || ''), gs = srv.grupos || {}, gl = loc.grupos || {};
+  const temS = new Map(); srv.dados.forEach(d => { const k = kOf(d); temS.set(k, (temS.get(k) || 0) + 1); });
+  const temL = new Map(); loc.dados.forEach(d => { const k = kOf(d); temL.set(k, (temL.get(k) || 0) + 1); });
+  for (const k of new Set([...temL.keys(), ...Object.keys(gl)])) {
+    const ts = gs[k] || (temS.has(k) ? '0' : ''), tl = gl[k] || (temL.has(k) ? '0' : '');
+    if (tl > ts) return true;
+  }
+  return false;
+}
 let carimbo = 0;
 const marca = v => typeof v === 'string' ? v : JSON.stringify(v); // pendentes antigos guardavam o registro inteiro
 function pendentes() { return lerJ(K_PEND, { listas: {}, valores: {} }); }
@@ -201,7 +214,7 @@ function aplicarEstado(est) {
         let local = null; try { local = JSON.parse(localStorage.getItem(DS[v]) || 'null'); } catch (e) { /* segue */ }
         const junto = mesclarDes(val, local), txt = JSON.stringify(junto);
         setOrig.call(localStorage, DS[v], txt);
-        if (txt !== JSON.stringify(val)) p.valores[v] = ++carimbo + '-' + Date.now(); // o servidor não tinha tudo: envia de novo
+        if (localTemMais(val, local)) p.valores[v] = ++carimbo + '-' + Date.now(); // o servidor não tinha tudo: envia de novo
         continue;
       }
       if (val === null || val === undefined) localStorage.removeItem(DS[v]); else setOrig.call(localStorage, DS[v], JSON.stringify(val));
