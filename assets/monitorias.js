@@ -134,6 +134,30 @@ function respCelula(mt, mes, cel, doMes, P) {
   const top = Object.entries(c).sort((a, b) => b[1] - a[1])[0];
   return top ? { nome: top[0], auto: true } : null;
 }
+/* com filtro de supervisor ou consultor, as metas acompanham: Qtd passa a ser só os consultores filtrados
+   (meta = Qtd filtrada × monitorias por consultor − redução proporcional) e as feitas são só as do filtro */
+function metasDoFiltro(M) {
+  const q = norm(est.q || '').trim(); if (!est.sup && !q) return M;
+  let C = M.vig.slice();
+  if (est.sup) C = C.filter(c => c.supervisor && (norm(c.supervisor) === norm(est.sup) || mesmoNome(c.supervisor, est.sup)));
+  if (q) {
+    // consultor exato (nome completo, matrícula, login) ou palavras que começam cada parte do nome
+    const um = A.identificarConsultor ? A.identificarConsultor(est.q.trim()) : null;
+    const pp = q.split(/\s+/); const x = um ? C.filter(c => norm(c.nome) === norm(um.nome)) : C.filter(c => { const ts = norm([c.nome, c.mat, c.login].join(' ')).split(/\s+/); return pp.every(w => ts.some(t => t === w || (w.length > 2 && t.startsWith(w)))); });
+    C = x.length ? x : (est.sup ? C : null);
+  }
+  const ajusta = (l, qtdF) => { const red = l.qtd ? Math.round((l.red || 0) * qtdF / l.qtd) : 0; return { ...l, qtd: qtdF, red, meta: l.n ? Math.max(0, qtdF * l.n - red) : 0 }; };
+  let sup, mon;
+  if (C) {
+    const nomesC = new Set(C.map(c => norm(c.nome)));
+    sup = M.linhasSup.map(l => ajusta(l, (l.eq || []).filter(c => nomesC.has(norm(c.nome))).length)).filter(l => l.qtd || l.feitas);
+    mon = M.linhasMon.map(l => ajusta(l, C.filter(c => chaveOp(M.opDeCons(c) || '') === chaveOp(l.op || '')).length)).filter(l => l.qtd || l.feitas);
+  } else {
+    // a busca é por um avaliador: ficam só as linhas dele
+    sup = M.linhasSup.filter(l => casaPessoa(est.q, l) || l.feitas); mon = M.linhasMon.filter(l => casaPessoa(est.q, l) || l.feitas);
+  }
+  return { ...M, linhasSup: sup, linhasMon: mon, filtrado: true, consFiltro: C ? C.length : null };
+}
 function montarMetas(P, doMes, todasMon) {
   const mt = metasMon(), q = P.quadro;
   const gest = ((ler('inovacao_treinamento_gestao_v1', {}) || {}).itens || q.gestao || []).filter(g => !/deslig/i.test(g.status || ''));
@@ -160,7 +184,7 @@ function montarMetas(P, doMes, todasMon) {
     const k = 'sup:' + norm(p.nome), opAuto = Object.entries(opsEq).sort((a, b) => b[1] - a[1])[0]?.[0] || operacaoBD(p), op = (mt.op || {})[k] || opAuto;
     const nSet = (mt.n || {})[k], n = nSet ?? PADRAO_N.sup, red = (mt.red || {})[k] || 0, qtdBD = eq.length, qtd = (mt.qtd || {})[k] ?? qtdBD, meta = n ? Math.max(0, qtd * n - red) : 0;
     const minhas = dele(p, doMes), daEquipe = doMes.filter(m => norm(m.supervisor) === norm(p.nome) || mesmoNome(m.supervisor || '', p.nome) || eq.some(c => norm(c.nome) === norm(m.nome)));
-    return { tipo: 'sup', chave: k, nome: p.nome, op, opAuto, qtd, qtdBD, n, nPadrao: nSet === undefined || nSet === null, red, meta, feitas: minhas.length, fb: minhas.reduce((a, m) => a + (m._fbN || 0), 0), notaDada: media_(minhas.map(m => m.nota)), mediaEquipe: media_(daEquipe.map(m => m.nota)), equipe: daEquipe };
+    return { tipo: 'sup', chave: k, nome: p.nome, op, opAuto, eq, qtd, qtdBD, n, nPadrao: nSet === undefined || nSet === null, red, meta, feitas: minhas.length, fb: minhas.reduce((a, m) => a + (m._fbN || 0), 0), notaDada: media_(minhas.map(m => m.nota)), mediaEquipe: media_(daEquipe.map(m => m.nota)), equipe: daEquipe };
   }).sort((a, b) => cmpTxt(a.op || 'zz', b.op || 'zz') || cmpTxt(a.nome, b.nome));
   const linhasMon = [];
   monsP.forEach(p => {
@@ -177,7 +201,7 @@ function montarMetas(P, doMes, todasMon) {
   // avaliadores da base que não batem com ninguém (aparecem como aviso)
   const todosP = supsP.concat(monsP), naoId = {};
   doMes.forEach(m => { if (m.avaliador && !todosP.some(p => casaPessoa(m.avaliador, p))) naoId[m.avaliador] = (naoId[m.avaliador] || 0) + 1; });
-  return { mt, linhasSup, linhasMon, opsNome, naoId: Object.entries(naoId).sort((a, b) => b[1] - a[1]), temADM: gest.length > 0 };
+  return { mt, vig, opDeCons, linhasSup, linhasMon, opsNome, naoId: Object.entries(naoId).sort((a, b) => b[1] - a[1]), temADM: gest.length > 0 };
 }
 
 /* ---------- desenho ---------- */
@@ -217,13 +241,13 @@ function dashboardMon(filtro, ant, mesesAsc, porMes) {
   const P = perfilBase(tudo);
   const marcar = xs => xs.forEach(m => { if (m._t === undefined) { m._t = P.tipoDe(m); m._fb = P.fbDe(m); m._fbN = P.fbN(m); } });
   marcar(tudo); marcar(filtro); marcar(ant);
-  const M = montarMetas(P, filtro, tudo), mt = M.mt, metaN = mt.nota || META;
+  const M0 = montarMetas(P, filtro, tudo), M = metasDoFiltro(M0), mt = M.mt, metaN = mt.nota || META;
   M.mes = est.mes; M.doMes = filtro; M.P = P;
   const respOp = o => { const r = respCelula(mt, est.mes, o, filtro, P); return r ? r.nome : ''; };
   const sup = filtro.filter(m => m._t === 'Supervisor'), mon = filtro.filter(m => m._t === 'Monitor');
   const notas = filtro.map(m => m.nota), md = media_(notas), mdAnt = media_(ant.map(m => m.nota));
   // atingimento como na planilha META: feitas das pessoas listadas ÷ meta (o total pode ser digitado à mão)
-  const metaSup = +mt.totSup || M.linhasSup.reduce((a, l) => a + l.meta, 0), metaMon = +mt.totMon || M.linhasMon.reduce((a, l) => a + l.meta, 0);
+  const metaSup = (!M.filtrado && +mt.totSup) || M.linhasSup.reduce((a, l) => a + l.meta, 0), metaMon = (!M.filtrado && +mt.totMon) || M.linhasMon.reduce((a, l) => a + l.meta, 0);
   const feitasSup = M.linhasSup.reduce((a, l) => a + l.feitas, 0), feitasMon = M.linhasMon.reduce((a, l) => a + l.feitas, 0);
   const hojeISO = hoje(), mesSel = (filtro[0] || {}).data ? filtro[0].data.slice(0, 7) : hojeISO.slice(0, 7);
   const diasMes = new Date(+mesSel.slice(0, 4), +mesSel.slice(5, 7), 0).getDate();
@@ -274,6 +298,7 @@ function dashboardMon(filtro, ant, mesesAsc, porMes) {
   const html = `
   <div class="q-topo"><span>${G.ic('clock', '')} Último lançamento: <b>${ultima ? dataBR(ultima) : '—'}</b>${impEm ? ` · base importada em ${new Date(impEm).toLocaleDateString('pt-BR')} ${new Date(impEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
     </div>
+  ${M.filtrado ? `<p class="q-filtro-meta">${G.ic('search', '')} Metas e números do filtro${est.sup ? ` · equipe ${esc(tituloNome(est.sup))}` : ''}${est.q ? ` · “${esc(est.q)}”` : ''}${M.consFiltro !== null && M.consFiltro !== undefined ? ` · ${M.consFiltro} consultor(es) no BD` : ''} — meta = consultores do filtro × monitorias por consultor</p>` : ''}
   <section class="q-placar">
     ${trilha('Geral', feitasSup + feitasMon, metaSup + metaMon, '#f5c542', ritmo)}
     ${trilha('Supervisores', feitasSup, metaSup, '#1baf7a', ritmo)}
@@ -325,9 +350,9 @@ function dashboardMon(filtro, ant, mesesAsc, porMes) {
     raiz.querySelectorAll('[data-oft]').forEach(x => x.onclick = () => { est.ofT = x.dataset.oft; render(); });
     raiz.querySelectorAll('.q-rank [data-nome], .q-of-pessoas [data-nome], .q-rein [data-nome]').forEach(x => x.onclick = () => A.abrirFicha && A.abrirFicha(x.dataset.nome));
     if (el('qRecicla') && fSel) el('qRecicla').onclick = () => A.planejarReciclagem(`Reciclagem: ${fSel.k}`, fSel.oc.map(m => m.nome));
-    if (el('monMetas2')) el('monMetas2').onclick = () => abrirMetasMon(M);
+    if (el('monMetas2')) el('monMetas2').onclick = () => abrirMetasMon(M0);
   };
-  return { html, depois, M };
+  return { html, depois, M: M0 };
 }
 function abrirMetasMon(M) {
   if (!M) { toast('Importe a base de qualidade para montar as metas'); return; }

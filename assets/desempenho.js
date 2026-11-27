@@ -280,7 +280,27 @@ function passoConsolidado(dets) {
   // um arquivo pode trazer várias abas: ADM (Admissão) e SERV (Serviços), de um ou mais meses
   if (!Array.isArray(dets)) dets = [dets];
   const f = document.getElementById('desForm'), fonte = arq.fonte || FONTE_PADRAO;
-  const partes = dets.map(det => { const aba = arq.abas[det.ia] || arq.abas[0], info = lerConsolidado(aba, det.iCab); return { aba, det, info, op: opDaAba(aba.nome) || opNorm(arq.nome), mes: mesDoArquivo(aba.nome) || arq.mes }; });
+  // dentro de cada aba, os meses vêm em blocos separados por uma linha vazia: o último bloco é o mês do arquivo
+  // ("Fonte_Novembro" → novembro) e cada bloco acima é um mês antes. "ADM OUT"/"SERV OUT" = Outbound, não outubro.
+  const mesBase = mesDoArquivo(arq.nome) || arq.mes;
+  const menosMes = (m, k) => { const d = new Date(+m.slice(0, 4), +m.slice(5, 7) - 1 - k, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+  const partes = [];
+  dets.forEach(det => {
+    const aba = arq.abas[det.ia] || arq.abas[0], info = lerConsolidado(aba, det.iCab), op = opDaAba(aba.nome) || opNorm(arq.nome);
+    const vazia = l => !l || l.slice(0, 6).every(c => c === null || c === undefined);
+    const temDado = l => l && [0, 1, 2].some(j => l[j] !== null && l[j] !== undefined && String(l[j]).trim() !== '');
+    const blocos = []; let cur = null;
+    for (let r = det.iCab + 1; r < aba.linhas.length; r++) { const l = aba.linhas[r]; if (vazia(l)) { if (cur) { blocos.push(cur); cur = null; } continue; } (cur = cur || []).push(r); }
+    if (cur) blocos.push(cur);
+    // linha vazia solta no meio do mesmo mês: só é outro mês se o bloco repetir consultores do anterior
+    const chaveL = l => String((l[0] ?? '') || (l[2] ?? '')).trim().toLowerCase();
+    for (let i = blocos.length - 1; i > 0; i--) { const a = new Set(blocos[i - 1].map(r => chaveL(aba.linhas[r])).filter(Boolean)), b = blocos[i].map(r => chaveL(aba.linhas[r])).filter(Boolean); if (!a.size || !b.length || !b.some(k => a.has(k))) { blocos[i - 1] = blocos[i - 1].concat(blocos[i]); blocos.splice(i, 1); } }
+    blocos.forEach((rs, i) => {
+      if (!rs.some(r => temDado(aba.linhas[r]))) return; // bloco vazio (mês sem dados)
+      const sub = { nome: aba.nome, linhas: [aba.linhas[det.iCab], ...rs.map(r => aba.linhas[r])], formatos: aba.formatos ? [aba.formatos[det.iCab], ...rs.map(r => aba.formatos[r])] : null };
+      partes.push({ aba: sub, det: { ia: det.ia, iCab: 0 }, info: { ...info, mets: info.mets }, op, mes: menosMes(mesBase, blocos.length - 1 - i), bloco: blocos.length > 1 ? `bloco ${i + 1} de ${blocos.length}` : '' });
+    });
+  });
   const TT = { tempo: 'tempo', tempoMedio: 'tempo', pct: '%', quartil: 'quartil', texto: 'texto', somar: 'nº' };
   const lerUI = () => partes.forEach((p, i) => { const o = document.getElementById('dsOp' + i), m = document.getElementById('dsMes' + i); if (o) p.op = o.value; if (m && m.value) p.mes = m.value; });
   const processar = () => partes.map(p => { p.info.op = p.op; const r = processarConsolidado(p.aba, p.det.iCab, p.info, p.mes); return { ...p, r }; });
@@ -301,9 +321,9 @@ function passoConsolidado(dets) {
   f.innerHTML = `<header class="cab-card"><span class="icb">${G.ic('check')}</span><div><h2>Relatório de indicadores reconhecido</h2><p>${esc(arq.nome)} · ${partes.length} aba(s) · uma linha por consultor</p></div></header>
     <label class="campo" style="max-width:360px"><span>Nome do relatório</span><input id="dsFonteC" value="${esc(fonte)}"></label>
     <div class="tabela-wrap"><table class="tabela ds-abas"><thead><tr><th>Aba</th><th>Operação</th><th>Mês dos dados</th><th class="dir">Consultores</th></tr></thead><tbody>
-      ${partes.map((p, i) => `<tr><td><b>${esc(p.aba.nome.trim())}</b></td><td><select id="dsOp${i}"><option value="">Pelo BD</option>${['Admissão', 'Serviços'].map(o => `<option${p.op === o ? ' selected' : ''}>${o}</option>`).join('')}</select></td><td><input type="month" id="dsMes${i}" value="${p.mes}"></td><td class="dir" id="dsN${i}"></td></tr>`).join('')}
+      ${partes.map((p, i) => `<tr><td><b>${esc(p.aba.nome.trim())}</b>${p.bloco ? `<small class="dica"> · ${p.bloco}</small>` : ''}</td><td><select id="dsOp${i}"><option value="">Pelo BD</option>${['Admissão', 'Serviços'].map(o => `<option${p.op === o ? ' selected' : ''}>${o}</option>`).join('')}</select></td><td><input type="month" id="dsMes${i}" value="${p.mes}"></td><td class="dir" id="dsN${i}"></td></tr>`).join('')}
     </tbody></table></div>
-    <p class="dica">Operação e mês vêm do nome de cada aba (ADM/SERV e o mês, ex.: OUT = outubro) ou do nome do arquivo. Confira antes de salvar.</p>
+    <p class="dica">Operação pelo nome da aba (ADM = Admissão, SERV = Serviços). Os meses de cada aba vêm em blocos separados por uma linha vazia: o último bloco é o mês do nome do arquivo e cada bloco acima é um mês antes. Confira antes de salvar.</p>
     <div id="dsResumo"></div>
     <div class="ds-grupos">${Object.entries(porGrupo).map(([g, ms]) => { const l = [...ms.values()]; return `<div><b>${esc(l[0].gOrig || g)}</b><span>${l.map(m => `<small title="${esc(m.rotulo)}">${esc(m.sOrig || m.sub)} <i>${TT[m.tipo] || ''}</i></small>`).join('')}</span></div>`; }).join('')}</div>
     <div class="dlg-rod"><small class="msg" id="dsMsg"></small><span><button type="button" class="btn btn-sec" id="dsVoltar">Voltar</button> <button type="button" class="btn btn-pri" id="dsSalvarC">${G.ic('check')}Salvar</button></span></div>`;
